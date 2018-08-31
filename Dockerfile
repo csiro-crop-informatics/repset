@@ -1,5 +1,7 @@
 FROM ubuntu:16.04
-MAINTAINER Rad Suchecki <rad.suchecki@csiro.au>
+LABEL maintainer="Rad Suchecki <rad.suchecki@csiro.au>"
+SHELL ["/bin/bash", "-c"]
+
 RUN apt-get update && apt-get install -y wget build-essential automake make unzip pigz ruby-full
 
 #overwrite at build time with e.g. --build-arg KANGA_VERSION=4.3.11
