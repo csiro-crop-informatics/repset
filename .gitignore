@@ -1,1 +1,4 @@
 biokanga-manuscript.pdf
+.nextflow*
+results/*
+work/*
