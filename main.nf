@@ -1,37 +1,89 @@
-#!/usr/bin/env nextflow
-
 datasets = ['human_t1r1','human_t1r2','human_t1r3']
+url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
 process downloadReference {
-  storeDir '${workflow.workDir}/dataset/human/genome'
+  input:
+    val(url)
 
   output:
-    file('ucsc.hg19.fa') into kangaRef, hisat2Ref
+    file('*') into refs
 
-  shell:
+  script:
+  """
+  wget ${url}
+  """
+}
+
+
+
+process convertReference {
+  storeDir "${workflow.workDir}/dataset/human/genome"
+
+  input:
+    file(ref) from refs
+
+  output:
+    file('ucsc.hg19.fa') into kangaRef
+
+  script:
+  """
+  tar xzvf ${ref}
+  cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V) > ucsc.hg19.fa
+  """
+}
+
+process kangaIndex {
+  echo true
+  // storeDir '${workflow.workDir}/dataset/human/${dataset}'
+  //stageInMode 'link'
+  // runOptions = "--bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/"
+  // runOptions = '--volume ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/'
+  container = 'rsuchecki/biokanga_benchmark:0.1.1'
+
+  input:
+    file('ucsc.hg19.fa') from kangaRef //not used from workdir
+
+   script:
+   // # indexing, generating alignments as PE only from the biokanga jobs directory and lastly processing for alignment statistics
+  // cd /project/itmatlab/aligner_benchmark/jobs/biokanga
     """
-      wget http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz
-      tar xzvf chromFa.tar.gz
-      cat $(ls | grep -E 'chr([0-9]{1,2}|X|Y)\.fa') > ucsc.hg19.fa
+    /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${process.cpus} /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh
     """
 }
 
 process downloadDatasets {
-  storeDir '${workflow.workDir}/dataset/human/${dataset}'
+  //storeDir "${workflow.workDir}/downloaded/${dataset}" and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
+  tag("${dataset}")
 
   input:
     each dataset from datasets
 
   output:
-    val('${dataset}') into downloadedDatasets
-
+    set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets
 
   script:
     """
     wget http://bp1.s3.amazonaws.com/${dataset}.tar.bz2
+    """
+}
+
+process extractDatasets {
+  storeDir "${workflow.workDir}/dataset/human/${dataset}"
+  tag("${dataset}")
+
+  input:
+    set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
+
+  output:
+    file('*') into dextractedDatasets
+
+  script:
+    """
     tar xjvf ${dataset}.tar.bz2
     """
 }
+
+
 
 // #!/bin/bash
 // # indexing, generating alignments as PE only from the biokanga jobs directory and lastly processing for alignment statistics
@@ -52,23 +104,7 @@ process downloadDatasets {
 // ruby master.rb -v t3r1 t3r1 /project/itmatlab/aligner_benchmark -abiokanga
 
 
-process kangaIndex {
-  echo true
-  // storeDir '${workflow.workDir}/dataset/human/${dataset}'
-  //stageInMode 'link'
-  runOptions = '--volume ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/'
-  container = 'rsuchecki/biokanga_benchmark:0.1.1'
 
-  input:
-    file('ucsc.hg19.fa') from kangaRef //not used from workdir
-
-   script:
-   // # indexing, generating alignments as PE only from the biokanga jobs directory and lastly processing for alignment statistics
-  // cd /project/itmatlab/aligner_benchmark/jobs/biokanga
-    """
-    /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${process.cpus} /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh
-    """
-}
 // process execute {
 //   echo true
 //   stageInMode 'link'
