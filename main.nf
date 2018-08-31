@@ -63,6 +63,8 @@ process kangaIndex {
     file('ucsc.hg19.fa') from kangaRef //not used from workdir
 
    script:
+   // # indexing, generating alignments as PE only from the biokanga jobs directory and lastly processing for alignment statistics
+  // cd /project/itmatlab/aligner_benchmark/jobs/biokanga
     """
     /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${process.cpus} /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh
     """

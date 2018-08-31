@@ -1,6 +1,9 @@
 # biokanga-manuscript
 A repository for a manuscript (application note?)  about [biokanga](https://github.com/csiro-crop-informatics/biokanga).
 
+# Experiments
+Adapting and containerising  earlier experiments (ongoing).
+
 # WRiting:
 
 ## Source
