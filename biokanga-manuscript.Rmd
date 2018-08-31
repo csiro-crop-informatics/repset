@@ -11,6 +11,9 @@ abstract:
   This is the abstract.
 bibliography: references.bib
 csl: elsevier-harvard.csl
+link-citations: true
+urlcolor: blue
+linkcolor: red
 ---
 
 ```{r, echo = FALSE}
@@ -24,7 +27,7 @@ knitr::opts_chunk$set(
 
 # Summary
 
-[//]: Cite papers like this: `[@Kim2015]` [@Kim2015; @Baruzzo2016] matching entries in `references.bib`.
+[comment]: # Cite papers like this: `[@Kim2015]` [@Kim2015; @Baruzzo2016] matching entries in `references.bib`.
 
 BioKanga is a general purpose Bioinformatics Toolkit targeting the majority of bioinformatics tasks which are utilised within typical bioinformatics workflows with individual tasks integrated within a single executable process.
 Tasks are presented as user selected submodules, with each submodule exposing a set of parameterisation defaults which can be user overridden by users as may be appropriate given a priori knowledge of that tasks input context.
@@ -52,7 +55,7 @@ The hisat2 (as an exemplary specialised RNA-seq aligner used in the original ben
 
 It is very common for NGS reads to contain artefact sub-sequences at the 5’ and/or 3’ read ends which have originated as a by-product of library preparation prior to actual base calling or inadequate adaptor trimming post sequencing by the sequencing dataset provider.
 A combination of methods are generally employed for reduction of these artefact sub-sequences prior to alignment of reads against the targeted genome assembly. With RNA-seq reads the target may be either genomic or transcriptomic.
-The generally employed methods use a set of known artefact sequences, e.g. adaptor sequences, which when detected at the 5’ or 3’ of a read will result in that read being hard trimmed until the known artefact sequence is no longer detectable
+The generally employed methods use a set of known artefact sequences, e.g. adaptor sequences, which when detected at the 5’ or 3’ of a read will result in that read being hard trimmed until the known artefact sequence is no longer detectable.
 Some methods simply hard trim a fixed number of nucleotides off. The question naturally arises as to what K-mer length of a putative artefact sequence must be present at the 5’ or 3’ end of a read before there can be confidence that the K-mer sequence of nucleotides is part of an artefact sequence rather than a naturally occurring K-mer sequence within the targeted assembly or transcriptome.
 Additionally, sequenced artefacts will have the same background base call error rate profile as the sequenced targeted fragments.
 Thus, it is common to require a relatively large K-mer of known artefact sequence to exactly match at the 5’ or 3’ end of a read before trimming that read to decrease the false positive rate.
