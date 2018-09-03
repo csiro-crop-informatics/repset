@@ -22,6 +22,7 @@ process convertReference {
 
   output:
     file('ucsc.hg19.fa') into kangaRef
+    file('ucsc.hg19.fa') into hisat2Ref
 
   script:
   """
@@ -58,6 +59,30 @@ process kangaIndex {
     /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh"
   """
 }
+
+// process hisat2Index {
+//   label 'index'
+//   tag("${ref}")
+//   //storeDir "${workflow.workDir}/tool_results/hisat2/index"
+
+//   input:
+//     file(ref) from hisat2Ref //not used from workdir
+
+//   output:
+//     file('*') into hisat2Refs
+
+//    script:
+//   """
+//     mkdir -p ${workflow.workDir}/tool_results
+//     SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+//     singularity exec --writable --bind \
+//     ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
+//     --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
+//     ${params.container} /bin/bash -c \
+//     "/bin/bash /project/itmatlab/aligner_benchmark/jobs/hisat2/hisat2-index.sh ${task.cpus}  \
+//     /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh"
+//   """
+// }
 
 process downloadDatasets {
   //storeDir "${workflow.workDir}/downloaded/${dataset}" and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
@@ -102,15 +127,12 @@ process kangaAlign {
     set val(dataset), file(ref) from datasetsForKanga.combine(kangaRefs) //cartesian product i.e. all input sets of reads vs all dbs
 
   output:
-    val(ds) into kangaAlignedDatasets
+    set val(tool), val(ds) into kangaAlignedDatasets
     file('Aligned.out.sam')
 
   script:
-  // exec:
+    tool='biokanga'
     ds = dataset.replaceFirst("human_","")
-    // println(dataset)
-    // println(ds)
-    // println(ref)
   """
     mkdir -p ${workflow.workDir}/tool_results
     SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
@@ -125,9 +147,16 @@ process kangaAlign {
 
 
 process benchmark {
-  tag("${dataset}")
+  storeDir "${workflow.workDir}/statistics/human_${dataset}/${tool}"
+  tag("${dataset} ${tool}")
+
   input:
-    val(dataset) from kangaAlignedDatasets
+    set val(tool), val(dataset) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
+
+  output:
+    file('comp_res_multi_mappers.txt')
+    file('comp_res.txt')
+    file('*.sam')
 
   script:
   """
@@ -138,7 +167,7 @@ process benchmark {
   --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
   --bind ${workflow.workDir}/statistics/:/project/itmatlab/aligner_benchmark/statistics/ \
   ${params.container} /bin/bash -c \
-  "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -abiokanga"
+  "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -a${tool}"
   """
 
 }
