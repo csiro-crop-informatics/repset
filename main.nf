@@ -14,8 +14,6 @@ process downloadReference {
   """
 }
 
-
-
 process convertReference {
   storeDir "${workflow.workDir}/dataset/human/genome"
 
@@ -33,10 +31,10 @@ process convertReference {
 }
 
 process kangaIndex {
-  echo true
-  storeDir "${workflow.workDir}/tool_results/"
+  label 'index'
+  tag("${ref}")
+  storeDir "${workflow.workDir}/tool_results/biokanga/index"
   //stageInMode 'link'
-  cpus 10
   // docker.runOptions = "--volume ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/"
   // container = 'rsuchecki/biokanga_benchmark:0.1.2'
   // config.singularity.runOptions = "--writable --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/"
@@ -46,13 +44,11 @@ process kangaIndex {
     file(ref) from kangaRef //not used from workdir
 
   output:
-    file('*.sfx')
+    file('*.sfx') into kangaRefs
 
    script:
-  //  """
-  //  ls -l
-  //  """
   """
+    mkdir -p ${workflow.workDir}/tool_results
     SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
     singularity exec --writable --bind \
     ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
@@ -60,15 +56,7 @@ process kangaIndex {
     ${params.container} /bin/bash -c \
     "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${task.cpus}  \
     /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh"
-    ln -s ${workflow.workDir}/tool_results/biokanga/ucsc.hg19.sfx
   """
-   // # indexing, generating alignments as PE only from the biokanga jobs directory and lastly processing for alignment statistics
-  // cd /project/itmatlab/aligner_benchmark/jobs/biokanga
-    // """
-    // bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${task.cpus} \
-    // /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh \
-    // && echo "done kangaIdex for ${ref}" > success
-    // """
 }
 
 process downloadDatasets {
@@ -88,22 +76,68 @@ process downloadDatasets {
 }
 
 process extractDatasets {
-  storeDir "${workflow.workDir}/dataset/human/${dataset}"
+  storeDir "${workflow.workDir}/dataset/human/${ds}"
   tag("${dataset}")
 
   input:
     set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
 
   output:
-    file('*') into dextractedDatasets
+    val(dataset) into datasetsForKanga
+    file('*') //into extractedDatasets
 
   script:
+    ds = dataset.replaceFirst("human","dataset")
     """
     tar xjvf ${dataset}.tar.bz2
     """
 }
 
+process kangaAlign {
+  label 'align'
+  tag("${dataset}"+" VS "+"${ref}")
 
+  input:
+    set val(dataset), file(ref) from datasetsForKanga.combine(kangaRefs) //cartesian product i.e. all input sets of reads vs all dbs
+
+  output:
+    val(ds) into kangaAlignedDatasets
+
+  script:
+  // exec:
+    ds = dataset.replaceFirst("human_","")
+    // println(dataset)
+    // println(ds)
+    // println(ref)
+  """
+    mkdir -p ${workflow.workDir}/tool_results
+    SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+    singularity exec --writable \
+    --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
+    --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
+    ${params.container} /bin/bash -c \
+    "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-align-PE.sh ${task.cpus}  \
+    /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_${ds}.sh"
+  """
+}
+
+
+process benchmark {
+
+  input:
+    val(dataset) from kangaAlignedDatasets
+
+  script:
+  """
+  SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+  singularity exec --writable \
+  --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
+  --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
+  ${params.container} /bin/bash -c \
+  "ruby /project/itmatlab/aligner_benchmark/master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -abiokanga"
+  """
+
+}
 
 // #!/bin/bash
 // # indexing, generating alignments as PE only from the biokanga jobs directory and lastly processing for alignment statistics
@@ -124,24 +158,6 @@ process extractDatasets {
 // ruby master.rb -v t3r1 t3r1 /project/itmatlab/aligner_benchmark -abiokanga
 
 
-
-// process execute {
-//   echo true
-//   stageInMode 'link'
-//   runOptions = '--volume ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/'
-//   container = 'rsuchecki/biokanga_benchmark:0.1.1'
-
-//   input:
-//     set filefile('hg19.chrom.sizes') from ref
-//     val() from downloadDatasets
-//     // file('ucsc.hg19.fa')
-
-//    script:
-//     """
-//     ls -l
-//     head *
-//     """
-// }
 
 /*
 This script:
