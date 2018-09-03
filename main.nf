@@ -34,21 +34,41 @@ process convertReference {
 
 process kangaIndex {
   echo true
-  // storeDir '${workflow.workDir}/dataset/human/${dataset}'
+  storeDir "${workflow.workDir}/tool_results/"
   //stageInMode 'link'
-  // runOptions = "--bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/"
-  // runOptions = '--volume ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/'
-  container = 'rsuchecki/biokanga_benchmark:0.1.1'
+  cpus 10
+  // docker.runOptions = "--volume ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/"
+  // container = 'rsuchecki/biokanga_benchmark:0.1.2'
+  // config.singularity.runOptions = "--writable --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/"
+  // println(runOptions)
 
   input:
-    file('ucsc.hg19.fa') from kangaRef //not used from workdir
+    file(ref) from kangaRef //not used from workdir
+
+  output:
+    file('*.sfx')
 
    script:
+  //  """
+  //  ls -l
+  //  """
+  """
+    SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+    singularity exec --writable --bind \
+    ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
+    --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
+    ${params.container} /bin/bash -c \
+    "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${task.cpus}  \
+    /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh"
+    ln -s ${workflow.workDir}/tool_results/biokanga/ucsc.hg19.sfx
+  """
    // # indexing, generating alignments as PE only from the biokanga jobs directory and lastly processing for alignment statistics
   // cd /project/itmatlab/aligner_benchmark/jobs/biokanga
-    """
-    /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${process.cpus} /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh
-    """
+    // """
+    // bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${task.cpus} \
+    // /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh \
+    // && echo "done kangaIdex for ${ref}" > success
+    // """
 }
 
 process downloadDatasets {
