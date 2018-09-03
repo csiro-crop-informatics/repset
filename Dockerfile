@@ -33,4 +33,5 @@ RUN wget https://github.com/rsuchecki/biokanga_benchmark/archive/v${EVALU_VERSIO
   && tar xzvf v${EVALU_VERSION}.tar.gz \
   && mv biokanga_benchmark-${EVALU_VERSION}/* . \
   && rmdir biokanga_benchmark-${EVALU_VERSION} \
+  && gem install erubis \
   && mkdir -p /project/itmatlab/aligner_benchmark/dataset/human/genome /project/itmatlab/aligner_benchmark/tool_results
