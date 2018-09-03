@@ -95,6 +95,7 @@ process extractDatasets {
 
 process kangaAlign {
   label 'align'
+  storeDir "${workflow.workDir}/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_${ds}"
   tag("${dataset}"+" VS "+"${ref}")
 
   input:
@@ -102,6 +103,7 @@ process kangaAlign {
 
   output:
     val(ds) into kangaAlignedDatasets
+    file('Aligned.out.sam')
 
   script:
   // exec:
@@ -116,25 +118,27 @@ process kangaAlign {
     --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
     --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
     ${params.container} /bin/bash -c \
-    "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-align-PE.sh ${task.cpus}  \
-    /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_${ds}.sh"
+    "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-align-PE.sh ${task.cpus}   \
+    /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_${ds}.sh -#100 "
   """
 }
 
 
 process benchmark {
-
+  tag("${dataset}")
   input:
     val(dataset) from kangaAlignedDatasets
 
   script:
   """
+  mkdir -p ${workflow.workDir}/statistics
   SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
   singularity exec --writable \
   --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
   --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
+  --bind ${workflow.workDir}/statistics/:/project/itmatlab/aligner_benchmark/statistics/ \
   ${params.container} /bin/bash -c \
-  "ruby /project/itmatlab/aligner_benchmark/master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -abiokanga"
+  "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -abiokanga"
   """
 
 }
