@@ -5,7 +5,7 @@ SHELL ["/bin/bash", "-c"]
 RUN apt-get update && apt-get install -y wget build-essential automake make unzip pigz ruby-full
 
 #overwrite at build time with e.g. --build-arg KANGA_VERSION=4.3.11
-ARG EVALU_VERSION=0.2
+ARG EVALU_VERSION=0.3
 ARG KANGA_VERSION=4.3.10
 ARG HISAT_VERSION=2.0.5
 
