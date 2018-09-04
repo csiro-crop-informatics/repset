@@ -15,7 +15,7 @@ process downloadReference {
 }
 
 process convertReference {
-  storeDir "${workflow.workDir}/dataset/human/genome"
+  //storeDir "${workflow.workDir}/dataset/human/genome"
 
   input:
     file(ref) from refs
@@ -27,38 +27,49 @@ process convertReference {
   script:
   """
   tar xzvf ${ref}
-  cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V) > ucsc.hg19.fa
+  cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V) | head -10000 > ucsc.hg19.fa
   """
 }
 
 process kangaIndex {
   label 'index'
   tag("${ref}")
-  storeDir "${workflow.workDir}/tool_results/biokanga/index"
-  //stageInMode 'link'
-  // docker.runOptions = "--volume ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/"
-  // container = 'rsuchecki/biokanga_benchmark:0.1.2'
-  // config.singularity.runOptions = "--writable --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/"
-  // println(runOptions)
+  module = 'biokanga/4.3.9'
 
   input:
-    file(ref) from kangaRef //not used from workdir
+    file(ref) from kangaRef
 
   output:
-    file('*.sfx') into kangaRefs
+    file("*.sfx") into kangaRefs
 
-   script:
-  """
-    mkdir -p ${workflow.workDir}/tool_results
-    SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-    singularity exec --writable --bind \
-    ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
-    --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
-    ${params.container} /bin/bash -c \
-    "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${task.cpus}  \
-    /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh"
-  """
+  script:
+    """
+    biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref human
+    """
 }
+// process kangaIndex {
+//   label 'index'
+//   tag("${ref}")
+//   storeDir "${workflow.workDir}/tool_results/biokanga/index"
+
+//   input:
+//     file(ref) from kangaRef //not used from workdir
+
+//   output:
+//     file('*.sfx') into kangaRefs
+
+//    script:
+//   """
+//     mkdir -p ${workflow.workDir}/tool_results
+//     SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+//     singularity exec --writable --bind \
+//     ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
+//     --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
+//     ${params.container} /bin/bash -c \
+//     "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-index.sh ${task.cpus}  \
+//     /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh"
+//   """
+// }
 
 // process hisat2Index {
 //   label 'index'
@@ -101,95 +112,143 @@ process downloadDatasets {
 }
 
 process extractDatasets {
-  storeDir "${workflow.workDir}/dataset/human/${ds}"
+  //storeDir "${workflow.workDir}/dataset/human/${ds}"
   tag("${dataset}")
 
   input:
     set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
 
   output:
-    val(dataset) into datasetsForKanga
-    file('*') //into extractedDatasets
+    set val(dataset), file(dataPath), file('*')  into datasetsForKanga
+    // file('*') into extractedDatasets
 
   script:
     ds = dataset.replaceFirst("human","dataset")
     """
     tar xjvf ${dataset}.tar.bz2
+    echo \${PWD} > dataPath
     """
 }
 
 process kangaAlign {
   label 'align'
-  storeDir "${workflow.workDir}/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_${ds}"
   tag("${dataset}"+" VS "+"${ref}")
+  module = 'biokanga/4.3.9'
 
   input:
-    set val(dataset), file(ref) from datasetsForKanga.combine(kangaRefs) //cartesian product i.e. all input sets of reads vs all dbs
+    set file(ref), val(dataset), file(dataPath), file('*') from kangaRefs.combine(datasetsForKanga) //cartesian product i.e. all input sets of reads vs all dbs
 
   output:
-    set val(tool), val(ds) into kangaAlignedDatasets
-    file('Aligned.out.sam')
+    set val(tool), val(ds), file(dataPath), file(outfile) into kangaAlignedDatasets
+  //   set val(tool), val(ds) into kangaAlignedDatasets
+  //   file('Aligned.out.sam')
 
   script:
     tool='biokanga'
+    outfile='Aligned.out.sam'
     ds = dataset.replaceFirst("human_","")
-  """
-    mkdir -p ${workflow.workDir}/tool_results
-    SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-    singularity exec --writable \
-    --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
-    --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
-    ${params.container} /bin/bash -c \
-    "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-align-PE.sh ${task.cpus}   \
-    /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_${ds}.sh -#100 "
-  """
+    CMD = "biokanga align --sfx ${ref} \
+      --log kanga_align.log \
+      --mode 0 \
+      --format 5 \
+      --maxns 2 \
+      --pemode 2 \
+      --pairmaxlen 50000 \
+      --in *.forward.fa \
+      --pair *.reverse.fa  \
+	    --out ${outfile} \
+	    --threads ${task.cpus} "
+    CMD += "--substitutions 5 \
+      --minchimeric 50 \
+      --samplenthrawread 1000"
+    """
+    ${CMD}
+    """
 }
+// process kangaAlign {
+//   label 'align'
+//   storeDir "${workflow.workDir}/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_${ds}"
+//   tag("${dataset}"+" VS "+"${ref}")
 
+//   input:
+//     set val(dataset), file(ref) from datasetsForKanga.combine(kangaRefs) //cartesian product i.e. all input sets of reads vs all dbs
+
+//   output:
+//     set val(tool), val(ds) into kangaAlignedDatasets
+//     file('Aligned.out.sam')
+
+//   script:
+//     tool='biokanga'
+//     ds = dataset.replaceFirst("human_","")
+//   """
+//     mkdir -p ${workflow.workDir}/tool_results
+//     SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+//     singularity exec --writable \
+//     --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
+//     --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
+//     ${params.container} /bin/bash -c \
+//     "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-align-PE.sh ${task.cpus}   \
+//     /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_${ds}.sh -#100 "
+//   """
+// }
+
+import static groovy.json.JsonOutput.*
 
 process benchmark {
-  storeDir "${workflow.workDir}/statistics/human_${dataset}/${tool}"
+  //storeDir "${workflow.workDir}/statistics/human_${dataset}/${tool}"
+  // echo true
   tag("${dataset} ${tool}")
 
   input:
-    set val(tool), val(dataset) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
+    set val(tool), val(dataset), file(dataPath), file(sam) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
 
   output:
-    file('comp_res_multi_mappers.txt')
-    file('comp_res.txt')
-    file('*.sam')
+    set val(tool), val(dataset), val(statsDir) into benchmarkedStats
 
+//work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
   script:
+  statsDir="${task.workDir}/statistics"
   """
-  mkdir -p ${workflow.workDir}/statistics
-  SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-  singularity exec --writable \
-  --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
-  --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
-  --bind ${workflow.workDir}/statistics/:/project/itmatlab/aligner_benchmark/statistics/ \
-  ${params.container} /bin/bash -c \
-  "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -a${tool}"
+  mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${dataset}
+  cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${dataset}/
+  ln -s \$(cat dataPath) dataset_${dataset}
+  ls -l
   """
-
+  // SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+  // singularity exec --writable \
+  // --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
+  // --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
+  // --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
+  // ${params.container} /bin/bash -c \
+  // "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -a${tool}"
+  // """
 }
 
-// #!/bin/bash
-// # indexing, generating alignments as PE only from the biokanga jobs directory and lastly processing for alignment statistics
-// cd /project/itmatlab/aligner_benchmark/jobs/biokanga
+// process benchmark {
+//   storeDir "${workflow.workDir}/statistics/human_${dataset}/${tool}"
+//   tag("${dataset} ${tool}")
 
-// #generating index for human - only needs to be done once
-// # ./biokanga-index.sh 48 /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh
+//   input:
+//     set val(tool), val(dataset) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
 
-// #generating PE alignments for human t1r1
-// ./biokanga-align-PE.sh 48 /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh
-// ./biokanga-align-PE.sh 48 /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t2r1.sh
-// ./biokanga-align-PE.sh 48 /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t3r1.sh
+//   output:
+//     file('comp_res_multi_mappers.txt')
+//     file('comp_res.txt')
+//     file('*.sam')
 
-// #now back to the benchmarking root directory and run the ruby scripts for generating stats on the alignments
-// cd /project/itmatlab/aligner_benchmark
-// ruby master.rb -v t1r1 t1r1 /project/itmatlab/aligner_benchmark -abiokanga
-// ruby master.rb -v t2r1 t2r1 /project/itmatlab/aligner_benchmark -abiokanga
-// ruby master.rb -v t3r1 t3r1 /project/itmatlab/aligner_benchmark -abiokanga
+//   script:
+//   """
+//   mkdir -p ${workflow.workDir}/statistics
+//   SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+//   singularity exec --writable \
+//   --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
+//   --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
+//   --bind ${workflow.workDir}/statistics/:/project/itmatlab/aligner_benchmark/statistics/ \
+//   ${params.container} /bin/bash -c \
+//   "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -a${tool}"
+//   """
 
+// }
 
 
 /*
