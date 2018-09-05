@@ -15,8 +15,6 @@ process downloadReference {
 }
 
 process convertReference {
-  //storeDir "${workflow.workDir}/dataset/human/genome"
-
   input:
     file(ref) from refs
 
@@ -48,29 +46,24 @@ process kangaIndex {
     """
 }
 
-// process hisat2Index {
-//   label 'index'
-//   tag("${ref}")
-//   //storeDir "${workflow.workDir}/tool_results/hisat2/index"
+process hisat2Index {
+  label 'index'
+  tag("${ref}")
+  module = 'hisat/2.0.5'
 
-//   input:
-//     file(ref) from hisat2Ref //not used from workdir
+  input:
+    file(ref) from hisat2Ref
 
-//   output:
-//     file('*') into hisat2Refs
+  output:
+    file("*") into hisat2Refs
 
-//    script:
-//   """
-//     mkdir -p ${workflow.workDir}/tool_results
-//     SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-//     singularity exec --writable --bind \
-//     ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
-//     --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
-//     ${params.container} /bin/bash -c \
-//     "/bin/bash /project/itmatlab/aligner_benchmark/jobs/hisat2/hisat2-index.sh ${task.cpus}  \
-//     /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_t1r1.sh"
-//   """
-// }
+  script:
+    """
+    hisat2-build ${ref} ${ref} -p ${task.cpus}
+    """
+}
+
+
 
 process downloadDatasets {
   //storeDir "${workflow.workDir}/downloaded/${dataset}" and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
@@ -137,41 +130,53 @@ process kangaAlign {
     ${CMD}
     """
 }
-// process kangaAlign {
-//   label 'align'
-//   storeDir "${workflow.workDir}/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_${ds}"
-//   tag("${dataset}"+" VS "+"${ref}")
 
-//   input:
-//     set val(dataset), file(ref) from datasetsForKanga.combine(kangaRefs) //cartesian product i.e. all input sets of reads vs all dbs
+process benchmark {
+  //echo true
+  tag("${meta}")
+  module = 'singularity/2.5.0'
 
-//   output:
-//     set val(tool), val(ds) into kangaAlignedDatasets
-//     file('Aligned.out.sam')
+  input:
+    set val(meta), file(dataDir), file(sam) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
 
-//   script:
-//     tool='biokanga'
-//     ds = dataset.replaceFirst("human_","")
-//   """
-//     mkdir -p ${workflow.workDir}/tool_results
-//     SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-//     singularity exec --writable \
-//     --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
-//     --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
-//     ${params.container} /bin/bash -c \
-//     "/bin/bash /project/itmatlab/aligner_benchmark/jobs/biokanga/biokanga-align-PE.sh ${task.cpus}   \
-//     /project/itmatlab/aligner_benchmark/jobs/settings/dataset_human_hg19_${ds}.sh -#100 "
-//   """
-// }
+  // output:
+  //   set val(meta), file("dataset_${dataset}") into benchmarkedStats
 
+//work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
+  script:
+  """
+  mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}
+  #place SAM where aligner_benchmark expects it
+  cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}/
+  SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+  singularity exec --writable \
+    --bind ${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/${dataDir} \
+    --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
+    --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
+    docker://rsuchecki/biokanga_benchmark:0.3.4 /bin/bash -c \
+    "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
+  """
+}
 
-// process benchmark {
-//   //storeDir "${workflow.workDir}/statistics/human_${dataset}/${tool}"
+// process benchmark2 {
 //   echo true
 //   tag("${meta}")
+//   module = 'singularity/2.5.0'
+//   beforeScript = "mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id} \
+//                   cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}/"
+//   singularity {
+//       enabled = true
+//       // autoMounts = true
+//       cacheDir = "${workflow.workDir}/singularity"
+//       runOptions = "--writable \
+//                     --bind ${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/${dataDir} \
+//                     --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
+//                     --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/"
+//       container = 'rsuchecki/biokanga_benchmark:0.3.4'
+//   }
 
 //   input:
-//     set val(meta), file(dataDir), file(sam) from kangaAlignedDatasets.first() //.mix(hisat2AlignedDatasets)
+//     set val(meta), file(dataDir), file(sam) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
 
 //   // output:
 //   //   set val(meta), file("dataset_${dataset}") into benchmarkedStats
@@ -179,18 +184,8 @@ process kangaAlign {
 // //work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
 //   script:
 //   """
-//   mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}
-//   #place SAM where aligner_benchmark expects it
-//   cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}/
-//   SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-//   echo singularity exec --writable \
-//     --bind \${PWD}:/project/itmatlab/aligner_benchmark/dataset/human/ \
-//     --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
-//     --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
-//     ${params.container} /bin/bash -c \
-//     "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
+//   cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}
 //   """
-
 // }
 
 // process plot {
