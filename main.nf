@@ -25,7 +25,7 @@ process convertReference {
   script:
   """
   tar xzvf ${ref}
-  cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V) | head -10000 > ucsc.hg19.fa
+  cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V)  > ucsc.hg19.fa
   """
 }
 
@@ -178,10 +178,6 @@ process benchmark {
     docker://rsuchecki/biokanga_benchmark:0.3.4 /bin/bash -c \
     "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
   """
-  //SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-
-
-  // """
 }
 
 // process benchmark2 {
