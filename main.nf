@@ -88,7 +88,7 @@ process extractDatasets {
     set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
 
   output:
-    set val(dataset), file("${ds}")  into datasetsForKanga
+    set val(dataset), file("${ds}")  into datasetsForKanga, datasetsForHisat2
     // file('*') into extractedDatasets
 
   script:
@@ -125,16 +125,39 @@ process kangaAlign {
 	    --out ${outfile} \
 	    --threads ${task.cpus} "
     CMD += "--substitutions 5 \
-      --minchimeric 50 #--samplenthrawread 1000"
+      --minchimeric 50"
     """
     ${CMD}
     """
 }
 
+
+// process hisat2Align {
+//   label 'align'
+//   tag("${dataset}")
+//   module = 'hisat/2.0.5'
+
+//   input:
+//     set file('*'), val(dataset), file(dataDir) from hisat2Refs.combine(datasetsForHisat2) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+
+//   // output:
+//   //   set val(meta), file(dataDir), file(outfile) into hisat2AlignedDatasets
+
+//   script:
+//   outfile='Aligned.out.sam'
+//     """
+//     echo "hisat2 -x hisat2db -1 ${dataDir}/*.forward.fa -2 ${dataDir}/*.reverse.fa > ${outfile}
+//     """
+// // }
+// kangaAlignedDatasets.subscribe {
+//   println it
+// }
+
 process benchmark {
   //echo true
   tag("${meta}")
   module = 'singularity/2.5.0'
+  beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
 
   input:
     set val(meta), file(dataDir), file(sam) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
@@ -148,7 +171,6 @@ process benchmark {
   mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}
   #place SAM where aligner_benchmark expects it
   cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}/
-  SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
   singularity exec --writable \
     --bind ${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/${dataDir} \
     --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
@@ -156,6 +178,10 @@ process benchmark {
     docker://rsuchecki/biokanga_benchmark:0.3.4 /bin/bash -c \
     "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
   """
+  //SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+
+
+  // """
 }
 
 // process benchmark2 {
