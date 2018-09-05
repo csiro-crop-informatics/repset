@@ -95,14 +95,14 @@ process extractDatasets {
     set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
 
   output:
-    set val(dataset), file("${dataset}")  into datasetsForKanga
+    set val(dataset), file("${ds}")  into datasetsForKanga
     // file('*') into extractedDatasets
 
   script:
-    //ds = dataset.replaceFirst("human","dataset")
+    ds = dataset.replaceFirst("human","dataset")
     """
-    mkdir -p ${dataset}
-    pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${dataset}
+    mkdir -p ${ds}
+    pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${ds}
     """
 }
 
@@ -132,8 +132,7 @@ process kangaAlign {
 	    --out ${outfile} \
 	    --threads ${task.cpus} "
     CMD += "--substitutions 5 \
-      --minchimeric 50 \
-      --samplenthrawread 1000"
+      --minchimeric 50 #--samplenthrawread 1000"
     """
     ${CMD}
     """
@@ -166,33 +165,33 @@ process kangaAlign {
 // }
 
 
-process benchmark {
-  //storeDir "${workflow.workDir}/statistics/human_${dataset}/${tool}"
-  echo true
-  tag("${meta}")
+// process benchmark {
+//   //storeDir "${workflow.workDir}/statistics/human_${dataset}/${tool}"
+//   echo true
+//   tag("${meta}")
 
-  input:
-    set val(meta), file(dataDir), file(sam) from kangaAlignedDatasets.first() //.mix(hisat2AlignedDatasets)
+//   input:
+//     set val(meta), file(dataDir), file(sam) from kangaAlignedDatasets.first() //.mix(hisat2AlignedDatasets)
 
-  // output:
-  //   set val(meta), file("dataset_${dataset}") into benchmarkedStats
+//   // output:
+//   //   set val(meta), file("dataset_${dataset}") into benchmarkedStats
 
-//work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
-  script:
-  """
-  mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}
-  #place SAM where aligner_benchmark expects it
-  cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}/
-  SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-  echo singularity exec --writable \
-    --bind \${PWD}/${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/ \
-    --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
-    --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
-    ${params.container} /bin/bash -c \
-    "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
-  """
+// //work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
+//   script:
+//   """
+//   mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}
+//   #place SAM where aligner_benchmark expects it
+//   cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}/
+//   SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
+//   echo singularity exec --writable \
+//     --bind \${PWD}:/project/itmatlab/aligner_benchmark/dataset/human/ \
+//     --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
+//     --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
+//     ${params.container} /bin/bash -c \
+//     "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
+//   """
 
-}
+// }
 
 // process plot {
 
