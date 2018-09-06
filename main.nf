@@ -55,7 +55,7 @@ process hisat2Index {
     file(ref) from hisat2Ref
 
   output:
-    file("*") into hisat2Refs
+    set val("${ref}"), file("${ref}.*.ht2") into hisat2Refs
 
   script:
     """
@@ -132,26 +132,29 @@ process kangaAlign {
 }
 
 
-// process hisat2Align {
-//   label 'align'
-//   tag("${dataset}")
-//   module = 'hisat/2.0.5'
+process hisat2Align {
+  label 'align'
+  tag("${dataset}"+" VS "+"${ref}")
+  module = 'hisat/2.0.5'
 
-//   input:
-//     set file('*'), val(dataset), file(dataDir) from hisat2Refs.combine(datasetsForHisat2) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+  input:
+    set val(ref), file("${ref}.*.ht2"), val(dataset), file(dataDir) from hisat2Refs.combine(datasetsForHisat2) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
 
-//   // output:
-//   //   set val(meta), file(dataDir), file(outfile) into hisat2AlignedDatasets
+  output:
+    set val(meta), file(dataDir), file(outfile) into hisat2AlignedDatasets
 
-//   script:
-//   outfile='Aligned.out.sam'
-//     """
-//     echo "hisat2 -x hisat2db -1 ${dataDir}/*.forward.fa -2 ${dataDir}/*.reverse.fa > ${outfile}
-//     """
-// // }
-// kangaAlignedDatasets.subscribe {
-//   println it
-// }
+  script:
+    meta = [tool: 'hisat2', id: dataset.replaceFirst("human_","")]
+    outfile='Aligned.out.sam'
+    """
+    hisat2 -x ${ref} -1 ${dataDir}/*.forward.fa -2 ${dataDir}/*.reverse.fa \
+      --time \
+      --threads ${task.cpus} \
+      --reorder \
+      -f \
+      -S ${outfile}
+    """
+}
 
 process benchmark {
   //echo true
