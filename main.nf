@@ -106,6 +106,7 @@ process kangaAlign {
 
   input:
     set file(ref), val(dataset), file(dataDir) from kangaRefs.combine(datasetsForKanga) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+    //each pemode from [2,3]
 
   output:
     set val(meta), file(dataDir), file(alignDir) into kangaAlignedDatasets
@@ -167,15 +168,17 @@ process hisat2Align {
 
 process benchmark {
   //echo true
+  // publishDir 'results/'
   tag("${meta}")
   module = 'singularity/2.5.0'
   beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
 
   input:
-    set val(meta), file(dataDir), file(alignDir) from kangaAlignedDatasets.mix(hisat2AlignedDatasets.first()) //kangaAlignedDatasets.first() //hisat2AlignedDatasets.first() //kangaAlignedDatasets.mix(hisat2AlignedDatasets)
+    set val(meta), file(dataDir), file(alignDir) from kangaAlignedDatasets.mix(hisat2AlignedDatasets) //kangaAlignedDatasets.first() //hisat2AlignedDatasets.first() //kangaAlignedDatasets.mix(hisat2AlignedDatasets)
 
-  // output:
-  //   set val(meta), file("dataset_${dataset}") into benchmarkedStats
+  output:
+    file("statistics") into benchmarkedStats
+    // set val(meta), file("statistics/human_${meta.id}/${meta.tool}/*.txt") into benchmarkedStats
 
 //work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
   script:
@@ -185,10 +188,35 @@ process benchmark {
     --bind ${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/${dataDir} \
     --bind ${alignDir}:/project/itmatlab/aligner_benchmark/tool_results/ \
     --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
-    docker://rsuchecki/biokanga_benchmark:0.3.7 /bin/bash -c \
+    docker://rsuchecki/biokanga_benchmark:0.4 /bin/bash -c \
     "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
   """
 }
+
+process collectStats {
+  echo true
+  module = 'singularity/2.5.0'
+  beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
+
+  input:
+    file("statistics*") from benchmarkedStats.collect()
+
+  script:
+  """
+  mkdir collected
+  for d in statistics*; do
+    rsync -a --exclude '*.sam' \${d}/ statistics/
+  done
+  #tree -hl statistics
+  singularity exec --writable \
+    --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
+    docker://rsuchecki/biokanga_benchmark:0.4 /bin/bash -c \
+    "cd /project/itmatlab/aligner_benchmark \
+      && find . -name comp_res.txt |sort | xargs ruby ./read_stats.rb >> statistics/default_summary.txt"
+  """
+
+}
+
 
 // process benchmark2 {
 //   echo true
