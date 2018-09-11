@@ -108,13 +108,14 @@ process kangaAlign {
     set file(ref), val(dataset), file(dataDir) from kangaRefs.combine(datasetsForKanga) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
 
   output:
-    set val(meta), file(dataDir), file(outfile) into kangaAlignedDatasets
+    set val(meta), file(dataDir), file(alignDir) into kangaAlignedDatasets
 
   script:
     meta = [tool: 'biokanga', id: dataset.replaceFirst("human_","")]
     outfile='Aligned.out.sam'
+    alignDir='aligndir'
+    alignPath="${alignDir}/${meta.tool}/alignment/dataset_human_hg19_RefSeq_${meta.id}"
     CMD = "biokanga align --sfx ${ref} \
-      --log kanga_align.log \
       --mode 0 \
       --format 5 \
       --maxns 2 \
@@ -122,11 +123,14 @@ process kangaAlign {
       --pairmaxlen 50000 \
       --in ${dataDir}/*.forward.fa \
       --pair ${dataDir}/*.reverse.fa  \
-	    --out ${outfile} \
+	    --out ${alignPath}/${outfile} \
+      --log ${alignPath}/${meta.tool}.log \
 	    --threads ${task.cpus} "
     CMD += "--substitutions 5 \
       --minchimeric 50"
     """
+
+    mkdir -p ${alignPath}
     ${CMD}
     """
 }
@@ -141,18 +145,23 @@ process hisat2Align {
     set val(ref), file("${ref}.*.ht2"), val(dataset), file(dataDir) from hisat2Refs.combine(datasetsForHisat2) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
 
   output:
-    set val(meta), file(dataDir), file(outfile) into hisat2AlignedDatasets
+    set val(meta), file(dataDir), file(alignDir) into hisat2AlignedDatasets
 
   script:
     meta = [tool: 'hisat2', id: dataset.replaceFirst("human_","")]
-    outfile='Aligned.out.sam'
+    //guess what, it appears these file names need to be hardcoded for the framework to work
+    outfile='output.sam'
+    alignDir='aligndir'
+    alignPath="${alignDir}/${meta.tool}/alignment/dataset_human_hg19_RefSeq_${meta.id}"
     """
+    mkdir -p ${alignPath}
     hisat2 -x ${ref} -1 ${dataDir}/*.forward.fa -2 ${dataDir}/*.reverse.fa \
       --time \
       --threads ${task.cpus} \
       --reorder \
       -f \
-      -S ${outfile}
+      -S ${alignPath}/${outfile} \
+      2> ${alignPath}/${meta.tool}.log
     """
 }
 
@@ -163,7 +172,7 @@ process benchmark {
   beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
 
   input:
-    set val(meta), file(dataDir), file(sam) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
+    set val(meta), file(dataDir), file(alignDir) from kangaAlignedDatasets.mix(hisat2AlignedDatasets.first()) //kangaAlignedDatasets.first() //hisat2AlignedDatasets.first() //kangaAlignedDatasets.mix(hisat2AlignedDatasets)
 
   // output:
   //   set val(meta), file("dataset_${dataset}") into benchmarkedStats
@@ -171,14 +180,12 @@ process benchmark {
 //work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
   script:
   """
-  mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}
-  #place SAM where aligner_benchmark expects it
-  cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}/
+  mkdir -p statistics
   singularity exec --writable \
     --bind ${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/${dataDir} \
-    --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
+    --bind ${alignDir}:/project/itmatlab/aligner_benchmark/tool_results/ \
     --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
-    docker://rsuchecki/biokanga_benchmark:0.3.4 /bin/bash -c \
+    docker://rsuchecki/biokanga_benchmark:0.3.7 /bin/bash -c \
     "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
   """
 }
