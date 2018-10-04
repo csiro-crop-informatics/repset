@@ -170,7 +170,6 @@ process benchmark {
   //echo true
   // publishDir 'results/'
   tag("${meta}")
-  module = 'singularity/2.5.0'
   beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
 
   input:
@@ -194,8 +193,6 @@ process benchmark {
 }
 
 process collectStats {
-  echo true
-  module = 'singularity/2.5.0'
   beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
 
   input:
@@ -203,7 +200,6 @@ process collectStats {
 
   script:
   """
-  mkdir collected
   for d in statistics*; do
     rsync -a --exclude '*.sam' \${d}/ statistics/
   done
