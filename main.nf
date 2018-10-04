@@ -88,7 +88,7 @@ process extractDatasets {
     set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
 
   output:
-    set val(dataset), file("${ds}")  into datasetsForKanga, datasetsForHisat2
+    set val(dataset), file("${ds}")  into datasets //datasetsForKanga, datasetsForHisat2
     // file('*') into extractedDatasets
 
   script:
@@ -97,6 +97,20 @@ process extractDatasets {
     mkdir -p ${ds}
     pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${ds}
     """
+}
+
+process addAdapters {
+  tag("${dataset}")
+
+  input:
+    set val(dataset), file(dataDir) from datasets
+  output:
+    set val(dataset), file(dataDir)  into datasetsForKanga, datasetsForHisat2
+
+  script:
+  """
+  add_adapter2fasta_V3.pl ${dataDir}/*.forward.fa ${dataDir}/*.reverse.fa ${dataDir}/forward.adapters.fa ${dataDir}/reverse.adapters.fa
+  """
 }
 
 process kangaAlign {
@@ -122,8 +136,8 @@ process kangaAlign {
       --maxns 2 \
       --pemode 2 \
       --pairmaxlen 50000 \
-      --in ${dataDir}/*.forward.fa \
-      --pair ${dataDir}/*.reverse.fa  \
+      --in ${dataDir}/forward.adapters.fa \
+      --pair ${dataDir}/reverse.adapters.fa  \
 	    --out ${alignPath}/${outfile} \
       --log ${alignPath}/${meta.tool}.log \
 	    --threads ${task.cpus} "
@@ -156,7 +170,7 @@ process hisat2Align {
     alignPath="${alignDir}/${meta.tool}/alignment/dataset_human_hg19_RefSeq_${meta.id}"
     """
     mkdir -p ${alignPath}
-    hisat2 -x ${ref} -1 ${dataDir}/*.forward.fa -2 ${dataDir}/*.reverse.fa \
+    hisat2 -x ${ref} -1 ${dataDir}/forward.adapters.fa -2 ${dataDir}/reverse.adapters.fa \
       --time \
       --threads ${task.cpus} \
       --reorder \
