@@ -27,7 +27,7 @@ knitr::opts_chunk$set(
 
 # Summary
 
-[comment]: # Cite papers like this: `[@Kim2015]` [@Kim2015; @Baruzzo2016] matching entries in `references.bib`.
+[//]: # (Cite papers like this: `[@Kim2015]` [@Kim2015; @Baruzzo2016] matching entries in `references.bib`.)
 
 BioKanga is a general purpose Bioinformatics Toolkit targeting the majority of bioinformatics tasks which are utilised within typical bioinformatics workflows with individual tasks integrated within a single executable process.
 Tasks are presented as user selected submodules, with each submodule exposing a set of parameterisation defaults which can be user overridden by users as may be appropriate given a priori knowledge of that tasks input context.
@@ -83,7 +83,7 @@ If there are multiple full length putative alignments for a given read then BioK
 
 Reads remaining unaligned are then processed as follows:
 
-a) $K = L/(S-1)$, where L is read length and S is the number of allowed substitutions proportional to the read length, specifies the length of core sub-sequences to be segmented from each read. A given read will provide N = (L+K-1)/K K-mer cores, with the Nth 3' right hand core partially overlapping with the previous core when (L+K-1)/K is not integral.
+a) $K = L/(S-1)$, where L is read length and $S$ is the number of allowed substitutions proportional to the read length, specifies the length of core sub-sequences to be segmented from each read. A given read will provide $N = (L+K-1)/K$ K-mer cores, with the Nth 3' right hand core partially overlapping with the previous core when $(L+K-1)/K$ is not integral.
 b) Cores are iterated from 1 (5' left most) up to N (3' right most) with each K-mer core exact matched, no substitutions allowed, against the targeted sequences. A given read may have zero or more core K-mers with exact matches, and each matching core K-mers may be aligning to multiple target loci.
 c) Each exactly matching K-mer core is then extended left and right within the boundaries of the originating read length with extension stopped after accumulating mismatches up to the maximum number of allowed substitutions. All alignment loci, sense, alignment length, and number of substitutions required are noted for each K-mer core.
 d) The original unaligned read is then reverse complemented to enable antisense alignments to targeted sequences and steps b) through c) inclusive are repeated to derive both sense and antisense core extensions.
@@ -92,20 +92,24 @@ e) The best alignment loci chosen for a given read will be that extended K-mer c
 The net result of the forgoing processing is that reads with end artefact sub-sequences will be adaptively trimmed without requiring prior knowledge of these artefacts or their nucleotide sequences whilst minimising the number of nucleotides required to be trimmed from each read.
 
 # Benchmark Methods
-Test datasets generated with the BEERS simulator were downloaded, human only, for complexity levels T1, T2, and T3  from datasets made available by  benchmarking authors Giacomo Baruzzo et al., at http://bioinf.itmat.upenn.edu/BEERS/bp1/datasets.php
+
+Benchmarking procedure of Baruzzo et al. is very thorough and extensive, but the implementation is highly rigid with many hard-coded paths and the overal design making it difficult to port, adapt and even re run.
+To make our results more readily reproducible, we have developed a Nextflow [@DiTommaso2017] pipeline which seemlessly handles tasks ranging from data download through execution of the aligners to summarising the results.
+A key benchmarking step relying on the original procedure has been wrapped in a Docker container and is executed by the nextflow pipeline using Singularity.
+The Nextflow pipeline automaticaly downloads test datasets (complexity levels T1, T2, T3, human only) generated with the BEERS simulator and made available by Giacomo Baruzzo et al. at http://bioinf.itmat.upenn.edu/BEERS/bp1/datasets.php.
 Complexity level T1 is documented as having a substitution rate of 0.001, indel rate of 0.0005 and error rate 0.005.
 Complexity level T2 is documented as having increased substitution rates of 0.005, indel rates of 0.002 and error rates 0.01.
 Complexity level T3 further increased substitution rates to 0.03, indel rates to 0.005 and error rates to 0.02.
 T3 also has an error rate of 0.5 in the last (3') 0 bases.
 It is also stated that approximately 40% of reads involve introns with PE insert size distributions having minimum length 100bp, mean 200bp and maximum of 500 bp.
-The benchmarking framework was downloaded from [http://bioinf.itmat.upenn.edu/BEERS/bp1/scripts/Alignment_scripts.zip](http://bioinf.itmat.upenn.edu/BEERS/bp1/scripts/Alignment_scripts.zip) and [http://bioinf.itmat.upenn.edu/BEERS/bp1/scripts/aligner_benchmark_khayer.zip](http://bioinf.itmat.upenn.edu/BEERS/bp1/scripts/aligner_benchmark_khayer.zip) in accordance with the download instructions presented by the benchmarking authors Giacomo Baruzzo et al., at [http://bioinf.itmat.upenn.edu/BEERS/bp1/software.php](http://bioinf.itmat.upenn.edu/BEERS/bp1/software.php)
-HISAT2 2.0.5 released 04/11/2016 binary was downloaded from  [ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat2/downloads/hisat2-2.0.5-Linux_x86_64.zip]([ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat2/downloads/hisat2-2.0.5-Linux_x86_64.zip)
-The BioKanga 4.3.3 integrated toolkit was added as a new job in the benchmarking framework `./jobs` subdirectory and as a new template to the framework `./templates subdirectory`.
+The benchmarking framework was downloaded from [http://bioinf.itmat.upenn.edu/BEERS/bp1/scripts/Alignment_scripts.zip](http://bioinf.itmat.upenn.edu/BEERS/bp1/scripts/Alignment_scripts.zip) and [http://bioinf.itmat.upenn.edu/BEERS/bp1/scripts/aligner_benchmark_khayer.zip](http://bioinf.itmat.upenn.edu/BEERS/bp1/scripts/aligner_benchmark_khayer.zip) in accordance with the download instructions presented by the benchmarking authors  at [http://bioinf.itmat.upenn.edu/BEERS/bp1/software.php](http://bioinf.itmat.upenn.edu/BEERS/bp1/software.php)
+
+[//]: # (HISAT2 2.0.5 released 04/11/2016 binary was downloaded from  [ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat2/downloads/hisat2-2.0.5-Linux_x86_64.zip]([ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat2/downloads/hisat2-2.0.5-Linux_x86_64.zip))
+
+[//]: # (The BioKanga 4.3.3 integrated toolkit was added as a new job in the benchmarking framework `./jobs` subdirectory and as a new template to the framework `./templates subdirectory`.)
+
 The `master.rb` Ruby script was modified to include biokanga as another aligner to be benchmarked.
-A new script `add_adapter2fasta_V3.pl` was added to the `./scripts` subdirectory to fix the issues with adaptor retentions experienced when using datasets generated by the pre-existing `add_adapter2fasta_V2.pl`.
-
-
-# Results
+A new script `add_adapter2fasta_V3.pl` was developed to fix the issues with adaptor retentions experienced when using datasets generated by the pre-existing `add_adapter2fasta_V2.pl`.
 
 
 
