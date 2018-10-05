@@ -31,8 +31,8 @@ process convertReference {
 
 process kangaIndex {
   label 'index'
+  label 'biokanga'
   tag("${ref}")
-  module = 'biokanga/4.3.9'
 
   input:
     file(ref) from kangaRef
@@ -48,8 +48,8 @@ process kangaIndex {
 
 process hisat2Index {
   label 'index'
+  label 'hisat2'
   tag("${ref}")
-  module = 'hisat/2.0.5'
 
   input:
     file(ref) from hisat2Ref
@@ -115,8 +115,8 @@ process addAdapters {
 
 process kangaAlign {
   label 'align'
+  label 'biokanga'
   tag("${dataset}"+" VS "+"${ref}")
-  module = 'biokanga/4.3.9'
 
   input:
     set file(ref), val(dataset), file(dataDir) from kangaRefs.combine(datasetsForKanga) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
@@ -153,8 +153,8 @@ process kangaAlign {
 
 process hisat2Align {
   label 'align'
+  label 'hisat2'
   tag("${dataset}"+" VS "+"${ref}")
-  module = 'hisat/2.0.5'
 
   input:
     set val(ref), file("${ref}.*.ht2"), val(dataset), file(dataDir) from hisat2Refs.combine(datasetsForHisat2) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
