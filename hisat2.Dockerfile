@@ -2,7 +2,7 @@ FROM ubuntu:16.04
 LABEL maintainer="Rad Suchecki <rad.suchecki@csiro.au>"
 SHELL ["/bin/bash", "-c"]
 
-RUN apt-get update && apt-get install -y wget unzip
+RUN apt-get update && apt-get install -y wget unzip python2.7
 
 # Install hisat2
 ARG HISAT_VERSION=2.0.5
