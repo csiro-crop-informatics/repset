@@ -4,6 +4,24 @@ A repository for a manuscript (application note?)  about [biokanga](https://gith
 # Experiments
 Adapting and containerising  earlier experiments (ongoing).
 
+Running the current version requires approximately 40 CPU-hours. There are a few execution options, all require Nextflow and Singularity.
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript
+```
+
+See [nextflow.config](nextflow.config#L18-L32) for available execution profiles, e.g.
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity,singularitymodule
+```
+
+or
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,modules,singularitymodule
+```
+
 # WRiting:
 
 ## Source
