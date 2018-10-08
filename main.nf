@@ -88,7 +88,7 @@ process extractDatasets {
     set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
 
   output:
-    set val(dataset), file("${ds}")  into datasets //datasetsForKanga, datasetsForHisat2
+    set val(dataset), file("${ds}")  into datasetsChannel //datasetsForKanga, datasetsForHisat2
     // file('*') into extractedDatasets
 
   script:
@@ -103,7 +103,7 @@ process addAdapters {
   tag("${dataset}")
 
   input:
-    set val(dataset), file(dataDir) from datasets
+    set val(dataset), file(dataDir) from datasetsChannel
   output:
     set val(dataset), file(dataDir)  into datasetsForKanga, datasetsForHisat2
 
