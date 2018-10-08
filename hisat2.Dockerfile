@@ -10,3 +10,5 @@ RUN wget ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat2/downloads/hisat2-${HISAT_VERS
   && unzip hisat2-${HISAT_VERSION}-Linux_x86_64.zip \
   && rm hisat2-${HISAT_VERSION}-Linux_x86_64.zip
 RUN cp -p hisat2-${HISAT_VERSION}/hisat2 hisat2-${HISAT_VERSION}/hisat2-* /usr/bin
+
+RUN apt-get install -y python
