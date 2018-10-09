@@ -2,3 +2,6 @@ biokanga-manuscript.pdf
 .nextflow*
 results/*
 work/*
+.Rhistory
+#local hardlink to .Rmd :
+biokanga-manuscript.md
