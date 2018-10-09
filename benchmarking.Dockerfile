@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y wget build-essential automake make unzi
 
 # Setup evaluation framework
 #overwrite at build time with e.g. --build-arg EVALU_VERSION=0.2
-ARG EVALU_VERSION=0.3
+ARG EVALU_VERSION=0.4
 WORKDIR /project/itmatlab/aligner_benchmark
 RUN wget https://github.com/rsuchecki/biokanga_benchmark/archive/v${EVALU_VERSION}.tar.gz \
   && tar xzvf v${EVALU_VERSION}.tar.gz \
