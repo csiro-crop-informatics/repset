@@ -18,27 +18,36 @@ process downloadReference {
 process convertReference {
 
   input:
-    file(ref) from refs
+    file(downloadedRef) from refs
 
   output:
-    file('ucsc.hg19.fa') into kangaRef
-    file('ucsc.hg19.fa') into hisat2Ref
+    file ref
+    // file('ucsc.hg19.fa') into reference
 
   script:
-  """
-  tar xzvf ${ref}
-  cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V)  > ucsc.hg19.fa
-  """
+  ref='ucsc.hg19.fa'
+  COMMON="tar xzvf ${downloadedRef}"
+  if(params.debug) {
+   """
+    ${COMMON}
+    cat chr1.fa > ${ref}
+    """
+  } else {
+    """
+    ${COMMON}
+    cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V)  > ${ref}
+    """
+  }
+
 }
 
 process kangaIndex {
-
   label 'index'
   label 'biokanga'
   tag("${ref}")
 
   input:
-    file(ref) from kangaRef
+    file(ref)
 
   output:
     file("*.sfx") into kangaRefs
@@ -49,14 +58,75 @@ process kangaIndex {
     """
 }
 
-process hisat2Index {
 
+// tools = ['biokanga','dart','hisat2']
+// tools = ['biokanga','hisat2']
+
+// process indexGenerator {
+//   label 'index'
+//   tag("${tool}")
+
+
+//   input:
+//     file ref
+//     each tool from tools
+
+//   output:
+//     set val(meta), file("${ref}*") into indices
+
+
+
+//   script:
+//     label("${tool}")
+//     meta = [tool: "${tool}", ref: "${ref}"]
+//     //EITHER THIS:
+//     switch(tool) {
+//       case 'biokanga':
+//         """
+//         biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref ${ref}
+//         """
+//         break
+//       case 'dart':
+//         """
+//         bwt_index ${ref} ${ref}
+//         """
+//         break
+//       case 'hisat2':
+//         """
+//         hisat2-build ${ref} ${ref} -p ${task.cpus}
+//         """
+//         break
+//       default:
+//         break
+//     }
+//     //OR USE TEMPLATES:
+//     // template "${tool}_index.sh"
+// }
+
+process dartIndex {
+  label 'index'
+  label 'dart'
+  tag("${ref}")
+
+  input:
+    file(ref)
+
+  output:
+    set val("${ref}"), file("${ref}.*") into dartRefs
+
+  script:
+    """
+    bwt_index ${ref} ${ref}
+    """
+}
+
+process hisat2Index {
   label 'index'
   label 'hisat2'
   tag("${ref}")
 
   input:
-    file(ref) from hisat2Ref
+    file(ref)
 
   output:
     set val("${ref}"), file("${ref}.*.ht2") into hisat2Refs
@@ -110,13 +180,32 @@ process addAdapters {
   input:
     set val(dataset), file(dataDir) from datasetsChannel
   output:
-    set val(dataset), file(dataDir)  into datasetsForKanga, datasetsForHisat2
+    set val(dataset), file(dataDir)  into datasetsForKanga, datasetsForHisat2, datasetsForDart
 
   script:
   """
   add_adapter2fasta_V3.pl ${dataDir}/*.forward.fa ${dataDir}/*.reverse.fa ${dataDir}/forward.adapters.fa ${dataDir}/reverse.adapters.fa
   """
 }
+
+
+
+// process align {
+//   label 'align'
+//   // label("${idxmeta.tool}")
+//   // tag("${idxmeta.tool}"+" VS "+"${idxmeta.ref}")
+//   echo true
+
+//   input:
+//     set val(idxmeta), file("${ref}.*"), val(dataset), file(dataDir) from indices.combine(datasetsChannel) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+
+//   script:
+//   """
+//   ls -l
+//   """
+
+
+// }
 
 process kangaAlign {
   label 'align'
@@ -148,6 +237,27 @@ process kangaAlign {
       --minchimeric 50"
     """
     ${CMD}
+    """
+}
+
+process dartAlign {
+  label 'align'
+  label 'dart'
+  tag("${dataset}"+" VS "+"${ref}")
+
+  input:
+    set val(ref), file("${ref}.*"), val(dataset), file(dataDir) from dartRefs.combine(datasetsForDart) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+
+  output:
+    set val(meta), file(dataDir), file(samfile) into dartAlignedDatasets
+
+  script:
+    meta = [tool: 'dart', id: dataset.replaceFirst("human_","")]
+    samfile='aligned.sam'
+    """
+    dart -i ${ref} -f ${dataDir}/forward.adapters.fa -f2 ${dataDir}/reverse.adapters.fa \
+      --threads ${task.cpus} \
+      | head -10000 > ${samfile}
     """
 }
 
@@ -191,7 +301,7 @@ process nameSortSAM {
   label 'samtools'
    tag("${meta}")
    input:
-    set val(meta), file(dataDir), file(samfile) from hisat2AlignedDatasets.mix(kangaAlignedDatasets) //kangaAlignedDatasets.first() //hisat2AlignedDatasets.first() //kangaAlignedDatasets.mix(hisat2AlignedDatasets)
+    set val(meta), file(dataDir), file(samfile) from hisat2AlignedDatasets.mix(kangaAlignedDatasets).mix(dartAlignedDatasets)
 
   output:
     set val(meta), file(dataDir), file(sortedsam) into sortedSAMs
@@ -204,7 +314,7 @@ process nameSortSAM {
 }
 
 process fixSAM {
-  label 'ruby'
+  label 'benchmark'
   tag("${meta}")
 
   input:
@@ -215,16 +325,20 @@ process fixSAM {
 
   script:
   """
-  gem install erubis --install-dir \$PWD
-  echo "source \'https://rubygems.org\'" > Gemfile
-  echo "gem \'erubis\'" >> Gemfile
-  bundle exec ruby ${baseDir}/bin/fix_sam.rb ${samfile} > fixedsam
+  ruby ${baseDir}/bin/fix_sam.rb ${samfile} > fixedsam
   """
+
+  //tu run when erubis not available, e.g.using modules on cluster
+  // """
+  // gem install erubis --install-dir \$PWD
+  // echo "source \'https://rubygems.org\'" > Gemfile
+  // echo "gem \'erubis\'" >> Gemfile
+  // bundle exec ruby ${baseDir}/bin/fix_sam.rb ${samfile} > fixedsam
+  // """
 }
 
 process compareToTruth {
-
-  label 'ruby'
+  label 'benchmark'
   tag("${meta}")
 
   input:
@@ -234,10 +348,7 @@ process compareToTruth {
 
   script:
   """
-  gem install erubis --install-dir \$PWD
-  echo "source \'https://rubygems.org\'" > Gemfile
-  echo "gem \'erubis\'" >> Gemfile
-  echo "bundle exec ruby ${baseDir}/bin/compare2truth.rb ${dataDir}/*.cig ${fixedsam} > comp_res.txt"
+  ruby ${baseDir}/bin/compare2truth.rb ${dataDir}/*.cig ${fixedsam} > comp_res.txt
   """
 }
 // process benchmark {
