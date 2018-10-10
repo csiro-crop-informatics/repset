@@ -223,7 +223,6 @@ process kangaAlign {
     meta = [tool: 'biokanga', id: dataset.replaceFirst("human_","")]
     samfile='aligned.sam'
     CMD = "biokanga align --sfx ${ref} \
-      -# 100 \
       --mode 0 \
       --format 5 \
       --maxns 2 \
@@ -235,6 +234,7 @@ process kangaAlign {
 	    --threads ${task.cpus} "
     CMD += "--substitutions 5 \
       --minchimeric 50"
+    CMD += params.debug ? ' -# 1000' : '' //every thousandth read/pair
     """
     ${CMD}
     """
@@ -254,10 +254,10 @@ process dartAlign {
   script:
     meta = [tool: 'dart', id: dataset.replaceFirst("human_","")]
     samfile='aligned.sam'
+    CMDSFX = params.debug ? '| head -10000' : ''
     """
     dart -i ${ref} -f ${dataDir}/forward.adapters.fa -f2 ${dataDir}/reverse.adapters.fa \
-      --threads ${task.cpus} \
-      | head -10000 > ${samfile}
+      --threads ${task.cpus} ${CMDSFX} > ${samfile}
     """
 }
 
@@ -287,13 +287,14 @@ process hisat2Align {
   script:
     meta = [tool: 'hisat2', id: dataset.replaceFirst("human_","")]
     samfile='aligned.sam'
+    CMDSFX = params.debug ? '| head -10000' : ''
     """
     hisat2 -x ${ref} -1 ${dataDir}/forward.adapters.fa -2 ${dataDir}/reverse.adapters.fa \
       --time \
       --threads ${task.cpus} \
       --reorder \
       -f \
-      | head -10000 > ${samfile}
+      ${CMDSFX} > ${samfile}
     """
 }
 
@@ -325,10 +326,10 @@ process fixSAM {
 
   script:
   """
-  ruby ${baseDir}/bin/fix_sam.rb ${samfile} > fixedsam
+  fix_sam.rb ${samfile} > fixedsam
   """
 
-  //tu run when erubis not available, e.g.using modules on cluster
+  //tu run when erubis not available, e.g.using modules on cluster and .rb scripts in bin/
   // """
   // gem install erubis --install-dir \$PWD
   // echo "source \'https://rubygems.org\'" > Gemfile
@@ -344,163 +345,8 @@ process compareToTruth {
   input:
     set val(meta), file(dataDir), file(fixedsam) from fixedSAMs
 
-
-
   script:
   """
-  ruby ${baseDir}/bin/compare2truth.rb ${dataDir}/*.cig ${fixedsam} > comp_res.txt
+  compare2truth.rb ${dataDir}/*.cig ${fixedsam} > comp_res.txt
   """
 }
-// process benchmark {
-//   //echo true
-//   // publishDir 'results/'
-//   label 'singularity'
-//   tag("${meta}")
-//   beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
-
-//   input:
-//     set val(meta), file(dataDir), file(alignDir) from kangaAlignedDatasets.mix(hisat2AlignedDatasets) //kangaAlignedDatasets.first() //hisat2AlignedDatasets.first() //kangaAlignedDatasets.mix(hisat2AlignedDatasets)
-
-//   output:
-//     file("statistics") into benchmarkedStats
-//     // set val(meta), file("statistics/human_${meta.id}/${meta.tool}/*.txt") into benchmarkedStats
-
-// //work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
-//   script:
-//   """
-//   mkdir -p statistics
-//   singularity exec --writable \
-//     --bind ${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/${dataDir} \
-//     --bind ${alignDir}:/project/itmatlab/aligner_benchmark/tool_results/ \
-//     --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
-//     docker://rsuchecki/biokanga_benchmark:0.4 /bin/bash -c \
-//     "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
-//   """
-// }
-
-// process collectStats {
-//   label 'singularity'
-//   beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
-
-//   input:
-//     file("statistics*") from benchmarkedStats.collect()
-
-//   script:
-//   """
-//   for d in statistics*; do
-//     rsync -a --exclude '*.sam' \${d}/ statistics/
-//   done
-//   #tree -hl statistics
-//   singularity exec --writable \
-//     --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
-//     docker://rsuchecki/biokanga_benchmark:0.4 /bin/bash -c \
-//     "cd /project/itmatlab/aligner_benchmark \
-//       && find . -name comp_res.txt |sort | xargs ruby ./read_stats.rb >> statistics/default_summary.txt"
-//   """
-// }
-
-
-// process benchmark2 {
-//   echo true
-//   tag("${meta}")
-//   module = 'singularity/2.5.0'
-//   beforeScript = "mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id} \
-//                   cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}/"
-//   singularity {
-//       enabled = true
-//       // autoMounts = true
-//       cacheDir = "${workflow.workDir}/singularity"
-//       runOptions = "--writable \
-//                     --bind ${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/${dataDir} \
-//                     --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
-//                     --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/"
-//       container = 'rsuchecki/biokanga_benchmark:0.3.4'
-//   }
-
-//   input:
-//     set val(meta), file(dataDir), file(sam) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
-
-//   // output:
-//   //   set val(meta), file("dataset_${dataset}") into benchmarkedStats
-
-// //work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
-//   script:
-//   """
-//   cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}
-//   """
-// }
-
-// process plot {
-
-//   input:
-//     set val(tool), val(dataset), file(statsDir) from benchmarkedStats
-
-//   script:
-//   """
-//   ls -l
-//   """
-// }
-
-// process benchmark {
-//   storeDir "${workflow.workDir}/statistics/human_${dataset}/${tool}"
-//   tag("${dataset} ${tool}")
-
-//   input:
-//     set val(tool), val(dataset) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
-
-//   output:
-//     file('comp_res_multi_mappers.txt')
-//     file('comp_res.txt')
-//     file('*.sam')
-
-//   script:
-//   """
-//   mkdir -p ${workflow.workDir}/statistics
-//   SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-//   singularity exec --writable \
-//   --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
-//   --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
-//   --bind ${workflow.workDir}/statistics/:/project/itmatlab/aligner_benchmark/statistics/ \
-//   ${params.container} /bin/bash -c \
-//   "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -a${tool}"
-//   """
-
-// }
-
-
-/*
-This script:
-Pulls test datasets if not locally present
-  TODO: define input.conf and/or input.json
-    BEERS DATASETS
-    hg19 download (genome, annotations)
-      ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_19/GRCh37.p13.genome.fa.gz
-      ftp://ftp.ensembl.org/pub/grch37/update/fasta/homo_sapiens/dna/
-      http://itmat.rum.s3.amazonaws.com/indexes/hg19_genome_one-line-seqs.fa.gz
-
-
-      ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_19/gencode.v19.annotation.gtf.gz
-      or ftp://ftp.ensembl.org/pub/grch37/update/gtf/homo_sapiens/Homo_sapiens.GRCh37.87.chr.gtf.gz
-
-
-Executes experimental alignemts
-Generates figures and/or tables for the manuscript.
-Due to... unusal way the experimental pipeline is implemented, what we need/have to do here is to ensure portability.
-Multiple hardcoded paths need to be inserted/replaced.
-  TODO: turn appropriate script files into templates to be used at pipeline runtime
-Required software to be made available via container(s).
-Custom scripts to be included in same repo - under bin/ or inline
- */
-
- /*
-  Processes required
-
-  With and without retained adapters?
-  biokanga_align
-    defaults
-    optimised
-  hista2_align
-    defaults
-    optimised
-
-  */
