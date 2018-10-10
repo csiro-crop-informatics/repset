@@ -2,6 +2,7 @@ datasets = ['human_t1r1','human_t1r2','human_t1r3']
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
 process downloadReference {
+
   input:
     val(url)
 
@@ -15,18 +16,29 @@ process downloadReference {
 }
 
 process convertReference {
+
   input:
-    file(ref) from refs
+    file(downloadedRef) from refs
 
   output:
-    file('ucsc.hg19.fa') into kangaRef
-    file('ucsc.hg19.fa') into hisat2Ref
+    file ref
+    // file('ucsc.hg19.fa') into reference
 
   script:
-  """
-  tar xzvf ${ref}
-  cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V)  > ucsc.hg19.fa
-  """
+  ref='ucsc.hg19.fa'
+  COMMON="tar xzvf ${downloadedRef}"
+  if(params.debug) {
+   """
+    ${COMMON}
+    cat chr1.fa > ${ref}
+    """
+  } else {
+    """
+    ${COMMON}
+    cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V)  > ${ref}
+    """
+  }
+
 }
 
 process kangaIndex {
@@ -35,7 +47,7 @@ process kangaIndex {
   tag("${ref}")
 
   input:
-    file(ref) from kangaRef
+    file(ref)
 
   output:
     file("*.sfx") into kangaRefs
@@ -46,13 +58,75 @@ process kangaIndex {
     """
 }
 
+
+// tools = ['biokanga','dart','hisat2']
+// tools = ['biokanga','hisat2']
+
+// process indexGenerator {
+//   label 'index'
+//   tag("${tool}")
+
+
+//   input:
+//     file ref
+//     each tool from tools
+
+//   output:
+//     set val(meta), file("${ref}*") into indices
+
+
+
+//   script:
+//     label("${tool}")
+//     meta = [tool: "${tool}", ref: "${ref}"]
+//     //EITHER THIS:
+//     switch(tool) {
+//       case 'biokanga':
+//         """
+//         biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref ${ref}
+//         """
+//         break
+//       case 'dart':
+//         """
+//         bwt_index ${ref} ${ref}
+//         """
+//         break
+//       case 'hisat2':
+//         """
+//         hisat2-build ${ref} ${ref} -p ${task.cpus}
+//         """
+//         break
+//       default:
+//         break
+//     }
+//     //OR USE TEMPLATES:
+//     // template "${tool}_index.sh"
+// }
+
+process dartIndex {
+  label 'index'
+  label 'dart'
+  tag("${ref}")
+
+  input:
+    file(ref)
+
+  output:
+    set val("${ref}"), file("${ref}.*") into dartRefs
+
+  script:
+    """
+    bwt_index ${ref} ${ref}
+    """
+}
+
 process hisat2Index {
   label 'index'
   label 'hisat2'
   tag("${ref}")
 
   input:
-    file(ref) from hisat2Ref
+    file(ref)
 
   output:
     set val("${ref}"), file("${ref}.*.ht2") into hisat2Refs
@@ -63,9 +137,8 @@ process hisat2Index {
     """
 }
 
-
-
 process downloadDatasets {
+
   //storeDir "${workflow.workDir}/downloaded/${dataset}" and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
   tag("${dataset}")
 
@@ -82,6 +155,7 @@ process downloadDatasets {
 }
 
 process extractDatasets {
+
   tag("${dataset}")
 
   input:
@@ -100,18 +174,38 @@ process extractDatasets {
 }
 
 process addAdapters {
+
   tag("${dataset}")
 
   input:
     set val(dataset), file(dataDir) from datasetsChannel
   output:
-    set val(dataset), file(dataDir)  into datasetsForKanga, datasetsForHisat2
+    set val(dataset), file(dataDir)  into datasetsForKanga, datasetsForHisat2, datasetsForDart
 
   script:
   """
   add_adapter2fasta_V3.pl ${dataDir}/*.forward.fa ${dataDir}/*.reverse.fa ${dataDir}/forward.adapters.fa ${dataDir}/reverse.adapters.fa
   """
 }
+
+
+
+// process align {
+//   label 'align'
+//   // label("${idxmeta.tool}")
+//   // tag("${idxmeta.tool}"+" VS "+"${idxmeta.ref}")
+//   echo true
+
+//   input:
+//     set val(idxmeta), file("${ref}.*"), val(dataset), file(dataDir) from indices.combine(datasetsChannel) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+
+//   script:
+//   """
+//   ls -l
+//   """
+
+
+// }
 
 process kangaAlign {
   label 'align'
@@ -123,13 +217,11 @@ process kangaAlign {
     //each pemode from [2,3]
 
   output:
-    set val(meta), file(dataDir), file(alignDir) into kangaAlignedDatasets
+    set val(meta), file(dataDir), file(samfile) into kangaAlignedDatasets
 
   script:
     meta = [tool: 'biokanga', id: dataset.replaceFirst("human_","")]
-    outfile='Aligned.out.sam'
-    alignDir='aligndir'
-    alignPath="${alignDir}/${meta.tool}/alignment/dataset_human_hg19_RefSeq_${meta.id}"
+    samfile='aligned.sam'
     CMD = "biokanga align --sfx ${ref} \
       --mode 0 \
       --format 5 \
@@ -138,18 +230,36 @@ process kangaAlign {
       --pairmaxlen 50000 \
       --in ${dataDir}/forward.adapters.fa \
       --pair ${dataDir}/reverse.adapters.fa  \
-	    --out ${alignPath}/${outfile} \
-      --log ${alignPath}/${meta.tool}.log \
+	    --out ${samfile} \
 	    --threads ${task.cpus} "
     CMD += "--substitutions 5 \
       --minchimeric 50"
+    CMD += params.debug ? ' -# 1000' : '' //every thousandth read/pair
     """
-
-    mkdir -p ${alignPath}
     ${CMD}
     """
 }
 
+process dartAlign {
+  label 'align'
+  label 'dart'
+  tag("${dataset}"+" VS "+"${ref}")
+
+  input:
+    set val(ref), file("${ref}.*"), val(dataset), file(dataDir) from dartRefs.combine(datasetsForDart) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+
+  output:
+    set val(meta), file(dataDir), file(samfile) into dartAlignedDatasets
+
+  script:
+    meta = [tool: 'dart', id: dataset.replaceFirst("human_","")]
+    samfile='aligned.sam'
+    CMDSFX = params.debug ? '| head -10000' : ''
+    """
+    dart -i ${ref} -f ${dataDir}/forward.adapters.fa -f2 ${dataDir}/reverse.adapters.fa \
+      --threads ${task.cpus} ${CMDSFX} > ${samfile}
+    """
+}
 
 process hisat2Align {
   label 'align'
@@ -160,175 +270,83 @@ process hisat2Align {
     set val(ref), file("${ref}.*.ht2"), val(dataset), file(dataDir) from hisat2Refs.combine(datasetsForHisat2) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
 
   output:
-    set val(meta), file(dataDir), file(alignDir) into hisat2AlignedDatasets
+    set val(meta), file(dataDir), file(samfile) into hisat2AlignedDatasets
 
+  //READ-level-optimized: default-1-20-0.5-25-5-20-1-0-3-0
+// MODE=default (end-to-end, alt local)
+// NUM_MISMATCH=1
+// SEED_LENGTH=20
+// SEED_INTERVAL=0.5
+// SEED_EXTENSION=25
+// RE_SEED=5
+// PENALITY_NONCANONICAL=20
+// MAX_MISMATCH_PENALITY=1
+// MIN_MISMATCH_PENALITY=0
+// MAX_SOFTCLIPPING_PENALITY=3
+// MIN_SOFTCLIPPING_PENALITY=0
   script:
     meta = [tool: 'hisat2', id: dataset.replaceFirst("human_","")]
-    //guess what, it appears these file names need to be hardcoded for the framework to work
-    outfile='output.sam'
-    alignDir='aligndir'
-    alignPath="${alignDir}/${meta.tool}/alignment/dataset_human_hg19_RefSeq_${meta.id}"
+    samfile='aligned.sam'
+    CMDSFX = params.debug ? '| head -10000' : ''
     """
-    mkdir -p ${alignPath}
     hisat2 -x ${ref} -1 ${dataDir}/forward.adapters.fa -2 ${dataDir}/reverse.adapters.fa \
       --time \
       --threads ${task.cpus} \
       --reorder \
       -f \
-      -S ${alignPath}/${outfile} \
-      2> ${alignPath}/${meta.tool}.log
+      ${CMDSFX} > ${samfile}
     """
 }
 
-process benchmark {
-  //echo true
-  // publishDir 'results/'
-  tag("${meta}")
-  beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
-
-  input:
-    set val(meta), file(dataDir), file(alignDir) from kangaAlignedDatasets.mix(hisat2AlignedDatasets) //kangaAlignedDatasets.first() //hisat2AlignedDatasets.first() //kangaAlignedDatasets.mix(hisat2AlignedDatasets)
+process nameSortSAM {
+  label 'samtools'
+   tag("${meta}")
+   input:
+    set val(meta), file(dataDir), file(samfile) from hisat2AlignedDatasets.mix(kangaAlignedDatasets).mix(dartAlignedDatasets)
 
   output:
-    file("statistics") into benchmarkedStats
-    // set val(meta), file("statistics/human_${meta.id}/${meta.tool}/*.txt") into benchmarkedStats
+    set val(meta), file(dataDir), file(sortedsam) into sortedSAMs
 
-//work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
   script:
+  sortedsam = 'sorted.sam'
   """
-  mkdir -p statistics
-  singularity exec --writable \
-    --bind ${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/${dataDir} \
-    --bind ${alignDir}:/project/itmatlab/aligner_benchmark/tool_results/ \
-    --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
-    docker://rsuchecki/biokanga_benchmark:0.4 /bin/bash -c \
-    "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}"
+  samtools sort -n --threads ${task.cpus} -o ${sortedsam} ${samfile}
   """
 }
 
-process collectStats {
-  beforeScript = "SINGULARITY_CACHEDIR=${workflow.workDir}/singularity"
+process fixSAM {
+  label 'benchmark'
+  tag("${meta}")
 
   input:
-    file("statistics*") from benchmarkedStats.collect()
+    set val(meta), file(dataDir), file(samfile) from sortedSAMs //kangaAlignedDatasets.first() //hisat2AlignedDatasets.first() //kangaAlignedDatasets.mix(hisat2AlignedDatasets)
+
+  output:
+    set val(meta), file(dataDir), file(fixedsam) into fixedSAMs
 
   script:
   """
-  for d in statistics*; do
-    rsync -a --exclude '*.sam' \${d}/ statistics/
-  done
-  #tree -hl statistics
-  singularity exec --writable \
-    --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/ \
-    docker://rsuchecki/biokanga_benchmark:0.4 /bin/bash -c \
-    "cd /project/itmatlab/aligner_benchmark \
-      && find . -name comp_res.txt |sort | xargs ruby ./read_stats.rb >> statistics/default_summary.txt"
+  fix_sam.rb ${samfile} > fixedsam
   """
 
+  //tu run when erubis not available, e.g.using modules on cluster and .rb scripts in bin/
+  // """
+  // gem install erubis --install-dir \$PWD
+  // echo "source \'https://rubygems.org\'" > Gemfile
+  // echo "gem \'erubis\'" >> Gemfile
+  // bundle exec ruby ${baseDir}/bin/fix_sam.rb ${samfile} > fixedsam
+  // """
 }
 
+process compareToTruth {
+  label 'benchmark'
+  tag("${meta}")
 
-// process benchmark2 {
-//   echo true
-//   tag("${meta}")
-//   module = 'singularity/2.5.0'
-//   beforeScript = "mkdir -p statistics biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id} \
-//                   cp --preserve=links ${sam} biokanga/alignment/dataset_human_hg19_RefSeq_${meta.id}/"
-//   singularity {
-//       enabled = true
-//       // autoMounts = true
-//       cacheDir = "${workflow.workDir}/singularity"
-//       runOptions = "--writable \
-//                     --bind ${dataDir}:/project/itmatlab/aligner_benchmark/dataset/human/${dataDir} \
-//                     --bind \${PWD}:/project/itmatlab/aligner_benchmark/tool_results/ \
-//                     --bind \${PWD}/statistics:/project/itmatlab/aligner_benchmark/statistics/"
-//       container = 'rsuchecki/biokanga_benchmark:0.3.4'
-//   }
+  input:
+    set val(meta), file(dataDir), file(fixedsam) from fixedSAMs
 
-//   input:
-//     set val(meta), file(dataDir), file(sam) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
-
-//   // output:
-//   //   set val(meta), file("dataset_${dataset}") into benchmarkedStats
-
-// //work/tool_results/biokanga/alignment/dataset_human_hg19_RefSeq_t1r1/Aligned.out.sam
-//   script:
-//   """
-//   cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${meta.id} ${meta.id} /project/itmatlab/aligner_benchmark -a${meta.tool}
-//   """
-// }
-
-// process plot {
-
-//   input:
-//     set val(tool), val(dataset), file(statsDir) from benchmarkedStats
-
-//   script:
-//   """
-//   ls -l
-//   """
-// }
-
-// process benchmark {
-//   storeDir "${workflow.workDir}/statistics/human_${dataset}/${tool}"
-//   tag("${dataset} ${tool}")
-
-//   input:
-//     set val(tool), val(dataset) from kangaAlignedDatasets //.mix(hisat2AlignedDatasets)
-
-//   output:
-//     file('comp_res_multi_mappers.txt')
-//     file('comp_res.txt')
-//     file('*.sam')
-
-//   script:
-//   """
-//   mkdir -p ${workflow.workDir}/statistics
-//   SINGULARITY_CACHEDIR=${workflow.workDir}/singularity
-//   singularity exec --writable \
-//   --bind ${workflow.workDir}/dataset/human/:/project/itmatlab/aligner_benchmark/dataset/human/ \
-//   --bind ${workflow.workDir}/tool_results/:/project/itmatlab/aligner_benchmark/tool_results/ \
-//   --bind ${workflow.workDir}/statistics/:/project/itmatlab/aligner_benchmark/statistics/ \
-//   ${params.container} /bin/bash -c \
-//   "cd /project/itmatlab/aligner_benchmark && ruby master.rb -v ${dataset} ${dataset} /project/itmatlab/aligner_benchmark -a${tool}"
-//   """
-
-// }
-
-
-/*
-This script:
-Pulls test datasets if not locally present
-  TODO: define input.conf and/or input.json
-    BEERS DATASETS
-    hg19 download (genome, annotations)
-      ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_19/GRCh37.p13.genome.fa.gz
-      ftp://ftp.ensembl.org/pub/grch37/update/fasta/homo_sapiens/dna/
-      http://itmat.rum.s3.amazonaws.com/indexes/hg19_genome_one-line-seqs.fa.gz
-
-
-      ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_19/gencode.v19.annotation.gtf.gz
-      or ftp://ftp.ensembl.org/pub/grch37/update/gtf/homo_sapiens/Homo_sapiens.GRCh37.87.chr.gtf.gz
-
-
-Executes experimental alignemts
-Generates figures and/or tables for the manuscript.
-Due to... unusal way the experimental pipeline is implemented, what we need/have to do here is to ensure portability.
-Multiple hardcoded paths need to be inserted/replaced.
-  TODO: turn appropriate script files into templates to be used at pipeline runtime
-Required software to be made available via container(s).
-Custom scripts to be included in same repo - under bin/ or inline
- */
-
- /*
-  Processes required
-
-  With and without retained adapters?
-  biokanga_align
-    defaults
-    optimised
-  hista2_align
-    defaults
-    optimised
-
-  */
+  script:
+  """
+  compare2truth.rb ${dataDir}/*.cig ${fixedsam} > comp_res.txt
+  """
+}
