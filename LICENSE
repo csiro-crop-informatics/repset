@@ -1,9 +1,8 @@
-This license does not apply to the following files which are under MIT licence:
-bin/
-├── compare2truth_multi_mappers.rb
-├── compare2truth.rb
-├── fix_sam.rb
-└── logging.rb
+This license does not apply to the following files (Copyright (c) 2015 Katharina Hayer) which are under The MIT License (MIT)
+bin/compare2truth_multi_mappers.rb
+bin/compare2truth.rb
+bin/fix_sam.rb
+bin/logging.rb
 
 
                     GNU GENERAL PUBLIC LICENSE
