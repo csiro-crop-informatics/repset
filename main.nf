@@ -112,7 +112,7 @@ process dartIndex {
     file(ref)
 
   output:
-    set val("${ref}"), file("${ref}.*") into dartRefs
+    set val("${ref}"), file("${ref}*") into dartRefs
 
   script:
     """
@@ -162,7 +162,7 @@ process extractDatasets {
     set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
 
   output:
-    set val(dataset), file("${ds}")  into datasetsChannel //datasetsForKanga, datasetsForHisat2
+    set val(dataset), file("${ds}")  into datasetsForKanga, datasetsForHisat2, datasetsForDart //into datasetsChannel
     // file('*') into extractedDatasets
 
   script:
@@ -173,20 +173,20 @@ process extractDatasets {
     """
 }
 
-process addAdapters {
+// process addAdapters {
 
-  tag("${dataset}")
+//   tag("${dataset}")
 
-  input:
-    set val(dataset), file(dataDir) from datasetsChannel
-  output:
-    set val(dataset), file(dataDir)  into datasetsForKanga, datasetsForHisat2, datasetsForDart
+//   input:
+//     set val(dataset), file(dataDir) from datasetsChannel
+//   output:
+//     set val(dataset), file(dataDir)  into datasetsForKanga, datasetsForHisat2, datasetsForDart
 
-  script:
-  """
-  add_adapter2fasta_V3.pl ${dataDir}/*.forward.fa ${dataDir}/*.reverse.fa ${dataDir}/forward.adapters.fa ${dataDir}/reverse.adapters.fa
-  """
-}
+//   script:
+//   """
+//   add_adapter2fasta_V3.pl ${dataDir}/*.forward.fa ${dataDir}/*.reverse.fa ${dataDir}/forward.adapters.fa ${dataDir}/reverse.adapters.fa
+//   """
+// }
 
 
 
@@ -228,8 +228,8 @@ process kangaAlign {
       --maxns 2 \
       --pemode 2 \
       --pairmaxlen 50000 \
-      --in ${dataDir}/forward.adapters.fa \
-      --pair ${dataDir}/reverse.adapters.fa  \
+      --in ${dataDir}/*.forward.fa \
+      --pair ${dataDir}/*.reverse.fa  \
 	    --out ${samfile} \
 	    --threads ${task.cpus} "
     CMD += "--substitutions 5 \
@@ -246,7 +246,7 @@ process dartAlign {
   tag("${dataset}"+" VS "+"${ref}")
 
   input:
-    set val(ref), file("${ref}.*"), val(dataset), file(dataDir) from dartRefs.combine(datasetsForDart) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+    set val(ref), file("*"), val(dataset), file(dataDir) from dartRefs.combine(datasetsForDart) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
 
   output:
     set val(meta), file(dataDir), file(samfile) into dartAlignedDatasets
@@ -256,8 +256,8 @@ process dartAlign {
     samfile='aligned.sam'
     CMDSFX = params.debug ? '| head -10000' : ''
     """
-    dart -i ${ref} -f ${dataDir}/forward.adapters.fa -f2 ${dataDir}/reverse.adapters.fa \
-      --threads ${task.cpus} ${CMDSFX} > ${samfile}
+    dart -i ${ref} -f ${dataDir}/*.forward.fa -f2 ${dataDir}/*.reverse.fa \
+      -t ${task.cpus} ${CMDSFX} > ${samfile}
     """
 }
 
@@ -289,7 +289,7 @@ process hisat2Align {
     samfile='aligned.sam'
     CMDSFX = params.debug ? '| head -10000' : ''
     """
-    hisat2 -x ${ref} -1 ${dataDir}/forward.adapters.fa -2 ${dataDir}/reverse.adapters.fa \
+    hisat2 -x ${ref} -1 ${dataDir}/*.forward.fa -2 ${dataDir}/*.reverse.fa \
       --time \
       --threads ${task.cpus} \
       --reorder \
@@ -338,15 +338,40 @@ process fixSAM {
   // """
 }
 
+actions = ['compare2truth', 'compare2truth_multi_mappers']
 process compareToTruth {
   label 'benchmark'
+  label 'stats'
   tag("${meta}")
 
   input:
     set val(meta), file(dataDir), file(fixedsam) from fixedSAMs
+    each action from actions
+
+  output:
+    file '*' into stats
 
   script:
   """
-  compare2truth.rb ${dataDir}/*.cig ${fixedsam} > comp_res.txt
+  ${action}.rb ${dataDir}/*.cig ${fixedsam} > "${meta.tool}_${meta.id}.${action}"
+  """
+}
+
+process aggregateStats {
+  label 'benchmark'
+  label 'stats'
+
+  input:
+    file '*' from stats.collect()
+
+  output:
+    file '*_combined.txt'
+
+
+  script:
+  """
+  for action in ${actions.join(" ")}; do
+    ls *.\${action} | sort | xargs read_stats.rb > \${action}_combined.txt
+  done
   """
 }
