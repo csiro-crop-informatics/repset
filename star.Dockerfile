@@ -11,5 +11,5 @@ ARG VERSION=2.6.1b
 WORKDIR /star
 RUN wget https://github.com/alexdobin/STAR/archive/${VERSION}.tar.gz \
   && tar xzvf ${VERSION}.tar.gz
-ENV PATH "$PATH:/star/STAR-${VERSION}/bin/Linux_x86_64/"
+ENV PATH "$PATH:/star/STAR-${VERSION}/bin/Linux_x86_64_static/"
 
