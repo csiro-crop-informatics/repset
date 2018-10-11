@@ -5,7 +5,7 @@ SHELL ["/bin/bash", "-c"]
 RUN apt-get update && apt-get install -y wget unzip build-essential make libz-dev
 
 #overwrite at build time with e.g. --build-arg VERSION=1.3.1
-ARG VERSION=1.3.1
+ARG VERSION=1.3.1e
 
 #Install dart
 WORKDIR /dart
