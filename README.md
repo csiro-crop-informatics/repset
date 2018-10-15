@@ -10,16 +10,16 @@ Running the current version requires approximately 40 CPU-hours. There are a few
 nextflow run csiro-crop-informatics/biokanga-manuscript
 ```
 
-See [nextflow.config](nextflow.config#L18-L32) for available execution profiles, e.g.
+See [nextflow.config](nextflow.config#L22-L40) for available execution profiles, e.g. for local execution this could be
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity,singularitymodule
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
 ```
 
-or
+or on a SLURM cluster
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,modules,singularitymodule
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule
 ```
 
 ## Experimental pipeline overview
@@ -54,7 +54,7 @@ Among the [alternatives available](https://rmarkdown.rstudio.com/authoring_bibli
 
 # Reproductivity of the results
 
-**NOTE: this is aim and not yet the reality**
+**TODO**
 
 All results presented in the manuscript can be reproduced by executing `nextflow run csiro-crop-informatics/biokanaga-manuscript`.
 
