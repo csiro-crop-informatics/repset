@@ -1,3 +1,4 @@
+tools = ['biokanga','dart','hisat2']
 datasets = ['human_t1r1','human_t1r2','human_t1r3']
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
@@ -103,39 +104,39 @@ process kangaIndex {
 //     // template "${tool}_index.sh"
 // }
 
-// process dartIndex {
-//   label 'index'
-//   label 'dart'
-//   tag("${ref}")
+process dartIndex {
+  label 'index'
+  label 'dart'
+  tag("${ref}")
 
-//   input:
-//     file(ref)
+  input:
+    file(ref)
 
-//   output:
-//     set val("${ref}"), file("${ref}*") into dartRefs
+  output:
+    set val("${ref}"), file("${ref}*") into dartRefs
 
-//   script:
-//     """
-//     bwt_index ${ref} ${ref}
-//     """
-// }
+  script:
+    """
+    bwt_index ${ref} ${ref}
+    """
+}
 
-// process hisat2Index {
-//   label 'index'
-//   label 'hisat2'
-//   tag("${ref}")
+process hisat2Index {
+  label 'index'
+  label 'hisat2'
+  tag("${ref}")
 
-//   input:
-//     file(ref)
+  input:
+    file(ref)
 
-//   output:
-//     set val("${ref}"), file("${ref}.*.ht2") into hisat2Refs
+  output:
+    set val("${ref}"), file("${ref}.*.ht2") into hisat2Refs
 
-//   script:
-//     """
-//     hisat2-build ${ref} ${ref} -p ${task.cpus}
-//     """
-// }
+  script:
+    """
+    hisat2-build ${ref} ${ref} -p ${task.cpus}
+    """
+}
 
 process downloadDatasets {
   label 'download'
@@ -171,8 +172,6 @@ process extractDatasets {
     """
 }
 
-
-
 process prepareDatasets {
   tag("${dataset}")
 
@@ -180,7 +179,7 @@ process prepareDatasets {
     set val(dataset), file(dataDir) from extractedDatasets
 
   output:
-    set val(dataset), file(r1), file(r2), file(cig) into preparedDatasets //, prepareDatasetsForAdapters
+    set val(meta), file(r1), file(r2), file(cig) into preparedDatasets, prepareDatasetsForAdapters
 
   script:
   meta = [dataset: dataset, adapters: false]
@@ -198,65 +197,28 @@ process prepareDatasets {
     """
   }
 }
-//Each tool to get each dataset
-tools = ['biokanga','dart','hisat2']
-preparedDatasetsChannelsQueue = preparedDatasets.into(tools.size()+1) as Queue //+1 for adding adapters
 
+//Each tool to get each dataset - multiplicate the channel and put these on Queue so that each tool can take one
+preparedDatasetsMultiChannel = preparedDatasets.into(tools.size()) as Queue
 
+process addAdapters {
+  tag("${meta.dataset}")
 
+  input:
+    set val(inmeta), file(r1), file(r2), file(cig) from prepareDatasetsForAdapters //(preparedDatasetsMultiChannel.poll())
+  output:
+    set val(meta), file(a1), file(a2), file(cig)  into datasetsWithAdapters //datasetsForKanga, datasetsForHisat2, datasetsForDart
 
-// process addAdapters {
-//   tag("${dataset}")
+  script:
+  meta = inmeta.clone()
+  meta.adapters = true
+    """
+    add_adapter2fasta_V3.pl ${r1} ${r2} a1 a2
+    """
+}
 
-//   input:
-//     set val(dataset), file("*.fa"), file("*.cig") from preparedDatasetsForAdapters
-//   output:
-//     set val(dataset), file("*.fa"), file("*.cig")  into //datasetsForKanga, datasetsForHisat2, datasetsForDart
-
-//   script:
-//   dataDir=dataset
-//   """
-//   add_adapter2fasta_V3.pl forward.fa reverse.fa forward_adapters.fa reverse_adapters.fa
-//   """
-// }
-
-
-// process extractDatasets {
-
-//   tag("${dataset}")
-
-//   input:
-//     set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
-
-//   output:
-//     set val(dataset), file("${ds}")  into datasetsForKanga, datasetsForHisat2, datasetsForDart //into datasetsChannel
-//     // file('*') into extractedDatasets
-
-//   script:
-//     ds = dataset.replaceFirst("human","dataset")
-//     """
-//     mkdir -p ${ds}
-//     pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${ds}
-//     """
-// }
-
-
-
-// // process addAdapters {
-
-// //   tag("${dataset}")
-
-// //   input:
-// //     set val(dataset), file(dataDir) from datasetsChannel
-// //   output:
-// //     set val(dataset), file(dataDir)  into datasetsForKanga, datasetsForHisat2, datasetsForDart
-
-// //   script:
-// //   """
-// //   add_adapter2fasta_V3.pl ${dataDir}/*.forward.fa ${dataDir}/*.reverse.fa ${dataDir}/forward.adapters.fa ${dataDir}/reverse.adapters.fa
-// //   """
-// // }
-
+//Each tool to get each dataset - multiplicate the channel and put these on Queue so that each tool can take one
+datasetsWithAdaptersMultiChannel = datasetsWithAdapters.into(tools.size) as Queue
 
 
 // // process align {
@@ -272,102 +234,92 @@ preparedDatasetsChannelsQueue = preparedDatasets.into(tools.size()+1) as Queue /
 // //   """
 // //   ls -l
 // //   """
-
-
 // // }
 
 process kangaAlign {
   label 'align'
   label 'biokanga'
-  tag("${dataset}"+" VS "+"${ref}")
+  tag("${inmeta}"+" VS "+"${ref}")
 
   input:
-    set file(ref), val(dataset), file(r1), file(r2), file(cig) from kangaRefs.combine(preparedDatasetsChannelsQueue.poll()) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+    set file(ref), val(inmeta), file(r1), file(r2), file(cig) from kangaRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
 
     //each pemode from [2,3]
 
-  // output:
-  //   set val(meta), file(dataDir), file(samfile) into kangaAlignedDatasets
+  output:
+    set val(meta), file(sam), file(cig) into kangaAlignedDatasets
 
   script:
-    meta = [tool: 'biokanga', dataset: dataset]
-    samfile='aligned.sam'
-    // CMD = "biokanga align --sfx ${ref} \
-    //   --mode 0 \
-    //   --format 5 \
-    //   --maxns 2 \
-    //   --pemode 2 \
-    //   --pairmaxlen 50000 \
-    //   --in forward.fa \
-    //   --pair reverse.fa  \
-	  //   --out ${samfile} \
-	  //   --threads ${task.cpus} "
-    // CMD += "--substitutions 5 \
-    //   --minchimeric 50"
-    // CMD += params.debug ? ' -# 1000' : '' //every thousandth read/pair
-    CMD= "ls -l"
+    meta = inmeta.clone() + [tool: 'biokanga']
+    CMD = "biokanga align --sfx ${ref} \
+      --mode 0 \
+      --format 5 \
+      --maxns 2 \
+      --pemode 2 \
+      --pairmaxlen 50000 \
+      --in ${r1} \
+      --pair ${r2}  \
+	    --out sam \
+	    --threads ${task.cpus} "
+    CMD += "--substitutions 5 \
+      --minchimeric 50"
     """
     ${CMD}
     """
 }
 
-// process dartAlign {
-//   label 'align'
-//   label 'dart'
-//   tag("${dataset}"+" VS "+"${ref}")
+process dartAlign {
+  label 'align'
+  label 'dart'
+  tag("${inmeta}"+" VS "+"${ref}")
 
-//   input:
-//     set val(ref), file("*"), val(dataset), file(dataDir) from dartRefs.combine(datasetsForDart) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+  input:
+    set val(ref), file("*"), val(inmeta), file(r1), file(r2), file(cig) from dartRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
 
-//   output:
-//     set val(meta), file(dataDir), file(samfile) into dartAlignedDatasets
+  output:
+    set val(meta), file(sam), file(cig) into dartAlignedDatasets
 
-//   script:
-//     meta = [tool: 'dart', dataset: dataset.replaceFirst("human_","")]
-//     samfile='aligned.sam'
-//     CMDSFX = params.debug ? '| head -10000' : ''
-//     """
-//     dart -i ${ref} -f ${dataDir}/*.forward.fa -f2 ${dataDir}/*.reverse.fa \
-//       -t ${task.cpus} ${CMDSFX} > ${samfile}
-//     """
-// }
+  script:
+    meta = inmeta.clone() + [tool: 'dart']
+    """
+    dart -i ${ref} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
+    """
+}
 
-// process hisat2Align {
-//   label 'align'
-//   label 'hisat2'
-//   tag("${dataset}"+" VS "+"${ref}")
+process hisat2Align {
+  label 'align'
+  label 'hisat2'
+  tag("${inmeta}"+" VS "+"${ref}")
 
-//   input:
-//     set val(ref), file("${ref}.*.ht2"), val(dataset), file(dataDir) from hisat2Refs.combine(datasetsForHisat2) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+  input:
+    set val(ref), file("${ref}.*.ht2"), val(inmeta), file(r1), file(r2), file(cig) from hisat2Refs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
 
-//   output:
-//     set val(meta), file(dataDir), file(samfile) into hisat2AlignedDatasets
+  output:
+    set val(meta), file(sam), file(cig) into hisat2AlignedDatasets
 
-//   //READ-level-optimized: default-1-20-0.5-25-5-20-1-0-3-0
-// // MODE=default (end-to-end, alt local)
-// // NUM_MISMATCH=1
-// // SEED_LENGTH=20
-// // SEED_INTERVAL=0.5
-// // SEED_EXTENSION=25
-// // RE_SEED=5
-// // PENALITY_NONCANONICAL=20
-// // MAX_MISMATCH_PENALITY=1
-// // MIN_MISMATCH_PENALITY=0
-// // MAX_SOFTCLIPPING_PENALITY=3
-// // MIN_SOFTCLIPPING_PENALITY=0
-//   script:
-//     meta = [tool: 'hisat2', dataset: dataset.replaceFirst("human_","")]
-//     samfile='aligned.sam'
-//     CMDSFX = params.debug ? '| head -10000' : ''
-//     """
-//     hisat2 -x ${ref} -1 ${dataDir}/*.forward.fa -2 ${dataDir}/*.reverse.fa \
-//       --time \
-//       --threads ${task.cpus} \
-//       --reorder \
-//       -f \
-//       ${CMDSFX} > ${samfile}
-//     """
-// }
+  //READ-level-optimized: default-1-20-0.5-25-5-20-1-0-3-0
+// MODE=default (end-to-end, alt local)
+// NUM_MISMATCH=1
+// SEED_LENGTH=20
+// SEED_INTERVAL=0.5
+// SEED_EXTENSION=25
+// RE_SEED=5
+// PENALITY_NONCANONICAL=20
+// MAX_MISMATCH_PENALITY=1
+// MIN_MISMATCH_PENALITY=0
+// MAX_SOFTCLIPPING_PENALITY=3
+// MIN_SOFTCLIPPING_PENALITY=0
+  script:
+    meta = inmeta.clone() + [tool: 'hisat2']
+    """
+    hisat2 -x ${ref} -1 ${r1} -2 ${r2} \
+      --time \
+      --threads ${task.cpus} \
+      --reorder \
+      -f \
+      > sam
+    """
+}
 
 // process nameSortSAM {
 //   label 'samtools'
