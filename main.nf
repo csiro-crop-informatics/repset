@@ -17,7 +17,6 @@ process downloadReference {
 }
 
 process convertReference {
-
   input:
     file(downloadedRef) from refs
 
@@ -26,16 +25,15 @@ process convertReference {
     // file('ucsc.hg19.fa') into reference
 
   script:
-  ref='ucsc.hg19.fa'
-  COMMON="tar xzvf ${downloadedRef}"
   if(params.debug) {
-   """
-    ${COMMON}
-    cat ${params.debugChromosome}.fa > ${ref}
+    ref="${params.debugChromosome}.fa"
+    """
+    tar xzvf ${downloadedRef} ${ref}
     """
   } else {
+    ref='ucsc.hg19.fa'
     """
-    ${COMMON}
+    tar xzvf ${downloadedRef}
     cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V)  > ${ref}
     """
   }
@@ -59,14 +57,9 @@ process kangaIndex {
     """
 }
 
-
-// tools = ['biokanga','dart','hisat2']
-// tools = ['biokanga','hisat2']
-
 // process indexGenerator {
 //   label 'index'
 //   tag("${tool}")
-
 
 //   input:
 //     file ref
@@ -74,8 +67,6 @@ process kangaIndex {
 
 //   output:
 //     set val(meta), file("${ref}*") into indices
-
-
 
 //   script:
 //     label("${tool}")
@@ -185,15 +176,16 @@ process prepareDatasets {
   meta = [dataset: dataset, adapters: false]
   if(params.debug) {
     """
-    awk '\$2~/${params.debugChromosome}\$/' ${dataDir}/*.cig | sort -k1,1V | head -n ${params.debugReads} > cig
-    fgrep --no-group-separator -A1 -f <(cut -f1 cig) ${dataDir}/*forward.fa > r1
-    fgrep --no-group-separator -A1 -f <(cut -f1 cig) ${dataDir}/*reverse.fa > r2
+    awk '\$2~/${params.debugChromosome}\$/' ${dataDir}/*.cig | cut -f1 > debug.ids
+    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.forward.fa > r1
+    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.reverse.fa > r2
+    ln -sf "\$(readlink -f ${dataDir}/*.cig)" cig
     """
   } else {
     """
-    cp --no-dereference ${dataDir}/*forward.fa r1
-    cp --no-dereference ${dataDir}/*reverse.fa r2
-    cp --no-dereference ${dataDir}/*.cig cig
+    ln -sf "\$(readlink -f ${dataDir}/*.forward.fa)" r1
+    ln -sf "\$(readlink -f ${dataDir}/*.reverse.fa)" r2
+    ln -sf "\$(readlink -f ${dataDir}/*.cig)" cig
     """
   }
 }
@@ -235,6 +227,13 @@ datasetsWithAdaptersMultiChannel = datasetsWithAdapters.into(tools.size) as Queu
 // //   ls -l
 // //   """
 // // }
+
+
+alignedDatasetsChannelsQ = [] as Queue
+tools.each {
+  alignedDatasetsChannelsQ.add(Channel.create())
+}
+
 
 process kangaAlign {
   label 'align'
@@ -321,80 +320,71 @@ process hisat2Align {
     """
 }
 
-// process nameSortSAM {
-//   label 'samtools'
-//    tag("${meta}")
-//    input:
-//     set val(meta), file(dataDir), file(samfile) from hisat2AlignedDatasets.mix(kangaAlignedDatasets).mix(dartAlignedDatasets)
+process nameSortSAM {
+   tag("${meta}")
+   input:
+    set val(meta), file(sam), file(cig) from hisat2AlignedDatasets.mix(kangaAlignedDatasets, dartAlignedDatasets)
 
-//   output:
-//     set val(meta), file(dataDir), file(sortedsam) into sortedSAMs
+  output:
+    set val(meta), file(sortedsam), file(cig) into sortedSAMs
 
-//   script:
-//   sortedsam = 'sorted.sam'
-//   """
-//   samtools sort -n --threads ${task.cpus} -o ${sortedsam} ${samfile}
-//   """
-// }
+  script:
+    """
+    grep -v '^@' ${sam} | sort -t'.' -k2,2n --parallel ${task.cpus} > sortedsam
+    """
+}
 
-// process fixSAM {
-//   label 'benchmark'
-//   tag("${meta}")
+process fixSAM {
+  label 'benchmark'
+  tag("${meta}")
 
-//   input:
-//     set val(meta), file(dataDir), file(samfile) from sortedSAMs //kangaAlignedDatasets.first() //hisat2AlignedDatasets.first() //kangaAlignedDatasets.mix(hisat2AlignedDatasets)
+  input:
+    set val(meta), file(sortedsam), file(cig) from sortedSAMs
 
-//   output:
-//     set val(meta), file(dataDir), file(fixedsam) into fixedSAMs
+  output:
+    set val(meta), file(fixedsam), file(cig) into fixedSAMs
 
-//   script:
-//   """
-//   fix_sam.rb ${samfile} > fixedsam
-//   """
+  script:
+  """
+  fix_sam.rb ${sortedsam} > fixedsam
+  """
+}
 
-//   //tu run when erubis not available, e.g.using modules on cluster and .rb scripts in bin/
-//   // """
-//   // gem install erubis --install-dir \$PWD
-//   // echo "source \'https://rubygems.org\'" > Gemfile
-//   // echo "gem \'erubis\'" >> Gemfile
-//   // bundle exec ruby ${baseDir}/bin/fix_sam.rb ${samfile} > fixedsam
-//   // """
-// }
+// actions = ['compare2truth', 'compare2truth_multi_mappers'] //
+actions = ['compare2truth']
+process compareToTruth {
+  label 'benchmark'
+  label 'stats'
+  tag("${meta}")
 
-// // actions = ['compare2truth', 'compare2truth_multi_mappers'] //
-// actions = ['compare2truth']
-// process compareToTruth {
-//   label 'benchmark'
-//   label 'stats'
-//   tag("${meta}")
+  input:
+    set val(meta), file(fixedsam), file(cig) from fixedSAMs
+    each action from actions
 
-//   input:
-//     set val(meta), file(dataDir), file(fixedsam) from fixedSAMs
-//     each action from actions
+  output:
+    file '*' into stats
 
-//   output:
-//     file '*' into stats
+  script:
+  outname = meta.dataset+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
+  """
+  ${action}.rb ${cig} ${fixedsam} > ${outname}
+  """
+}
 
-//   script:
-//   """
-//   ${action}.rb ${dataDir}/*.cig ${fixedsam} > "${meta.tool}_${meta.dataset}.${action}"
-//   """
-// }
+process aggregateStats {
+  label 'benchmark'
+  label 'stats'
 
-// process aggregateStats {
-//   label 'benchmark'
-//   label 'stats'
+  input:
+    file '*' from stats.collect()
 
-//   input:
-//     file '*' from stats.collect()
+  output:
+    file '*_combined.txt'
 
-//   output:
-//     file '*_combined.txt'
-
-//   script:
-//   """
-//   for action in ${actions.join(" ")}; do
-//     ls *.\${action} | sort | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
-//   done
-//   """
-// }
+  script:
+  """
+  for action in ${actions.join(" ")}; do
+    ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
+  done
+  """
+}
