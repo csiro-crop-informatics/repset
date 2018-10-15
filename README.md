@@ -22,6 +22,11 @@ or
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,modules,singularitymodule
 ```
 
+## Experimental pipeline overview
+
+
+![figures/dag.png](figures/dag.png)
+
 # WRiting:
 
 ## Source
