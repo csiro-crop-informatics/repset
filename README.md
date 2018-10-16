@@ -26,6 +26,8 @@ nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singulari
 
 
 ![figures/dag.png](figures/dag.png)
+[Same DAG before generalisation of indexing and alignment processes to work with multiple tools](figures/dag-old-colmplex.png)
+
 
 # WRiting:
 
