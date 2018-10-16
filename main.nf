@@ -2,6 +2,28 @@ tools = ['biokanga','dart','hisat2']
 datasets = ['human_t1r1','human_t1r2','human_t1r3']
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
+import static groovy.json.JsonOutput.*
+
+def helpMessage() {
+  log.info"""
+  Usage:
+
+  nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
+
+  Default params:
+  """.stripIndent()
+  // println(prettyPrint(toJson(params)))
+  println(prettyPrint(toJson(config)))
+  // println(prettyPrint(toJson(config.process)))
+}
+
+// Show help message
+params.help = false
+if (params.help){
+    helpMessage()
+    exit 0
+}
+
 process downloadReference {
 
   input:
@@ -57,9 +79,13 @@ process kangaIndex {
     """
 }
 
+
+
 // process indexGenerator {
 //   label 'index'
-//   tag("${tool}")
+////  label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+//   container { this.config.process.get("withLabel:${tool}" as String).get("container") } //once (if) NF supports dynamic labels, replace with: label "${tool}"
+//   tag("${tool} << ${ref}")
 
 //   input:
 //     file ref
@@ -69,7 +95,6 @@ process kangaIndex {
 //     set val(meta), file("${ref}*") into indices
 
 //   script:
-//     label("${tool}")
 //     meta = [tool: "${tool}", ref: "${ref}"]
 //     //EITHER THIS:
 //     switch(tool) {
@@ -233,7 +258,6 @@ alignedDatasetsChannelsQ = [] as Queue
 tools.each {
   alignedDatasetsChannelsQ.add(Channel.create())
 }
-
 
 process kangaAlign {
   label 'align'
