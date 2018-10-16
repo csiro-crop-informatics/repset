@@ -81,44 +81,44 @@ process kangaIndex {
 
 
 
-// process indexGenerator {
-//   label 'index'
-////  label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-//   container { this.config.process.get("withLabel:${tool}" as String).get("container") } //once (if) NF supports dynamic labels, replace with: label "${tool}"
-//   tag("${tool} << ${ref}")
+process indexGenerator {
+  label 'index'
+  //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  container { this.config.process.get("withLabel:${tool}" as String).get("container") }
+  tag("${tool} << ${ref}")
 
-//   input:
-//     file ref
-//     each tool from tools
+  input:
+    file ref
+    each tool from tools
 
-//   output:
-//     set val(meta), file("${ref}*") into indices
+  output:
+    set val(meta), file("${ref}*") into indices
 
-//   script:
-//     meta = [tool: "${tool}", ref: "${ref}"]
-//     //EITHER THIS:
-//     switch(tool) {
-//       case 'biokanga':
-//         """
-//         biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref ${ref}
-//         """
-//         break
-//       case 'dart':
-//         """
-//         bwt_index ${ref} ${ref}
-//         """
-//         break
-//       case 'hisat2':
-//         """
-//         hisat2-build ${ref} ${ref} -p ${task.cpus}
-//         """
-//         break
-//       default:
-//         break
-//     }
-//     //OR USE TEMPLATES:
-//     // template "${tool}_index.sh"
-// }
+  script:
+    meta = [tool: "${tool}", ref: "${ref}"]
+    //EITHER THIS:
+    switch(tool) {
+      case 'biokanga':
+        """
+        biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref ${ref}
+        """
+        break
+      case 'dart':
+        """
+        bwt_index ${ref} ${ref}
+        """
+        break
+      case 'hisat2':
+        """
+        hisat2-build ${ref} ${ref} -p ${task.cpus}
+        """
+        break
+      default:
+        break
+    }
+    //OR USE TEMPLATES:
+    // template "${tool}_index.sh"
+}
 
 process dartIndex {
   label 'index'
@@ -216,7 +216,7 @@ process prepareDatasets {
 }
 
 //Each tool to get each dataset - multiplicate the channel and put these on Queue so that each tool can take one
-preparedDatasetsMultiChannel = preparedDatasets.into(tools.size()) as Queue
+// preparedDatasetsMultiChannel = preparedDatasets.into(tools.size()) as Queue
 
 process addAdapters {
   tag("${meta.dataset}")
@@ -234,120 +234,163 @@ process addAdapters {
     """
 }
 
-//Each tool to get each dataset - multiplicate the channel and put these on Queue so that each tool can take one
-datasetsWithAdaptersMultiChannel = datasetsWithAdapters.into(tools.size) as Queue
+// //Each tool to get each dataset - multiplicate the channel and put these on Queue so that each tool can take one
+// datasetsWithAdaptersMultiChannel = datasetsWithAdapters.into(tools.size) as Queue
 
 
-// // process align {
-// //   label 'align'
-// //   // label("${idxmeta.tool}")
-// //   // tag("${idxmeta.tool}"+" VS "+"${idxmeta.ref}")
-// //   echo true
 
-// //   input:
-// //     set val(idxmeta), file("${ref}.*"), val(dataset), file(dataDir) from indices.combine(datasetsChannel) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
-
-// //   script:
-// //   """
-// //   ls -l
-// //   """
-// // }
+// alignedDatasetsChannelsQ = [] as Queue
+// tools.each {
+//   alignedDatasetsChannelsQ.add(Channel.create())
+// }
 
 
-alignedDatasetsChannelsQ = [] as Queue
-tools.each {
-  alignedDatasetsChannelsQ.add(Channel.create())
-}
-
-process kangaAlign {
+process align {
   label 'align'
-  label 'biokanga'
-  tag("${inmeta}"+" VS "+"${ref}")
+  // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
+
+  tag("${idxmeta} << ${readsmeta}")
+  // echo true
 
   input:
-    set file(ref), val(inmeta), file(r1), file(r2), file(cig) from kangaRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
-
-    //each pemode from [2,3]
-
-  output:
-    set val(meta), file(sam), file(cig) into kangaAlignedDatasets
-
-  script:
-    meta = inmeta.clone() + [tool: 'biokanga']
-    CMD = "biokanga align --sfx ${ref} \
-      --mode 0 \
-      --format 5 \
-      --maxns 2 \
-      --pemode 2 \
-      --pairmaxlen 50000 \
-      --in ${r1} \
-      --pair ${r2}  \
-	    --out sam \
-	    --threads ${task.cpus} "
-    CMD += "--substitutions 5 \
-      --minchimeric 50"
-    """
-    ${CMD}
-    """
-}
-
-process dartAlign {
-  label 'align'
-  label 'dart'
-  tag("${inmeta}"+" VS "+"${ref}")
-
-  input:
-    set val(ref), file("*"), val(inmeta), file(r1), file(r2), file(cig) from dartRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
+    // set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll()))
 
   output:
-    set val(meta), file(sam), file(cig) into dartAlignedDatasets
+    set val(meta), file(sam), file(cig) into alignedDatasets
 
   script:
-    meta = inmeta.clone() + [tool: 'dart']
-    """
-    dart -i ${ref} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
-    """
+  meta = idxmeta.clone() + readsmeta.clone()
+  //EITHER THIS:
+    switch(idxmeta.tool) {
+      case 'biokanga':
+        """
+        biokanga align --sfx ${idxmeta.ref}.sfx \
+         --mode 0 \
+         --format 5 \
+         --maxns 2 \
+         --pemode 2 \
+         --pairmaxlen 50000 \
+         --in ${r1} \
+         --pair ${r2}  \
+         --out sam \
+         --threads ${task.cpus} \
+         --substitutions 5 \
+         --minchimeric 50
+        """
+        break
+      case 'dart':
+        """
+        dart -i ${idxmeta.ref} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
+        """
+        break
+      case 'hisat2':
+        """
+        hisat2 -x ${idxmeta.ref} -1 ${r1} -2 ${r2} \
+        --time \
+        --threads ${task.cpus} \
+        --reorder \
+        -f \
+        > sam
+        """
+        break
+      // default:
+      //   break
+    }
+    //OR USE TEMPLATES:
+    // template "${tool}_align.sh"
 }
 
-process hisat2Align {
-  label 'align'
-  label 'hisat2'
-  tag("${inmeta}"+" VS "+"${ref}")
+// process kangaAlign {
+//   label 'align'
+//   label 'biokanga'
+//   tag("${inmeta}"+" VS "+"${ref}")
 
-  input:
-    set val(ref), file("${ref}.*.ht2"), val(inmeta), file(r1), file(r2), file(cig) from hisat2Refs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+//   input:
+//     set file(ref), val(inmeta), file(r1), file(r2), file(cig) from kangaRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
 
-  output:
-    set val(meta), file(sam), file(cig) into hisat2AlignedDatasets
+//     //each pemode from [2,3]
 
-  //READ-level-optimized: default-1-20-0.5-25-5-20-1-0-3-0
-// MODE=default (end-to-end, alt local)
-// NUM_MISMATCH=1
-// SEED_LENGTH=20
-// SEED_INTERVAL=0.5
-// SEED_EXTENSION=25
-// RE_SEED=5
-// PENALITY_NONCANONICAL=20
-// MAX_MISMATCH_PENALITY=1
-// MIN_MISMATCH_PENALITY=0
-// MAX_SOFTCLIPPING_PENALITY=3
-// MIN_SOFTCLIPPING_PENALITY=0
-  script:
-    meta = inmeta.clone() + [tool: 'hisat2']
-    """
-    hisat2 -x ${ref} -1 ${r1} -2 ${r2} \
-      --time \
-      --threads ${task.cpus} \
-      --reorder \
-      -f \
-      > sam
-    """
-}
+//   output:
+//     set val(meta), file(sam), file(cig) into kangaAlignedDatasets
+
+//   script:
+//     meta = inmeta.clone() + [tool: 'biokanga']
+//     CMD = "biokanga align --sfx ${ref} \
+//       --mode 0 \
+//       --format 5 \
+//       --maxns 2 \
+//       --pemode 2 \
+//       --pairmaxlen 50000 \
+//       --in ${r1} \
+//       --pair ${r2}  \
+// 	    --out sam \
+// 	    --threads ${task.cpus} "
+//     CMD += "--substitutions 5 \
+//       --minchimeric 50"
+//     """
+//     ${CMD}
+//     """
+// }
+
+// process dartAlign {
+//   label 'align'
+//   label 'dart'
+//   tag("${inmeta}"+" VS "+"${ref}")
+
+//   input:
+//     set val(ref), file("*"), val(inmeta), file(r1), file(r2), file(cig) from dartRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+
+//   output:
+//     set val(meta), file(sam), file(cig) into dartAlignedDatasets
+
+//   script:
+//     meta = inmeta.clone() + [tool: 'dart']
+//     """
+//     dart -i ${ref} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
+//     """
+// }
+
+// process hisat2Align {
+//   label 'align'
+//   label 'hisat2'
+//   tag("${inmeta}"+" VS "+"${ref}")
+
+//   input:
+//     set val(ref), file("${ref}.*.ht2"), val(inmeta), file(r1), file(r2), file(cig) from hisat2Refs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
+
+//   output:
+//     set val(meta), file(sam), file(cig) into hisat2AlignedDatasets
+
+//   //READ-level-optimized: default-1-20-0.5-25-5-20-1-0-3-0
+// // MODE=default (end-to-end, alt local)
+// // NUM_MISMATCH=1
+// // SEED_LENGTH=20
+// // SEED_INTERVAL=0.5
+// // SEED_EXTENSION=25
+// // RE_SEED=5
+// // PENALITY_NONCANONICAL=20
+// // MAX_MISMATCH_PENALITY=1
+// // MIN_MISMATCH_PENALITY=0
+// // MAX_SOFTCLIPPING_PENALITY=3
+// // MIN_SOFTCLIPPING_PENALITY=0
+//   script:
+//     meta = inmeta.clone() + [tool: 'hisat2']
+//     """
+//     hisat2 -x ${ref} -1 ${r1} -2 ${r2} \
+//       --time \
+//       --threads ${task.cpus} \
+//       --reorder \
+//       -f \
+//       > sam
+//     """
+// }
 
 process nameSortSAM {
    tag("${meta}")
    input:
-    set val(meta), file(sam), file(cig) from hisat2AlignedDatasets.mix(kangaAlignedDatasets, dartAlignedDatasets)
+    set val(meta), file(sam), file(cig) from alignedDatasets //hisat2AlignedDatasets.mix(kangaAlignedDatasets, dartAlignedDatasets)
 
   output:
     set val(meta), file(sortedsam), file(cig) into sortedSAMs
