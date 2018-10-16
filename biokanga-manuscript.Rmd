@@ -30,7 +30,7 @@ knitr::opts_chunk$set(
 
 BioKanga is a general purpose bioinformatics toolkit targeting many utilised within bioinformatics workflows.
 We present BioKanga toolkit in the context of a turn-key reproducible and easily extendible evaluation frameworks for RNA-Seq and DNA-Seq.
-We demonstrate how BioKanga align, a general purpose short read aligner performs on par with specialist RNA-Seq aligners.
+We demonstrate how BioKanga `align`, a general purpose short read aligner performs on par with specialist RNA-Seq aligners.
 We also show how design decisions behind BioKanga align lead to more robust results then those produced by popular alignment tools such as bwa or bowtie2 when aligning DNA-Seq reads to large, complex and repetitive polyploid genomes.
 
 ## BioKanga toolkit
@@ -104,7 +104,7 @@ The net result of the forgoing processing is that reads with end artefact sub-se
 
 Benchmarking procedure of Baruzzo et al. is very thorough and extensive, but the implementation is highly rigid with many hard-coded paths and the overall design making it difficult to port, adapt and even re run.
 To make our results more readily reproducible, we have developed a Nextflow [@DiTommaso2017] pipeline which seamlessly handles tasks ranging from data download through execution of the aligners to summarising the results.
-A key benchmarking step relying on the original procedure has been wrapped in a Docker container and is executed by the Nextflow pipeline using Singularity software.
+Benchmarking scripts from Baruzzo et al. have been encapsulated in a Docker container together with software dependencies and are executed by the Nextflow pipeline using Singularity software.
 The Nextflow pipeline automatically downloads test datasets (complexity levels T1, T2, T3, human only) generated with the BEERS simulator and made available by Giacomo Baruzzo et al. at http://bioinf.itmat.upenn.edu/BEERS/bp1/datasets.php.
 Complexity level T1 is documented as having a substitution rate of 0.001, indel rate of 0.0005 and error rate 0.005.
 Complexity level T2 is documented as having increased substitution rates of 0.005, indel rates of 0.002 and error rates 0.01.
