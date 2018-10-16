@@ -94,7 +94,8 @@ process indexGenerator {
         hisat2-build ${ref} ${ref} -p ${task.cpus}
         """
         break
-      default:
+      default: //If case not specified for the tool above expecting a template in templates/
+        template "${tool}_index.sh" ///OR USE TEMPLATES EXCLUSIVELY AND DROP swith/case
         break
     }
     //OR USE TEMPLATES:
@@ -166,9 +167,9 @@ process addAdapters {
   tag("${meta.dataset}")
 
   input:
-    set val(inmeta), file(r1), file(r2), file(cig) from prepareDatasetsForAdapters //(preparedDatasetsMultiChannel.poll())
+    set val(inmeta), file(r1), file(r2), file(cig) from prepareDatasetsForAdapters
   output:
-    set val(meta), file(a1), file(a2), file(cig)  into datasetsWithAdapters //datasetsForKanga, datasetsForHisat2, datasetsForDart
+    set val(meta), file(a1), file(a2), file(cig)  into datasetsWithAdapters
 
   script:
   meta = inmeta.clone()
@@ -182,13 +183,10 @@ process align {
   label 'align'
   // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
-
   tag("${idxmeta} << ${readsmeta}")
-  // echo true
 
   input:
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
-    // set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll()))
 
   output:
     set val(meta), file(sam), file(cig) into alignedDatasets
@@ -203,7 +201,7 @@ process align {
          --mode 0 \
          --format 5 \
          --maxns 2 \
-         --pemode 2 \
+         --pemode 3 \
          --pairmaxlen 50000 \
          --in ${r1} \
          --pair ${r2}  \
@@ -228,18 +226,16 @@ process align {
         > sam
         """
         break
-      default: //If tool not specified above expecting a template in templates/
-        template "${tool}_align.sh"
+      default: //If case not specified for the tool above expecting a template in templates/
+        template "${idxmeta.tool}_align.sh" ///OR USE TEMPLATES EXCLUSIVELY AND DROP swith/case
         break
     }
-    //OR USE TEMPLATES:
-    // template "${tool}_align.sh"
 }
 
 process nameSortSAM {
    tag("${meta}")
    input:
-    set val(meta), file(sam), file(cig) from alignedDatasets //hisat2AlignedDatasets.mix(kangaAlignedDatasets, dartAlignedDatasets)
+    set val(meta), file(sam), file(cig) from alignedDatasets
 
   output:
     set val(meta), file(sortedsam), file(cig) into sortedSAMs
