@@ -62,25 +62,6 @@ process convertReference {
 
 }
 
-process kangaIndex {
-  label 'index'
-  label 'biokanga'
-  tag("${ref}")
-
-  input:
-    file(ref)
-
-  output:
-    file("*.sfx") into kangaRefs
-
-  script:
-    """
-    biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref human
-    """
-}
-
-
-
 process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
@@ -118,40 +99,6 @@ process indexGenerator {
     }
     //OR USE TEMPLATES:
     // template "${tool}_index.sh"
-}
-
-process dartIndex {
-  label 'index'
-  label 'dart'
-  tag("${ref}")
-
-  input:
-    file(ref)
-
-  output:
-    set val("${ref}"), file("${ref}*") into dartRefs
-
-  script:
-    """
-    bwt_index ${ref} ${ref}
-    """
-}
-
-process hisat2Index {
-  label 'index'
-  label 'hisat2'
-  tag("${ref}")
-
-  input:
-    file(ref)
-
-  output:
-    set val("${ref}"), file("${ref}.*.ht2") into hisat2Refs
-
-  script:
-    """
-    hisat2-build ${ref} ${ref} -p ${task.cpus}
-    """
 }
 
 process downloadDatasets {
@@ -215,9 +162,6 @@ process prepareDatasets {
   }
 }
 
-//Each tool to get each dataset - multiplicate the channel and put these on Queue so that each tool can take one
-// preparedDatasetsMultiChannel = preparedDatasets.into(tools.size()) as Queue
-
 process addAdapters {
   tag("${meta.dataset}")
 
@@ -233,17 +177,6 @@ process addAdapters {
     add_adapter2fasta_V3.pl ${r1} ${r2} a1 a2
     """
 }
-
-// //Each tool to get each dataset - multiplicate the channel and put these on Queue so that each tool can take one
-// datasetsWithAdaptersMultiChannel = datasetsWithAdapters.into(tools.size) as Queue
-
-
-
-// alignedDatasetsChannelsQ = [] as Queue
-// tools.each {
-//   alignedDatasetsChannelsQ.add(Channel.create())
-// }
-
 
 process align {
   label 'align'
@@ -295,97 +228,13 @@ process align {
         > sam
         """
         break
-      // default:
-      //   break
+      default: //If tool not specified above expecting a template in templates/
+        template "${tool}_align.sh"
+        break
     }
     //OR USE TEMPLATES:
     // template "${tool}_align.sh"
 }
-
-// process kangaAlign {
-//   label 'align'
-//   label 'biokanga'
-//   tag("${inmeta}"+" VS "+"${ref}")
-
-//   input:
-//     set file(ref), val(inmeta), file(r1), file(r2), file(cig) from kangaRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
-
-//     //each pemode from [2,3]
-
-//   output:
-//     set val(meta), file(sam), file(cig) into kangaAlignedDatasets
-
-//   script:
-//     meta = inmeta.clone() + [tool: 'biokanga']
-//     CMD = "biokanga align --sfx ${ref} \
-//       --mode 0 \
-//       --format 5 \
-//       --maxns 2 \
-//       --pemode 2 \
-//       --pairmaxlen 50000 \
-//       --in ${r1} \
-//       --pair ${r2}  \
-// 	    --out sam \
-// 	    --threads ${task.cpus} "
-//     CMD += "--substitutions 5 \
-//       --minchimeric 50"
-//     """
-//     ${CMD}
-//     """
-// }
-
-// process dartAlign {
-//   label 'align'
-//   label 'dart'
-//   tag("${inmeta}"+" VS "+"${ref}")
-
-//   input:
-//     set val(ref), file("*"), val(inmeta), file(r1), file(r2), file(cig) from dartRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
-
-//   output:
-//     set val(meta), file(sam), file(cig) into dartAlignedDatasets
-
-//   script:
-//     meta = inmeta.clone() + [tool: 'dart']
-//     """
-//     dart -i ${ref} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
-//     """
-// }
-
-// process hisat2Align {
-//   label 'align'
-//   label 'hisat2'
-//   tag("${inmeta}"+" VS "+"${ref}")
-
-//   input:
-//     set val(ref), file("${ref}.*.ht2"), val(inmeta), file(r1), file(r2), file(cig) from hisat2Refs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
-
-//   output:
-//     set val(meta), file(sam), file(cig) into hisat2AlignedDatasets
-
-//   //READ-level-optimized: default-1-20-0.5-25-5-20-1-0-3-0
-// // MODE=default (end-to-end, alt local)
-// // NUM_MISMATCH=1
-// // SEED_LENGTH=20
-// // SEED_INTERVAL=0.5
-// // SEED_EXTENSION=25
-// // RE_SEED=5
-// // PENALITY_NONCANONICAL=20
-// // MAX_MISMATCH_PENALITY=1
-// // MIN_MISMATCH_PENALITY=0
-// // MAX_SOFTCLIPPING_PENALITY=3
-// // MIN_SOFTCLIPPING_PENALITY=0
-//   script:
-//     meta = inmeta.clone() + [tool: 'hisat2']
-//     """
-//     hisat2 -x ${ref} -1 ${r1} -2 ${r2} \
-//       --time \
-//       --threads ${task.cpus} \
-//       --reorder \
-//       -f \
-//       > sam
-//     """
-// }
 
 process nameSortSAM {
    tag("${meta}")
