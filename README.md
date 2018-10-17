@@ -4,7 +4,7 @@ A repository for a manuscript (application note?)  about [biokanga](https://gith
 # Experiments
 Adapting and containerising  earlier experiments (ongoing).
 
-Running the current version requires approximately 40 CPU-hours. There are a few execution options, all require Nextflow and Singularity.
+Running the current version requires approximately 70 CPU-hours. There are a few execution options, all require Nextflow and Singularity.
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript
