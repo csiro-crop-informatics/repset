@@ -1,5 +1,6 @@
-tools = ['biokanga','dart','hisat2']
-datasets = ['human_t1r1','human_t1r2','human_t1r3']
+aligners = Channel.from(['biokanga','dart','hisat2','star'])
+// datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
+datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1'])
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
 import static groovy.json.JsonOutput.*
@@ -70,10 +71,10 @@ process indexGenerator {
 
   input:
     file ref
-    each tool from tools
+    val(tool) from aligners
 
   output:
-    set val(meta), file("${ref}*") into indices
+    set val(meta), file("*") into indices
 
   script:
     meta = [tool: "${tool}", ref: "${ref}"]
@@ -109,7 +110,7 @@ process downloadDatasets {
   tag("${dataset}")
 
   input:
-    each dataset from datasets
+    val(dataset) from datasets
 
   output:
     set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets
@@ -147,12 +148,18 @@ process prepareDatasets {
 
   script:
   meta = [dataset: dataset, adapters: false]
-  if(params.debug) {
+  if(params.debug) { //FOR QUICKER RUNS, ONLY TAKE READS AND GROUDG-THRUTH FOR A SINGLE CHROMOSOME
     """
-    awk '\$2~/${params.debugChromosome}\$/' ${dataDir}/*.cig | cut -f1 > debug.ids
-    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.forward.fa > r1
-    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.reverse.fa > r2
-    ln -sf "\$(readlink -f ${dataDir}/*.cig)" cig
+    awk '\$2~/${params.debugChromosome}\$/' ${dataDir}/*.cig \
+      | sort -k1,1V --parallel ${task.cpus} \
+      | tee >(awk -vOFS="\\t" 'NR%2==1{n++};{gsub(/[0-9]+/,n,\$1);print}' > cig) \
+      | cut -f1 > debug.ids
+    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.forward.fa \
+      | paste - - | sort -k1,1V --parallel ${task.cpus} \
+      | awk -vOFS="\\n" '{gsub(/[0-9]+/,++n,\$1);print \$1,\$2}' > r1
+    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.reverse.fa \
+      | paste - - | sort -k1,1V --parallel ${task.cpus} \
+      | awk -vOFS="\\n" '{gsub(/[0-9]+/,++n,\$1);print \$1,\$2}' > r2
     """
   } else {
     """
@@ -189,7 +196,7 @@ process align {
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
 
   output:
-    set val(meta), file(sam), file(cig) into alignedDatasets
+    set val(meta), file("*sam"), file(cig) into alignedDatasets
 
   script:
   meta = idxmeta.clone() + readsmeta.clone()
@@ -257,9 +264,15 @@ process fixSAM {
     set val(meta), file(fixedsam), file(cig) into fixedSAMs
 
   script:
-  """
-  fix_sam.rb ${sortedsam} > fixedsam
-  """
+  if(params.debug) { //should probably fixt that not just n --debug otherwise --nummer fixed to 10 mil (?!)
+    """
+    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${sortedsam} > fixedsam
+    """
+  } else {
+    """
+    fix_sam.rb ${sortedsam} > fixedsam
+    """
+  }
 }
 
 // actions = ['compare2truth', 'compare2truth_multi_mappers'] //
@@ -274,7 +287,7 @@ process compareToTruth {
     each action from actions
 
   output:
-    file '*' into stats
+    set val(meta), file("${outname}") into stats
 
   script:
   outname = meta.dataset+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
@@ -283,20 +296,49 @@ process compareToTruth {
   """
 }
 
-process aggregateStats {
-  label 'benchmark'
-  label 'stats'
+// process tidyStats {
+//   label 'stats'
 
-  input:
-    file '*' from stats.collect()
+//   input:
+//     set val(meta), file('*') from stats
 
-  output:
-    file '*_combined.txt'
+//   // output:
+//   //   file '*_combined.txt'
 
-  script:
-  """
-  for action in ${actions.join(" ")}; do
-    ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
-  done
-  """
-}
+//   script:
+//   """
+//   awk ''
+//   """
+// }
+
+// process aggregateStats {
+//   label 'stats'
+
+//   input:
+//     set val(meta), file('*') from stats.collect()
+
+//   output:
+//     file '*_combined.txt'
+
+//   script:
+//   """
+//   ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
+//   """
+// }
+// process aggregateStats {
+//   label 'benchmark'
+//   label 'stats'
+
+//   input:
+//     file '*' from stats.collect()
+
+//   output:
+//     file '*_combined.txt'
+
+//   script:
+//   """
+//   for action in ${actions.join(" ")}; do
+//     ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
+//   done
+//   """
+// }
