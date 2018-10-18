@@ -1,6 +1,30 @@
-tools = ['biokanga','dart','hisat2']
-datasets = ['human_t1r1','human_t1r2','human_t1r3']
+aligners = Channel.from(['biokanga','dart','hisat2','star'])
+// aligners = Channel.from(['biokanga','dart']) //,'hisat2'])
+//datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
+datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1'])
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
+
+import static groovy.json.JsonOutput.*
+
+def helpMessage() {
+  log.info"""
+  Usage:
+
+  nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
+
+  Default params:
+  """.stripIndent()
+  // println(prettyPrint(toJson(params)))
+  println(prettyPrint(toJson(config)))
+  // println(prettyPrint(toJson(config.process)))
+}
+
+// Show help message
+params.help = false
+if (params.help){
+    helpMessage()
+    exit 0
+}
 
 process downloadReference {
 
@@ -40,93 +64,44 @@ process convertReference {
 
 }
 
-process kangaIndex {
+process indexGenerator {
   label 'index'
-  label 'biokanga'
-  tag("${ref}")
+  //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  container { this.config.process.get("withLabel:${tool}" as String).get("container") }
+  tag("${tool} << ${ref}")
 
   input:
-    file(ref)
+    file ref
+    val(tool) from aligners
 
   output:
-    file("*.sfx") into kangaRefs
+    set val(meta), file("*") into indices
 
   script:
-    """
-    biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref human
-    """
-}
-
-// process indexGenerator {
-//   label 'index'
-//   tag("${tool}")
-
-//   input:
-//     file ref
-//     each tool from tools
-
-//   output:
-//     set val(meta), file("${ref}*") into indices
-
-//   script:
-//     label("${tool}")
-//     meta = [tool: "${tool}", ref: "${ref}"]
-//     //EITHER THIS:
-//     switch(tool) {
-//       case 'biokanga':
-//         """
-//         biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref ${ref}
-//         """
-//         break
-//       case 'dart':
-//         """
-//         bwt_index ${ref} ${ref}
-//         """
-//         break
-//       case 'hisat2':
-//         """
-//         hisat2-build ${ref} ${ref} -p ${task.cpus}
-//         """
-//         break
-//       default:
-//         break
-//     }
-//     //OR USE TEMPLATES:
-//     // template "${tool}_index.sh"
-// }
-
-process dartIndex {
-  label 'index'
-  label 'dart'
-  tag("${ref}")
-
-  input:
-    file(ref)
-
-  output:
-    set val("${ref}"), file("${ref}*") into dartRefs
-
-  script:
-    """
-    bwt_index ${ref} ${ref}
-    """
-}
-
-process hisat2Index {
-  label 'index'
-  label 'hisat2'
-  tag("${ref}")
-
-  input:
-    file(ref)
-
-  output:
-    set val("${ref}"), file("${ref}.*.ht2") into hisat2Refs
-
-  script:
-    """
-    hisat2-build ${ref} ${ref} -p ${task.cpus}
-    """
+    meta = [tool: "${tool}", target: "${ref}"]
+    //EITHER THIS:
+    switch(tool) {
+      case 'biokanga':
+        """
+        biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref ${ref}
+        """
+        break
+      case 'dart':
+        """
+        bwt_index ${ref} ${ref}
+        """
+        break
+      case 'hisat2':
+        """
+        hisat2-build ${ref} ${ref} -p ${task.cpus}
+        """
+        break
+      default: //If case not specified for the tool above expecting a template in templates/
+        template "${tool}_index.sh" ///OR USE TEMPLATES EXCLUSIVELY AND DROP swith/case
+        break
+    }
+    //OR USE TEMPLATES:
+    // template "${tool}_index.sh"
 }
 
 process downloadDatasets {
@@ -136,7 +111,7 @@ process downloadDatasets {
   tag("${dataset}")
 
   input:
-    each dataset from datasets
+    val(dataset) from datasets
 
   output:
     set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets
@@ -174,12 +149,18 @@ process prepareDatasets {
 
   script:
   meta = [dataset: dataset, adapters: false]
-  if(params.debug) {
+  if(params.debug) { //FOR QUICKER RUNS, ONLY TAKE READS AND GROUDG-THRUTH FOR A SINGLE CHROMOSOME
     """
-    awk '\$2~/${params.debugChromosome}\$/' ${dataDir}/*.cig | cut -f1 > debug.ids
-    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.forward.fa > r1
-    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.reverse.fa > r2
-    ln -sf "\$(readlink -f ${dataDir}/*.cig)" cig
+    awk '\$2~/${params.debugChromosome}\$/' ${dataDir}/*.cig \
+      | sort -k1,1V --parallel ${task.cpus} \
+      | tee >(awk -vOFS="\\t" 'NR%2==1{n++};{gsub(/[0-9]+/,n,\$1);print}' > cig) \
+      | cut -f1 > debug.ids
+    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.forward.fa \
+      | paste - - | sort -k1,1V --parallel ${task.cpus} \
+      | awk -vOFS="\\n" '{gsub(/[0-9]+/,++n,\$1);print \$1,\$2}' > r1
+    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.reverse.fa \
+      | paste - - | sort -k1,1V --parallel ${task.cpus} \
+      | awk -vOFS="\\n" '{gsub(/[0-9]+/,++n,\$1);print \$1,\$2}' > r2
     """
   } else {
     """
@@ -190,16 +171,13 @@ process prepareDatasets {
   }
 }
 
-//Each tool to get each dataset - multiplicate the channel and put these on Queue so that each tool can take one
-preparedDatasetsMultiChannel = preparedDatasets.into(tools.size()) as Queue
-
 process addAdapters {
   tag("${meta.dataset}")
 
   input:
-    set val(inmeta), file(r1), file(r2), file(cig) from prepareDatasetsForAdapters //(preparedDatasetsMultiChannel.poll())
+    set val(inmeta), file(r1), file(r2), file(cig) from prepareDatasetsForAdapters
   output:
-    set val(meta), file(a1), file(a2), file(cig)  into datasetsWithAdapters //datasetsForKanga, datasetsForHisat2, datasetsForDart
+    set val(meta), file(a1), file(a2), file(cig)  into datasetsWithAdapters
 
   script:
   meta = inmeta.clone()
@@ -209,121 +187,63 @@ process addAdapters {
     """
 }
 
-//Each tool to get each dataset - multiplicate the channel and put these on Queue so that each tool can take one
-datasetsWithAdaptersMultiChannel = datasetsWithAdapters.into(tools.size) as Queue
-
-
-// // process align {
-// //   label 'align'
-// //   // label("${idxmeta.tool}")
-// //   // tag("${idxmeta.tool}"+" VS "+"${idxmeta.ref}")
-// //   echo true
-
-// //   input:
-// //     set val(idxmeta), file("${ref}.*"), val(dataset), file(dataDir) from indices.combine(datasetsChannel) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
-
-// //   script:
-// //   """
-// //   ls -l
-// //   """
-// // }
-
-
-alignedDatasetsChannelsQ = [] as Queue
-tools.each {
-  alignedDatasetsChannelsQ.add(Channel.create())
-}
-
-
-process kangaAlign {
+process align {
   label 'align'
-  label 'biokanga'
-  tag("${inmeta}"+" VS "+"${ref}")
+  // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
+  tag("${idxmeta} << ${readsmeta}")
 
   input:
-    set file(ref), val(inmeta), file(r1), file(r2), file(cig) from kangaRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
-
-    //each pemode from [2,3]
+    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
 
   output:
-    set val(meta), file(sam), file(cig) into kangaAlignedDatasets
+    set val(meta), file("*sam"), file(cig) into alignedDatasets
 
   script:
-    meta = inmeta.clone() + [tool: 'biokanga']
-    CMD = "biokanga align --sfx ${ref} \
-      --mode 0 \
-      --format 5 \
-      --maxns 2 \
-      --pemode 2 \
-      --pairmaxlen 50000 \
-      --in ${r1} \
-      --pair ${r2}  \
-	    --out sam \
-	    --threads ${task.cpus} "
-    CMD += "--substitutions 5 \
-      --minchimeric 50"
-    """
-    ${CMD}
-    """
-}
-
-process dartAlign {
-  label 'align'
-  label 'dart'
-  tag("${inmeta}"+" VS "+"${ref}")
-
-  input:
-    set val(ref), file("*"), val(inmeta), file(r1), file(r2), file(cig) from dartRefs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
-
-  output:
-    set val(meta), file(sam), file(cig) into dartAlignedDatasets
-
-  script:
-    meta = inmeta.clone() + [tool: 'dart']
-    """
-    dart -i ${ref} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
-    """
-}
-
-process hisat2Align {
-  label 'align'
-  label 'hisat2'
-  tag("${inmeta}"+" VS "+"${ref}")
-
-  input:
-    set val(ref), file("${ref}.*.ht2"), val(inmeta), file(r1), file(r2), file(cig) from hisat2Refs.combine(preparedDatasetsMultiChannel.poll().mix(datasetsWithAdaptersMultiChannel.poll())) //cartesian product i.e. all input sets of reads vs all dbs - easy way of repeating ref for each dataset
-
-  output:
-    set val(meta), file(sam), file(cig) into hisat2AlignedDatasets
-
-  //READ-level-optimized: default-1-20-0.5-25-5-20-1-0-3-0
-// MODE=default (end-to-end, alt local)
-// NUM_MISMATCH=1
-// SEED_LENGTH=20
-// SEED_INTERVAL=0.5
-// SEED_EXTENSION=25
-// RE_SEED=5
-// PENALITY_NONCANONICAL=20
-// MAX_MISMATCH_PENALITY=1
-// MIN_MISMATCH_PENALITY=0
-// MAX_SOFTCLIPPING_PENALITY=3
-// MIN_SOFTCLIPPING_PENALITY=0
-  script:
-    meta = inmeta.clone() + [tool: 'hisat2']
-    """
-    hisat2 -x ${ref} -1 ${r1} -2 ${r2} \
-      --time \
-      --threads ${task.cpus} \
-      --reorder \
-      -f \
-      > sam
-    """
+  meta = idxmeta.clone() + readsmeta.clone()
+  //EITHER THIS:
+    switch(idxmeta.tool) {
+      case 'biokanga':
+        """
+        biokanga align --sfx ${idxmeta.target}.sfx \
+         --mode 0 \
+         --format 5 \
+         --maxns 2 \
+         --pemode 3 \
+         --pairmaxlen 50000 \
+         --in ${r1} \
+         --pair ${r2}  \
+         --out sam \
+         --threads ${task.cpus} \
+         --substitutions 5 \
+         --minchimeric 50
+        """
+        break
+      case 'dart':
+        """
+        dart -i ${idxmeta.target} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
+        """
+        break
+      case 'hisat2':
+        """
+        hisat2 -x ${idxmeta.target} -1 ${r1} -2 ${r2} \
+        --time \
+        --threads ${task.cpus} \
+        --reorder \
+        -f \
+        > sam
+        """
+        break
+      default: //If case not specified for the tool above expecting a template in templates/
+        template "${idxmeta.tool}_align.sh" ///OR USE TEMPLATES EXCLUSIVELY AND DROP swith/case
+        break
+    }
 }
 
 process nameSortSAM {
    tag("${meta}")
    input:
-    set val(meta), file(sam), file(cig) from hisat2AlignedDatasets.mix(kangaAlignedDatasets, dartAlignedDatasets)
+    set val(meta), file(sam), file(cig) from alignedDatasets
 
   output:
     set val(meta), file(sortedsam), file(cig) into sortedSAMs
@@ -345,46 +265,124 @@ process fixSAM {
     set val(meta), file(fixedsam), file(cig) into fixedSAMs
 
   script:
-  """
-  fix_sam.rb ${sortedsam} > fixedsam
-  """
+  if(params.debug) { //should probably fixt that not just n --debug otherwise --nummer fixed to 10 mil (?!)
+    """
+    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${sortedsam} > fixedsam
+    """
+  } else {
+    """
+    fix_sam.rb ${sortedsam} > fixedsam
+    """
+  }
 }
 
+actions = Channel.from(['unique', 'multi'])
 // actions = ['compare2truth', 'compare2truth_multi_mappers'] //
-actions = ['compare2truth']
+//actions = ['compare2truth']
 process compareToTruth {
   label 'benchmark'
-  label 'stats'
+  // label 'stats'
   tag("${meta}")
 
   input:
-    set val(meta), file(fixedsam), file(cig) from fixedSAMs
-    each action from actions
+    set val(meta), file(fixedsam), file(cig), val(action) from fixedSAMs.combine(actions)
+    // each action from actions
 
   output:
-    file '*' into stats
+    set val(outmeta), file(stat) into stats
 
   script:
-  outname = meta.dataset+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
-  """
-  ${action}.rb ${cig} ${fixedsam} > ${outname}
-  """
+  // outname = meta.dataset+"_"+meta.target+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
+  outmeta = meta.clone() + [type : action]
+  if(action == 'multi') {
+    """
+    compare2truth_multi_mappers.rb ${cig} ${fixedsam} > stat
+    """
+  } else {
+    """
+    compare2truth.rb ${cig} ${fixedsam} > stat
+    """
+  }
 }
 
-process aggregateStats {
-  label 'benchmark'
+process tidyStats {
+  label 'rscript'
+  // label 'stats'
+  // echo true
+  tag("${meta}")
+
+  input:
+    set val(meta), file(instats) from stats
+
+  output:
+    file 'tidy.csv' into tidyStats
+
+  exec:
+  keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
+
+  shell:
+  '''
+  < !{instats} stats_parser.R !{meta.type} > tidy.csv
+  for KV in !{keyValue}; do
+    sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" tidy.csv
+  done
+  '''
+  //sed adds key to the header line and the value to each remaining line
+}
+
+process dummyPlot {
+  // label 'rscript'
   label 'stats'
 
   input:
-    file '*' from stats.collect()
+    file '*.csv' from tidyStats.collect()
 
   output:
-    file '*_combined.txt'
+    file 'all.csv'
 
   script:
   """
-  for action in ${actions.join(" ")}; do
-    ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
-  done
+  awk 'FNR==1 && NR!=1{next;}{print}' *.csv > all.csv
   """
+  // """
+  // #!/usr/bin/env Rscript
+
+  // location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+  // if(!require(tidyverse)){
+  //   install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
+  //   library(tidyverse, lib.loc = location)
+  // }
+  // """
 }
+
+// process aggregateStats {
+//   label 'stats'
+
+//   input:
+//     set val(meta), file('*') from stats.collect()
+
+//   output:
+//     file '*_combined.txt'
+
+//   script:
+//   """
+//   ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
+//   """
+// }
+// process aggregateStats {
+//   label 'benchmark'
+//   label 'stats'
+
+//   input:
+//     file '*' from stats.collect()
+
+//   output:
+//     file '*_combined.txt'
+
+//   script:
+//   """
+//   for action in ${actions.join(" ")}; do
+//     ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
+//   done
+//   """
+// }
