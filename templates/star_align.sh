@@ -2,6 +2,6 @@
 
 STAR \
   --runThreadN ${task.cpus} \
-  --genomeDir ./ \
+  --genomeDir genomeDir \
   --readFilesIn ${r1} ${r2}
 

@@ -1,5 +1,5 @@
-// aligners = Channel.from(['biokanga','dart','hisat2','star'])
-aligners = Channel.from(['biokanga','dart']) //,'hisat2'])
+aligners = Channel.from(['biokanga','dart','hisat2','star'])
+// aligners = Channel.from(['biokanga','dart']) //,'hisat2'])
 //datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
 datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1'])
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
@@ -78,7 +78,7 @@ process indexGenerator {
     set val(meta), file("*") into indices
 
   script:
-    meta = [tool: "${tool}", ref: "${ref}"]
+    meta = [tool: "${tool}", target: "${ref}"]
     //EITHER THIS:
     switch(tool) {
       case 'biokanga':
@@ -205,7 +205,7 @@ process align {
     switch(idxmeta.tool) {
       case 'biokanga':
         """
-        biokanga align --sfx ${idxmeta.ref}.sfx \
+        biokanga align --sfx ${idxmeta.target}.sfx \
          --mode 0 \
          --format 5 \
          --maxns 2 \
@@ -221,12 +221,12 @@ process align {
         break
       case 'dart':
         """
-        dart -i ${idxmeta.ref} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
+        dart -i ${idxmeta.target} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
         """
         break
       case 'hisat2':
         """
-        hisat2 -x ${idxmeta.ref} -1 ${r1} -2 ${r2} \
+        hisat2 -x ${idxmeta.target} -1 ${r1} -2 ${r2} \
         --time \
         --threads ${task.cpus} \
         --reorder \
@@ -292,7 +292,7 @@ process compareToTruth {
     set val(outmeta), file(stat) into stats
 
   script:
-  // outname = meta.dataset+"_"+meta.ref+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
+  // outname = meta.dataset+"_"+meta.target+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
   outmeta = meta.clone() + [type : action]
   if(action == 'multi') {
     """
