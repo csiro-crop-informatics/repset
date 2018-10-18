@@ -1,5 +1,6 @@
-aligners = Channel.from(['biokanga','dart','hisat2','star'])
-// datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
+// aligners = Channel.from(['biokanga','dart','hisat2','star'])
+aligners = Channel.from(['biokanga','dart','hisat2'])
+//datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
 datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1'])
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
@@ -275,8 +276,8 @@ process fixSAM {
   }
 }
 
-// actions = ['compare2truth', 'compare2truth_multi_mappers'] //
-actions = ['compare2truth']
+actions = ['compare2truth', 'compare2truth_multi_mappers'] //
+//actions = ['compare2truth']
 process compareToTruth {
   label 'benchmark'
   label 'stats'
@@ -290,24 +291,40 @@ process compareToTruth {
     set val(meta), file("${outname}") into stats
 
   script:
-  outname = meta.dataset+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
+  outname = meta.dataset+"_"+meta.ref+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
   """
   ${action}.rb ${cig} ${fixedsam} > ${outname}
   """
 }
 
-// process tidyStats {
-//   label 'stats'
+process tidyStats {
+  label 'rscript'
+  label 'stats'
 
-//   input:
-//     set val(meta), file('*') from stats
+  input:
+    set val(meta), file(instats) from stats.first()
 
-//   // output:
-//   //   file '*_combined.txt'
+  // output:
+  //   file '*_combined.txt'
+
+  script:
+  """
+  stats_parser.R < ${instats} > outstats
+  """
+}
+
+// process dummyPlot {
+//   label 'rscript'
 
 //   script:
 //   """
-//   awk ''
+//   #!/usr/bin/env Rscript
+
+//   location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+//   if(!require(tidyverse)){
+//     install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
+//     library(tidyverse, lib.loc = location)
+//   }
 //   """
 // }
 
