@@ -318,7 +318,8 @@ process tidyStats {
     file 'tidy.csv' into tidyStats
 
   exec:
-  keyValue = meta.toMapString().replaceAll("[\\[\\],]","")
+  keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
+
   shell:
   '''
   < !{instats} stats_parser.R !{meta.type} > tidy.csv
@@ -326,18 +327,22 @@ process tidyStats {
     sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" tidy.csv
   done
   '''
-
+  //sed adds key to the header line and the value to each remaining line
 }
 
 process dummyPlot {
   // label 'rscript'
+  label 'stats'
 
   input:
     file '*.csv' from tidyStats.collect()
 
+  output:
+    file 'all.csv'
+
   script:
   """
-  ls -l
+  awk 'FNR==1 && NR!=1{next;}{print}' *.csv > all.csv
   """
   // """
   // #!/usr/bin/env Rscript
