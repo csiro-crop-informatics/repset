@@ -6,6 +6,7 @@ if(!require(tidyverse)){
   library(tidyverse, lib.loc = location)
 }
 
+
 new_vars_single <- c("total_reads",
               "total_read_accuracy",
               "unique_read_accuracy",
@@ -77,9 +78,14 @@ parse_file <- function(filename, multi = FALSE, debug = FALSE) {
   out <- bind_rows(other, junctions)
 
   out <- out %>%
+    #not necessary as added iby NF shell script mutate(type = ifelse(multi, "multi", "unique")) %>%
     mutate(perc = ifelse(grepl("%", value), TRUE, FALSE),
            value_dbl = ifelse(grepl("no.*called", value), NA,
                                  as.numeric(sub("([^%\\(]*).*", "\\1", value))))
 }
 
-write_csv(parse_file('/dev/stdin'),'/dev/stdout')
+args <- commandArgs(TRUE)
+ismulti <- any(ifelse(grepl("multi",c(args), ignore.case = TRUE), TRUE, FALSE))
+
+
+write_csv(parse_file('/dev/stdin', multi = ismulti),'/dev/stdout')

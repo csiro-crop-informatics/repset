@@ -1,5 +1,5 @@
 // aligners = Channel.from(['biokanga','dart','hisat2','star'])
-aligners = Channel.from(['biokanga','dart','hisat2'])
+aligners = Channel.from(['biokanga','dart']) //,'hisat2'])
 //datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
 datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1'])
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
@@ -276,57 +276,79 @@ process fixSAM {
   }
 }
 
-actions = ['compare2truth', 'compare2truth_multi_mappers'] //
+actions = Channel.from(['unique', 'multi'])
+// actions = ['compare2truth', 'compare2truth_multi_mappers'] //
 //actions = ['compare2truth']
 process compareToTruth {
   label 'benchmark'
-  label 'stats'
+  // label 'stats'
   tag("${meta}")
 
   input:
-    set val(meta), file(fixedsam), file(cig) from fixedSAMs
-    each action from actions
+    set val(meta), file(fixedsam), file(cig), val(action) from fixedSAMs.combine(actions)
+    // each action from actions
 
   output:
-    set val(meta), file("${outname}") into stats
+    set val(outmeta), file(stat) into stats
 
   script:
-  outname = meta.dataset+"_"+meta.ref+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
-  """
-  ${action}.rb ${cig} ${fixedsam} > ${outname}
-  """
+  // outname = meta.dataset+"_"+meta.ref+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
+  outmeta = meta.clone() + [type : action]
+  if(action == 'multi') {
+    """
+    compare2truth_multi_mappers.rb ${cig} ${fixedsam} > stat
+    """
+  } else {
+    """
+    compare2truth.rb ${cig} ${fixedsam} > stat
+    """
+  }
 }
 
 process tidyStats {
   label 'rscript'
-  label 'stats'
+  // label 'stats'
+  // echo true
+  tag("${meta}")
 
   input:
-    set val(meta), file(instats) from stats.first()
+    set val(meta), file(instats) from stats
 
-  // output:
-  //   file '*_combined.txt'
+  output:
+    file 'tidy.csv' into tidyStats
+
+  exec:
+  keyValue = meta.toMapString().replaceAll("[\\[\\],]","")
+  shell:
+  '''
+  < !{instats} stats_parser.R !{meta.type} > tidy.csv
+  for KV in !{keyValue}; do
+    sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" tidy.csv
+  done
+  '''
+
+}
+
+process dummyPlot {
+  // label 'rscript'
+
+  input:
+    file '*.csv' from tidyStats.collect()
 
   script:
   """
-  stats_parser.R < ${instats} > outstats
+  ls -l
   """
+  // """
+  // #!/usr/bin/env Rscript
+
+  // location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+  // if(!require(tidyverse)){
+  //   install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
+  //   library(tidyverse, lib.loc = location)
+  // }
+  // """
 }
-
-// process dummyPlot {
-//   label 'rscript'
-
-//   script:
-//   """
-//   #!/usr/bin/env Rscript
-
-//   location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-//   if(!require(tidyverse)){
-//     install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
-//     library(tidyverse, lib.loc = location)
-//   }
-//   """
-// }
 
 // process aggregateStats {
 //   label 'stats'
