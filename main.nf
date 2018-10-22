@@ -107,7 +107,7 @@ process indexGenerator {
 process downloadDatasets {
   label 'download'
   tag("${dataset}")
-  storeDir "${workflow.workDir}/downloaded" //and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
+  // storeDir "${workflow.workDir}/downloaded" //and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
 
   input:
     val(dataset) from datasets
@@ -213,6 +213,8 @@ process align {
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
   tag("${idxmeta} << ${readsmeta}")
   // cache { idxmeta.tool == 'star' ? 'deep' : 'lenient'}
+  // time { idxmeta.tool == 'gsnap' ? '4.h' : '2.h'}
+
   input:
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
 
@@ -261,8 +263,9 @@ process align {
 }
 
 process nameSortSAM {
-   tag("${meta}")
-   input:
+  label 'sort'
+  tag("${meta}")
+  input:
     set val(meta), file(sam), file(cig) from alignedDatasets
 
   output:

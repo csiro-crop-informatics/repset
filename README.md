@@ -4,7 +4,7 @@ A repository for a manuscript (application note?)  about [biokanga](https://gith
 # Experiments
 Adapting and containerising  earlier experiments (ongoing).
 
-Running the current version requires approximately 70 CPU-hours. For a quick-ish test run use `--debug` flag.
+Running the current version requires approximately 220 CPU-hours. For a quick-ish test run use `--debug` flag.
 In this case only the simulated reads coming from a single human chromosome are aligned to it.
  Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`.
 
