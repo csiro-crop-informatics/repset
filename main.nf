@@ -241,8 +241,6 @@ process fixSAM {
 }
 
 actions = Channel.from(['unique', 'multi'])
-// actions = ['compare2truth', 'compare2truth_multi_mappers'] //
-//actions = ['compare2truth']
 process compareToTruth {
   label 'benchmark'
   // label 'stats'
@@ -256,17 +254,16 @@ process compareToTruth {
     set val(outmeta), file(stat) into stats
 
   script:
-  // outname = meta.dataset+"_"+meta.target+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
-  outmeta = meta.clone() + [type : action]
-  if(action == 'multi') {
-    """
-    compare2truth_multi_mappers.rb ${cig} ${fixedsam} > stat
-    """
-  } else {
-    """
-    compare2truth.rb ${cig} ${fixedsam} > stat
-    """
-  }
+    outmeta = meta.clone() + [type : action]
+    if(action == 'multi') {
+      """
+      compare2truth_multi_mappers.rb ${cig} ${fixedsam} > stat
+      """
+    } else {
+      """
+      compare2truth.rb ${cig} ${fixedsam} > stat
+      """
+    }
 }
 
 process tidyStats {
@@ -285,12 +282,12 @@ process tidyStats {
   keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
 
   shell:
-  '''
-  < !{instats} stats_parser.R !{meta.type} > tidy.csv
-  for KV in !{keyValue}; do
-    sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" tidy.csv
-  done
-  '''
+    '''
+    < !{instats} stats_parser.R !{meta.type} > tidy.csv
+    for KV in !{keyValue}; do
+      sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" tidy.csv
+    done
+    '''
   //sed adds key to the header line and the value to each remaining line
 }
 
@@ -318,35 +315,3 @@ process dummyPlot {
   // }
   // """
 }
-
-// process aggregateStats {
-//   label 'stats'
-
-//   input:
-//     set val(meta), file('*') from stats.collect()
-
-//   output:
-//     file '*_combined.txt'
-
-//   script:
-//   """
-//   ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
-//   """
-// }
-// process aggregateStats {
-//   label 'benchmark'
-//   label 'stats'
-
-//   input:
-//     file '*' from stats.collect()
-
-//   output:
-//     file '*_combined.txt'
-
-//   script:
-//   """
-//   for action in ${actions.join(" ")}; do
-//     ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
-//   done
-//   """
-// }
