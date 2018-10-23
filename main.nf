@@ -78,29 +78,7 @@ process indexGenerator {
 
   script:
     meta = [tool: "${tool}", target: "${ref}"]
-    //EITHER THIS:
-    switch(tool) {
-      case 'biokanga':
-        """
-        biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref ${ref}
-        """
-        break
-      case 'dart':
-        """
-        bwt_index ${ref} ${ref}
-        """
-        break
-      case 'hisat2':
-        """
-        hisat2-build ${ref} ${ref} -p ${task.cpus}
-        """
-        break
-      default: //If case not specified for the tool above expecting a template in templates/
-        template "${tool}_index.sh" ///OR USE TEMPLATES EXCLUSIVELY AND DROP swith/case
-        break
-    }
-    //OR USE TEMPLATES:
-    // template "${tool}_index.sh"
+    template "${tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
 }
 
 process downloadDatasets {
@@ -221,46 +199,8 @@ process align {
     set val(meta), file("*sam"), file(cig) into alignedDatasets
 
   script:
-  meta = idxmeta.clone() + readsmeta.clone()
-  //EITHER THIS:
-    switch(idxmeta.tool) {
-      case 'biokanga':
-        """
-        biokanga align --sfx ${idxmeta.target}.sfx \
-         --mode 0 \
-         --format 5 \
-         --maxns 2 \
-         --pemode 3 \
-         --pairmaxlen 50000 \
-         --in ${r1} \
-         --pair ${r2}  \
-         --out sam \
-         --threads ${task.cpus} \
-         --substitutions 5 \
-         --minchimeric 50
-        """
-        break
-      case 'dart':
-        """
-        dart -i ${idxmeta.target} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
-        """
-        break
-      case 'hisat2':
-        TUNING_PARAMS="-N 1 -L 20 -i S,1,0.5 -D 25 -R 5 --pen-noncansplice 12  --mp 1,0  --sp 3,0"
-        """
-        hisat2 -x ${idxmeta.target} -1 ${r1} -2 ${r2} \
-        --time \
-        --threads ${task.cpus} \
-        --reorder \
-        -f \
-        ${TUNING_PARAMS} \
-        > sam
-        """
-        break
-      default: //If case not specified for the tool above expecting a template in templates/
-        template "${idxmeta.tool}_align.sh" ///OR USE TEMPLATES EXCLUSIVELY AND DROP swith/case
-        break
-    }
+    meta = idxmeta.clone() + readsmeta.clone()
+    template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
 process nameSortSAM {
