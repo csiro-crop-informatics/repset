@@ -1,4 +1,4 @@
-aligners = Channel.from(['bbmap', 'biokanga','dart','hisat2','star','gsnap']) //hera? mapsplice2? Subread
+aligners = Channel.from(['bbmap', 'biokanga','dart','gsnap','hisat2','star','subread']) //hera? mapsplice2? Subread
 //datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
 datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
