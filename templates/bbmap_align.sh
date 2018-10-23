@@ -5,7 +5,8 @@ bbmap.sh \
   in2=${r2} \
   threads=${task.cpus} \
   maxindel=200000 \
-  ambig=random \
+  ambiguous=best \
   intronlen=20 \
   keepnames=t \
+  sam=1.3 \
   out=sam
