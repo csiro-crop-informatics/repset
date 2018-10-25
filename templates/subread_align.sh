@@ -6,6 +6,7 @@ subread-align \
   -R ${r2} \
   -t 0 \
   --SAMoutput \
+  --maxMismatches 5 \
   -T ${task.cpus} \
   > sam
 

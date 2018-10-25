@@ -5,7 +5,10 @@
 hisat2 -x ${idxmeta.target} \
   -1 ${r1} \
   -2 ${r2} \
+  --no-mixed \
+  --no-discordant \
+  --mp 4,4 \
+  --max-intronlen 100000 \
   --threads ${task.cpus} \
-  --reorder \
   -f \
   > sam
