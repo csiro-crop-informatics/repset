@@ -39,6 +39,43 @@ process downloadReference {
   """
 }
 
+process downloadDatasets {
+  label 'download'
+  tag("${dataset}")
+  // storeDir "${workflow.workDir}/downloaded" //and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
+
+  input:
+    val(dataset) from datasets
+
+  output:
+    set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets
+
+  script:
+    """
+    wget http://bp1.s3.amazonaws.com/${dataset}.tar.bz2
+    """
+}
+
+
+
+process extractDatasets {
+  tag("${dataset}")
+
+  input:
+    set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
+
+  output:
+    set val(dataset), file("${dataset}") into extractedDatasets
+
+  script:
+    """
+    mkdir -p ${dataset}
+    pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${dataset}
+    """
+}
+
+
+
 process convertReference {
   input:
     file(downloadedRef) from refs
@@ -81,38 +118,7 @@ process indexGenerator {
     template "${tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
 }
 
-process downloadDatasets {
-  label 'download'
-  tag("${dataset}")
-  // storeDir "${workflow.workDir}/downloaded" //and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
 
-  input:
-    val(dataset) from datasets
-
-  output:
-    set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets
-
-  script:
-    """
-    wget http://bp1.s3.amazonaws.com/${dataset}.tar.bz2
-    """
-}
-
-process extractDatasets {
-  tag("${dataset}")
-
-  input:
-    set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
-
-  output:
-    set val(dataset), file("${dataset}") into extractedDatasets
-
-  script:
-    """
-    mkdir -p ${dataset}
-    pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${dataset}
-    """
-}
 
 process prepareDatasets {
   tag("${dataset}")
