@@ -202,18 +202,24 @@ process align {
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
 
   output:
-    set val(meta), file("*sam"), file(cig) into alignedDatasets
+    set val(meta), file("*sam"), file(cig), file('.command.trace') into alignedDatasets
 
   script:
     meta = idxmeta.clone() + readsmeta.clone()
     template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
+
 process nameSortSAM {
   label 'sort'
   tag("${meta}")
   input:
-    set val(meta), file(sam), file(cig) from alignedDatasets
+    set val(meta), file(sam), file(cig) from alignedDatasets.map { meta, sam, cig, trace ->
+        // meta.'aligntrace' = trace.splitCsv( header: true, limit: 1, sep: ' ')
+        // meta.'aligntrace'.'duration' = trace.text.tokenize('\n').last()
+        meta.'aligntime' = trace.text.tokenize('\n').last()
+        new Tuple(meta, sam, cig)
+      }
 
   output:
     set val(meta), file(sortedsam), file(cig) into sortedSAMs
@@ -226,6 +232,7 @@ process nameSortSAM {
 
 process fixSAM {
   label 'benchmark'
+  label 'slow'
   tag("${meta}")
 
   input:
@@ -235,13 +242,18 @@ process fixSAM {
     set val(meta), file(fixedsam), file(cig) into fixedSAMs
 
   script:
-  if(params.debug) { //should probably fixt that not just n --debug otherwise --nummer fixed to 10 mil (?!)
+  if(params.debug) {
+    //1. should probably get exect value not just for --debug run. Otherwise --nummer fixed to 10 mil (?!)
+    //2. awk reading sam twice to exclude multi-aligners
     """
-    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${sortedsam} > fixedsam
+    fix_sam.rb \
+      --nummer \$(paste - - < ${cig} | wc -l) \
+      <(awk 'NR==FNR{occurances[\$1]+=1};NR!=FNR && occurances[\$1]==1{print}' ${sortedsam} ${sortedsam}) \
+      > fixedsam
     """
   } else {
     """
-    fix_sam.rb ${sortedsam} > fixedsam
+    fix_sam.rb <(awk 'NR==FNR{occurances[\$1]+=1};NR!=FNR && occurances[\$1]==1{print}' ${sortedsam} ${sortedsam}) > fixedsam
     """
   }
 }
@@ -297,7 +309,7 @@ process tidyStats {
   //sed adds key to the header line and the value to each remaining line
 }
 
-process dummyPlot {
+process aggregateStats {
   // label 'rscript'
   label 'stats'
 
