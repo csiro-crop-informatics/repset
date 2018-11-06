@@ -1,4 +1,5 @@
 aligners = Channel.from(['bbmap', 'biokanga','dart','gsnap','hisat2','star','subread']) //hera? mapsplice2? Subread
+// aligners = Channel.from(['biokanga','gsnap','star']) //hera? mapsplice2? Subread
 //datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
 datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
@@ -212,6 +213,7 @@ process align {
 
 process nameSortSAM {
   label 'sort'
+  label 'samtools'
   tag("${meta}")
   input:
     set val(meta), file(sam), file(cig) from alignedDatasets.map { meta, sam, cig, trace ->
@@ -226,7 +228,7 @@ process nameSortSAM {
 
   script:
     """
-    grep -v '^@' ${sam} | sort -t'.' -k2,2n --parallel ${task.cpus} > sortedsam
+    samtools view -F2304  ${sam} | grep -v '^@' | sort -t'.' -k2,2n --parallel ${task.cpus} > sortedsam
     """
 }
 
@@ -245,11 +247,14 @@ process fixSAM {
   if(params.debug) {
     //1. should probably get exect value not just for --debug run. Otherwise --nummer fixed to 10 mil (?!)
     //2. awk reading sam twice to exclude multi-aligners
+    // """
+    // fix_sam.rb \
+    //   --nummer \$(paste - - < ${cig} | wc -l) \
+    //   <(awk 'NR==FNR{occurances[\$1]+=1};NR!=FNR && occurances[\$1]==1{print}' ${sortedsam} ${sortedsam} | tee dedupedsam ) \
+    //   > fixedsam
+    // """
     """
-    fix_sam.rb \
-      --nummer \$(paste - - < ${cig} | wc -l) \
-      <(awk 'NR==FNR{occurances[\$1]+=1};NR!=FNR && occurances[\$1]==1{print}' ${sortedsam} ${sortedsam}) \
-      > fixedsam
+    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${sortedsam} > fixedsam
     """
   } else {
     """
@@ -317,7 +322,7 @@ process aggregateStats {
     file '*.csv' from tidyStats.collect()
 
   output:
-    file 'all.csv'
+    file 'all.csv' into aggregatedStats
 
   script:
   """
@@ -332,4 +337,61 @@ process aggregateStats {
   //   library(tidyverse, lib.loc = location)
   // }
   // """
+}
+process ggplot {
+  echo true
+  errorStrategy 'finish'
+  label 'rscript'
+  label 'stats'
+
+  input:
+    file csv from aggregatedStats
+
+  output:
+    file '*.pdf'
+
+  script:
+  """
+  #!/usr/bin/env Rscript
+
+  location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+  if(!require(tidyverse)){
+    install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
+    library(tidyverse, lib.loc = location)
+  }
+  #if(!require(hrbrthemes)){
+  #  install.packages("hrbrthemes", lib = location, repos='https://cran.csiro.au')
+  #  library(hrbrthemes, lib.loc = location)
+  #}
+  stats <- read_csv('${csv}') %>%
+    mutate(adapters = case_when(adapters ~ "With adapters",  !adapters  ~ "No adapters"))
+
+  #RUN-TIMES
+  ggplot(stats)+ aes(tool, aligntime/1000) +
+    geom_point(aes(colour = dataset))
+  ggsave(file="runtimes.pdf", width=16, height=9);
+
+  #ALIGNMENT RATES
+  #Get those that report percentages
+stat_perc <- stats %>%
+  filter(perc)
+
+stats_prop <- stats %>%
+  filter(var %in% c("total_read_accuracy",
+                    "perc_reads_incorrect",
+                    "perc_reads_unaligned",
+                    "perc_reads_ambiguous"),
+         type == "unique")
+
+ggplot(stats_prop, aes(tool, value_dbl)) +
+  geom_bar(aes(fill = var), stat = "identity") +
+  facet_wrap(adapters~dataset) +
+  #scale_fill_viridis(discrete = TRUE, direction = -1) +
+  labs(title = "Read alignment statistics ",
+       subtitle = "uniquely aligned reads",
+       x = "Tool",
+       y = "Percentage",
+       fill = "Alignment classification") #+  theme_ipsum_rc()
+  ggsave(file="align-rates.pdf", width=16, height=9);
+  """
 }
