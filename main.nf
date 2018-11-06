@@ -258,7 +258,7 @@ process fixSAM {
     """
   } else {
     """
-    fix_sam.rb <(awk 'NR==FNR{occurances[\$1]+=1};NR!=FNR && occurances[\$1]==1{print}' ${sortedsam} ${sortedsam}) > fixedsam
+    fix_sam.rb ${sortedsam} > fixedsam
     """
   }
 }
