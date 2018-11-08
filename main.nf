@@ -1,7 +1,11 @@
-aligners = Channel.from(['biokanga','dart','hisat2','star','gsnap'])
-// aligners = Channel.from(['biokanga','dart']) //,'hisat2'])
+#!/usr/bin/env nextflow
+
+aligners = Channel.from(['bbmap', 'biokanga','dart','gsnap','hisat2','star','subread']) //hera? mapsplice2? Subread
+// alignerparams = Channel.from(['hisat2': ['--sp 2,1', '--sp 2,0', '--sp 1,0', '--sp 0,0']])
+// aligners = Channel.from(['biokanga','gsnap','star']) //hera? mapsplice2? Subread
 //datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
-datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
+datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']) //.filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
+// datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
 import static groovy.json.JsonOutput.*
@@ -39,6 +43,43 @@ process downloadReference {
   wget ${url}
   """
 }
+
+process downloadDatasets {
+  label 'download'
+  tag("${dataset}")
+  // storeDir "${workflow.workDir}/downloaded" //and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
+
+  input:
+    val(dataset) from datasets
+
+  output:
+    set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets
+
+  script:
+    """
+    wget http://bp1.s3.amazonaws.com/${dataset}.tar.bz2
+    """
+}
+
+
+
+process extractDatasets {
+  tag("${dataset}")
+
+  input:
+    set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
+
+  output:
+    set val(dataset), file("${dataset}") into extractedDatasets
+
+  script:
+    """
+    mkdir -p ${dataset}
+    pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${dataset}
+    """
+}
+
+
 
 process convertReference {
   input:
@@ -79,63 +120,10 @@ process indexGenerator {
 
   script:
     meta = [tool: "${tool}", target: "${ref}"]
-    //EITHER THIS:
-    switch(tool) {
-      case 'biokanga':
-        """
-        biokanga index --threads ${task.cpus} -i ${ref} -o ${ref}.sfx --ref ${ref}
-        """
-        break
-      case 'dart':
-        """
-        bwt_index ${ref} ${ref}
-        """
-        break
-      case 'hisat2':
-        """
-        hisat2-build ${ref} ${ref} -p ${task.cpus}
-        """
-        break
-      default: //If case not specified for the tool above expecting a template in templates/
-        template "${tool}_index.sh" ///OR USE TEMPLATES EXCLUSIVELY AND DROP swith/case
-        break
-    }
-    //OR USE TEMPLATES:
-    // template "${tool}_index.sh"
+    template "${tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
 }
 
-process downloadDatasets {
-  label 'download'
-  tag("${dataset}")
-  // storeDir "${workflow.workDir}/downloaded" //and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
 
-  input:
-    val(dataset) from datasets
-
-  output:
-    set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets
-
-  script:
-    """
-    wget http://bp1.s3.amazonaws.com/${dataset}.tar.bz2
-    """
-}
-
-process extractDatasets {
-  tag("${dataset}")
-
-  input:
-    set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
-
-  output:
-    set val(dataset), file("${dataset}") into extractedDatasets
-
-  script:
-    """
-    mkdir -p ${dataset}
-    pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${dataset}
-    """
-}
 
 process prepareDatasets {
   tag("${dataset}")
@@ -179,8 +167,8 @@ process addAdapters {
   output:
     set val(meta), file(a1), file(a2), file(cig)  into datasetsWithAdapters
 
-  when:
-    !params.debug //omitting this process to speed things up a bit for debug runs
+  // when:
+  //   !params.debug //omitting this process to speed things up a bit for debug runs
 
   script:
     meta = inmeta.clone()
@@ -206,9 +194,10 @@ process addAdapters {
 //  NUM_COLLAPSED_JUNCTIONS - NUM_INSERTED_JUNCTIONS - NUM_MULTIMAPPER - NUM_FILTER_MISMATCHES - RATIO_FILTER_MISMATCHES - SEED_LENGTH - OVERHANG - END_ALIGNMENT_TYPE - NUM_FILTER_MATCHES - NUM_FILTER_SCORE - NUM_ANCHOR - OVERHANG_ANNOTATED - OUT_FILTER
 
 
+alignLabel = params.debug ? 'debugAlign' : 'align'
 
 process align {
-  label 'align'
+  label alignLabel
   // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
   tag("${idxmeta} << ${readsmeta}")
@@ -219,95 +208,95 @@ process align {
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
 
   output:
-    set val(meta), file("*sam"), file(cig) into alignedDatasets
+    set val(meta), file("*sam"), file(cig), file('.command.trace') into alignedDatasets
 
   script:
-  meta = idxmeta.clone() + readsmeta.clone()
-  //EITHER THIS:
-    switch(idxmeta.tool) {
-      case 'biokanga':
-        """
-        biokanga align --sfx ${idxmeta.target}.sfx \
-         --mode 0 \
-         --format 5 \
-         --maxns 2 \
-         --pemode 3 \
-         --pairmaxlen 50000 \
-         --in ${r1} \
-         --pair ${r2}  \
-         --out sam \
-         --threads ${task.cpus} \
-         --substitutions 5 \
-         --minchimeric 50
-        """
-        break
-      case 'dart':
-        """
-        dart -i ${idxmeta.target} -f ${r1} -f2 ${r2} -t ${task.cpus} > sam
-        """
-        break
-      case 'hisat2':
-        TUNING_PARAMS="-N 1 -L 20 -i S,1,0.5 -D 25 -R 5 --pen-noncansplice 12  --mp 1,0  --sp 3,0"
-        """
-        hisat2 -x ${idxmeta.target} -1 ${r1} -2 ${r2} \
-        --time \
-        --threads ${task.cpus} \
-        --reorder \
-        -f \
-        ${TUNING_PARAMS} \
-        > sam
-        """
-        break
-      default: //If case not specified for the tool above expecting a template in templates/
-        template "${idxmeta.tool}_align.sh" ///OR USE TEMPLATES EXCLUSIVELY AND DROP swith/case
-        break
-    }
+    meta = idxmeta.clone() + readsmeta.clone()
+    template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
+
 process nameSortSAM {
-  label 'sort'
+  // label 'sort'
+  label 'samtools'
   tag("${meta}")
   input:
-    set val(meta), file(sam), file(cig) from alignedDatasets
+    set val(meta), file(sam), file(cig) from alignedDatasets.map { meta, sam, cig, trace ->
+        // meta.'aligntrace' = trace.splitCsv( header: true, limit: 1, sep: ' ')
+        // meta.'aligntrace'.'duration' = trace.text.tokenize('\n').last()
+        meta.'aligntime' = trace.text.tokenize('\n').last()
+        new Tuple(meta, sam, cig)
+      }
 
   output:
     set val(meta), file(sortedsam), file(cig) into sortedSAMs
 
   script:
     """
-    grep -v '^@' ${sam} | sort -t'.' -k2,2n --parallel ${task.cpus} > sortedsam
+    samtools sort --threads ${task.cpus} -n --output-fmt SAM  ${sam} > sortedsam
     """
+    // """
+    // samtools view -F2304  ${sam} | grep -v '^@' | sort -t'.' -k2,2n --parallel ${task.cpus} > sortedsam
+    // """
 }
+
+// process removeSecondaryAndSupplementary {
+//   tag("${meta}")
+//   label 'samtools'
+
+//   input:
+//     set val(meta), file(sortedsam), file(cig) from sortedSAMs1
+
+//   output:
+//     set val(meta), file(uniqedsam), file(cig) into uniqedSAMs
+
+//   script:
+//   """
+//   samtools view -F2304  ${sam} > uniqedsam
+//   """
+// }
+
+
+uniqSAM = Channel.from([false, true])
 
 process fixSAM {
   label 'benchmark'
+  label 'slow'
   tag("${meta}")
 
   input:
-    set val(meta), file(sortedsam), file(cig) from sortedSAMs
+    set val(inmeta), file(sortedsam), file(cig), val(uniqed) from sortedSAMs.combine(uniqSAM)
 
   output:
     set val(meta), file(fixedsam), file(cig) into fixedSAMs
 
   script:
-  if(params.debug) { //should probably fixt that not just n --debug otherwise --nummer fixed to 10 mil (?!)
+  meta = inmeta.clone() + [uniqed: uniqed]
+  INSAM = uniqed ? "<(awk '\$1 !~ /^@/ && !and(\$2,256) && !and(\$2,2048)' ${sortedsam} ) " : "<(grep -v '^@' ${sortedsam})"
+  if(params.debug) {
+    //1. should probably get exect value not just for --debug run. Otherwise --nummer fixed to 10 mil (?!)
+    //2. awk reading sam twice to exclude multi-aligners
+    // """
+    // fix_sam.rb \
+    //   --nummer \$(paste - - < ${cig} | wc -l) \
+    //   <(awk 'NR==FNR{occurances[\$1]+=1};NR!=FNR && occurances[\$1]==1{print}' ${sortedsam} ${sortedsam} | tee dedupedsam ) \
+    //   > fixedsam
+    // """
     """
-    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${sortedsam} > fixedsam
+    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${INSAM} > fixedsam
     """
   } else {
     """
-    fix_sam.rb ${sortedsam} > fixedsam
+    fix_sam.rb ${INSAM} > fixedsam
     """
   }
 }
 
 actions = Channel.from(['unique', 'multi'])
-// actions = ['compare2truth', 'compare2truth_multi_mappers'] //
-//actions = ['compare2truth']
 process compareToTruth {
   label 'benchmark'
   // label 'stats'
-  tag("${meta}")
+  tag("${outmeta}")
 
   input:
     set val(meta), file(fixedsam), file(cig), val(action) from fixedSAMs.combine(actions)
@@ -317,17 +306,16 @@ process compareToTruth {
     set val(outmeta), file(stat) into stats
 
   script:
-  // outname = meta.dataset+"_"+meta.target+""+(meta.adapters ? "_adapters" : "")+"_"+meta.tool+"."+action
-  outmeta = meta.clone() + [type : action]
-  if(action == 'multi') {
-    """
-    compare2truth_multi_mappers.rb ${cig} ${fixedsam} > stat
-    """
-  } else {
-    """
-    compare2truth.rb ${cig} ${fixedsam} > stat
-    """
-  }
+    outmeta = meta.clone() + [type : action]
+    if(action == 'multi') {
+      """
+      compare2truth_multi_mappers.rb ${cig} ${fixedsam} > stat
+      """
+    } else {
+      """
+      compare2truth.rb ${cig} ${fixedsam} > stat
+      """
+    }
 }
 
 process tidyStats {
@@ -346,16 +334,16 @@ process tidyStats {
   keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
 
   shell:
-  '''
-  < !{instats} stats_parser.R !{meta.type} > tidy.csv
-  for KV in !{keyValue}; do
-    sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" tidy.csv
-  done
-  '''
+    '''
+    < !{instats} stats_parser.R !{meta.type} > tidy.csv
+    for KV in !{keyValue}; do
+      sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" tidy.csv
+    done
+    '''
   //sed adds key to the header line and the value to each remaining line
 }
 
-process dummyPlot {
+process aggregateStats {
   // label 'rscript'
   label 'stats'
 
@@ -363,7 +351,7 @@ process dummyPlot {
     file '*.csv' from tidyStats.collect()
 
   output:
-    file 'all.csv'
+    file 'all.csv' into aggregatedStats
 
   script:
   """
@@ -379,35 +367,62 @@ process dummyPlot {
   // }
   // """
 }
+process ggplot {
+  echo true
+  errorStrategy 'finish'
+  label 'rscript'
+  label 'stats'
 
-// process aggregateStats {
-//   label 'stats'
+  input:
+    file csv from aggregatedStats
 
-//   input:
-//     set val(meta), file('*') from stats.collect()
+  output:
+    file '*.pdf'
 
-//   output:
-//     file '*_combined.txt'
+  script:
+  """
+  #!/usr/bin/env Rscript
 
-//   script:
-//   """
-//   ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
-//   """
-// }
-// process aggregateStats {
-//   label 'benchmark'
-//   label 'stats'
+  location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+  if(!require(tidyverse)){
+    install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
+    library(tidyverse, lib.loc = location)
+  }
+  #if(!require(hrbrthemes)){
+  #  install.packages("hrbrthemes", lib = location, repos='https://cran.csiro.au')
+  #  library(hrbrthemes, lib.loc = location)
+  #}
+  stats <- read_csv('${csv}') %>%
+    mutate(adapters = case_when(adapters ~ "With adapters",  !adapters  ~ "No adapters")) %>%
+    mutate(uniqed = case_when(!uniqed ~ "With secondary/supplementary",  uniqed  ~ "No secondary/supplementary"))
 
-//   input:
-//     file '*' from stats.collect()
+  #RUN-TIMES
+  ggplot(stats)+ aes(tool, aligntime*10^-3/60) +
+    geom_point(aes(colour = dataset)) +
+    facet_wrap(~adapters) +
+    ggsave(file="runtimes.pdf", width=16, height=9);
 
-//   output:
-//     file '*_combined.txt'
+  #ALIGNMENT RATES
+  #Get those that report percentages
+stat_perc <- stats %>%
+  filter(perc)
 
-//   script:
-//   """
-//   for action in ${actions.join(" ")}; do
-//     ls *.\${action} | sort -V | xargs read_stats.rb | sed "s/\${action}//g" > \${action}_combined.txt
-//   done
-//   """
-// }
+stats_prop <- stats %>%
+  filter(var %in% c("total_read_accuracy",
+                    "perc_reads_incorrect",
+                    "perc_reads_unaligned",
+                    "perc_reads_ambiguous"),
+         type == "unique")
+
+ggplot(stats_prop, aes(tool, value_dbl)) +
+  geom_bar(aes(fill = var), stat = "identity") +
+  facet_wrap(adapters~dataset~uniqed) +
+  #scale_fill_viridis(discrete = TRUE, direction = -1) +
+  labs(title = "Read alignment statistics ",
+       subtitle = "uniquely aligned reads",
+       x = "Tool",
+       y = "Percentage",
+       fill = "Alignment classification") #+  theme_ipsum_rc()
+  ggsave(file="align-rates.pdf", width=16, height=9);
+  """
+}
