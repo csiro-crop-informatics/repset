@@ -9,6 +9,5 @@ bbmap.sh \
   intronlen=20 \
   keepnames=t \
   sam=1.3 \
-  minid=95 \
   local=t \
   out=sam
