@@ -1,7 +1,11 @@
+#!/usr/bin/env nextflow
+
 aligners = Channel.from(['bbmap', 'biokanga','dart','gsnap','hisat2','star','subread']) //hera? mapsplice2? Subread
+// alignerparams = Channel.from(['hisat2': ['--sp 2,1', '--sp 2,0', '--sp 1,0', '--sp 0,0']])
 // aligners = Channel.from(['biokanga','gsnap','star']) //hera? mapsplice2? Subread
 //datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
-datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
+datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']) //.filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
+// datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
 import static groovy.json.JsonOutput.*
@@ -163,8 +167,8 @@ process addAdapters {
   output:
     set val(meta), file(a1), file(a2), file(cig)  into datasetsWithAdapters
 
-  when:
-    !params.debug //omitting this process to speed things up a bit for debug runs
+  // when:
+  //   !params.debug //omitting this process to speed things up a bit for debug runs
 
   script:
     meta = inmeta.clone()
@@ -190,9 +194,10 @@ process addAdapters {
 //  NUM_COLLAPSED_JUNCTIONS - NUM_INSERTED_JUNCTIONS - NUM_MULTIMAPPER - NUM_FILTER_MISMATCHES - RATIO_FILTER_MISMATCHES - SEED_LENGTH - OVERHANG - END_ALIGNMENT_TYPE - NUM_FILTER_MATCHES - NUM_FILTER_SCORE - NUM_ANCHOR - OVERHANG_ANNOTATED - OUT_FILTER
 
 
+alignLabel = params.debug ? 'debugAlign' : 'align'
 
 process align {
-  label 'align'
+  label alignLabel
   // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
   tag("${idxmeta} << ${readsmeta}")
@@ -212,7 +217,7 @@ process align {
 
 
 process nameSortSAM {
-  label 'sort'
+  // label 'sort'
   label 'samtools'
   tag("${meta}")
   input:
@@ -228,9 +233,31 @@ process nameSortSAM {
 
   script:
     """
-    samtools view -F2304  ${sam} | grep -v '^@' | sort -t'.' -k2,2n --parallel ${task.cpus} > sortedsam
+    samtools sort --threads ${task.cpus} -n --output-fmt SAM  ${sam} > sortedsam
     """
+    // """
+    // samtools view -F2304  ${sam} | grep -v '^@' | sort -t'.' -k2,2n --parallel ${task.cpus} > sortedsam
+    // """
 }
+
+// process removeSecondaryAndSupplementary {
+//   tag("${meta}")
+//   label 'samtools'
+
+//   input:
+//     set val(meta), file(sortedsam), file(cig) from sortedSAMs1
+
+//   output:
+//     set val(meta), file(uniqedsam), file(cig) into uniqedSAMs
+
+//   script:
+//   """
+//   samtools view -F2304  ${sam} > uniqedsam
+//   """
+// }
+
+
+uniqSAM = Channel.from([false, true])
 
 process fixSAM {
   label 'benchmark'
@@ -238,12 +265,14 @@ process fixSAM {
   tag("${meta}")
 
   input:
-    set val(meta), file(sortedsam), file(cig) from sortedSAMs
+    set val(inmeta), file(sortedsam), file(cig), val(uniqed) from sortedSAMs.combine(uniqSAM)
 
   output:
     set val(meta), file(fixedsam), file(cig) into fixedSAMs
 
   script:
+  meta = inmeta.clone() + [uniqed: uniqed]
+  INSAM = uniqed ? "<(awk '\$1 !~ /^@/ && !and(\$2,256) && !and(\$2,2048)' ${sortedsam} ) " : "<(grep -v '^@' ${sortedsam})"
   if(params.debug) {
     //1. should probably get exect value not just for --debug run. Otherwise --nummer fixed to 10 mil (?!)
     //2. awk reading sam twice to exclude multi-aligners
@@ -254,11 +283,11 @@ process fixSAM {
     //   > fixedsam
     // """
     """
-    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${sortedsam} > fixedsam
+    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${INSAM} > fixedsam
     """
   } else {
     """
-    fix_sam.rb ${sortedsam} > fixedsam
+    fix_sam.rb ${INSAM} > fixedsam
     """
   }
 }
@@ -364,12 +393,14 @@ process ggplot {
   #  library(hrbrthemes, lib.loc = location)
   #}
   stats <- read_csv('${csv}') %>%
-    mutate(adapters = case_when(adapters ~ "With adapters",  !adapters  ~ "No adapters"))
+    mutate(adapters = case_when(adapters ~ "With adapters",  !adapters  ~ "No adapters")) %>%
+    mutate(uniqed = case_when(!uniqed ~ "With secondary/supplementary",  uniqed  ~ "No secondary/supplementary"))
 
   #RUN-TIMES
-  ggplot(stats)+ aes(tool, aligntime/1000) +
-    geom_point(aes(colour = dataset))
-  ggsave(file="runtimes.pdf", width=16, height=9);
+  ggplot(stats)+ aes(tool, aligntime*10^-3/60) +
+    geom_point(aes(colour = dataset)) +
+    facet_wrap(~adapters) +
+    ggsave(file="runtimes.pdf", width=16, height=9);
 
   #ALIGNMENT RATES
   #Get those that report percentages
@@ -385,7 +416,7 @@ stats_prop <- stats %>%
 
 ggplot(stats_prop, aes(tool, value_dbl)) +
   geom_bar(aes(fill = var), stat = "identity") +
-  facet_wrap(adapters~dataset) +
+  facet_wrap(adapters~dataset~uniqed) +
   #scale_fill_viridis(discrete = TRUE, direction = -1) +
   labs(title = "Read alignment statistics ",
        subtitle = "uniquely aligned reads",
