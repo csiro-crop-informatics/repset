@@ -1,10 +1,15 @@
 #!/usr/bin/env Rscript
 
-location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-if(!require(tidyverse)){
-  install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
-  library(tidyverse, lib.loc = location)
-}
+# location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+# if(!require(tidyverse)){
+#   install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
+#   library(tidyverse, lib.loc = location)
+# }
+library(readr)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggplot2)
 
 
 new_vars_single <- c("total_reads",
