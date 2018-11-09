@@ -365,7 +365,7 @@ process ggplot {
 
   script:
   """
-  #!/usr/bin/env Rscript
+  #!/usr/bin/env r
 
   library(dplyr)
   library(readr)
