@@ -1,4 +1,4 @@
-#!/usr/bin/env r
+#!/usr/bin/env Rscript
 
 # location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
 # if(!require(tidyverse)){
