@@ -1,9 +1,9 @@
 #!/usr/bin/env nextflow
 
-aligners = Channel.from(['bbmap', 'biokanga','dart','gsnap','hisat2','star','subread']) //hera? mapsplice2? Subread
+aligners = Channel.from(['bbmap', 'biokanga','biokanga_4_3_11','dart','gsnap','hisat2','star','subread']) //hera? mapsplice2? Subread
 // alignerparams = Channel.from(['hisat2': ['--sp 2,1', '--sp 2,0', '--sp 1,0', '--sp 0,0']])
 // aligners = Channel.from(['biokanga','gsnap','star']) //hera? mapsplice2? Subread
-//datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
+// datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
 datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']) //.filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 // datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
@@ -31,12 +31,14 @@ if (params.help){
 }
 
 process downloadReference {
+  storeDir "downloaded"
+  scratch false
 
   input:
     val(url)
 
   output:
-    file('*') into refs
+    file('chromFa.tar.gz') into refs
 
   script:
   """
@@ -45,15 +47,17 @@ process downloadReference {
 }
 
 process downloadDatasets {
-  label 'download'
+  // label 'download'
   tag("${dataset}")
-  // storeDir "${workflow.workDir}/downloaded" //and put the downloaded datasets there and prevent generating cost to dataset creators through repeated downloads
+  storeDir "downloaded" // storeDir "${workflow.workDir}/downloaded" put the datasets there and prevent generating cost to dataset creators through repeated downloads on re-runs
+  scratch false
 
   input:
     val(dataset) from datasets
 
   output:
-    set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets
+    file("${dataset}.tar.bz2") into downloadedDatasets
+    // set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets  //not possible when using storeDir
 
   script:
     """
@@ -61,21 +65,23 @@ process downloadDatasets {
     """
 }
 
-
-
 process extractDatasets {
   tag("${dataset}")
+  echo true
 
   input:
-    set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
+    // set val(dataset), file("${dataset}.tar.bz2") from downloadedDatasets
+    file(datasetfile) from downloadedDatasets
 
   output:
     set val(dataset), file("${dataset}") into extractedDatasets
 
   script:
+    dataset = datasetfile.name.replaceAll("\\..*","")
     """
     mkdir -p ${dataset}
-    pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${dataset}
+    pbzip2 --decompress --stdout -p${task.cpus} ${datasetfile} | tar -x --directory ${dataset}
+    #pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${dataset}
     """
 }
 
@@ -260,13 +266,7 @@ process fixSAM {
   INSAM = uniqed ? "<(awk '\$1 !~ /^@/ && !and(\$2,256) && !and(\$2,2048)' ${sortedsam} ) " : "<(grep -v '^@' ${sortedsam})"
   if(params.debug) {
     //1. should probably get exect value not just for --debug run. Otherwise --nummer fixed to 10 mil (?!)
-    //2. awk reading sam twice to exclude multi-aligners
-    // """
-    // fix_sam.rb \
-    //   --nummer \$(paste - - < ${cig} | wc -l) \
-    //   <(awk 'NR==FNR{occurances[\$1]+=1};NR!=FNR && occurances[\$1]==1{print}' ${sortedsam} ${sortedsam} | tee dedupedsam ) \
-    //   > fixedsam
-    // """
+
     """
     fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${INSAM} > fixedsam
     """
@@ -328,29 +328,7 @@ process tidyStats {
   //sed adds key to the header line and the value to each remaining line
 }
 
-process aggregateStats {
-  label 'stats'
 
-  input:
-    file '*.csv' from tidyStats.collect()
-
-  output:
-    file 'all.csv' into aggregatedStats
-
-  script:
-  """
-  awk 'FNR>1 || NR==1' *.csv > all.csv
-  """
-  // """
-  // #!/usr/bin/env Rscript
-
-  // location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-  // if(!require(tidyverse)){
-  //   install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
-  //   library(tidyverse, lib.loc = location)
-  // }
-  // """
-}
 process ggplot {
   echo true
   errorStrategy 'finish'
@@ -358,10 +336,12 @@ process ggplot {
   label 'stats'
 
   input:
-    file csv from aggregatedStats
+    file csv from tidyStats.collectFile(name: 'all.csv', keepHeader: true)
+    // file csv from aggregatedStats
 
   output:
     file '*.pdf'
+    file csv
 
   script:
   """
