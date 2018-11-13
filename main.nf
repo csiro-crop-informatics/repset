@@ -1,10 +1,10 @@
 #!/usr/bin/env nextflow
 
-aligners = Channel.from(['bbmap', 'biokanga','biokanga_4_3_11','dart','gsnap','hisat2','star','subread']) //hera? mapsplice2? Subread
+aligners = Channel.from(['bbmap', 'biokanga','biokanga_4_3_11','dart','gsnap','hisat2','star','subread']).filter{ !params.debug || it.matches("(biokanga|dart|hisat2)\$") } //hera? mapsplice2? Subread
 // alignerparams = Channel.from(['hisat2': ['--sp 2,1', '--sp 2,0', '--sp 1,0', '--sp 0,0']])
 // aligners = Channel.from(['biokanga','gsnap','star']) //hera? mapsplice2? Subread
 // datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
-datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']) //.filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
+datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 // datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
@@ -173,8 +173,8 @@ process addAdapters {
   output:
     set val(meta), file(a1), file(a2), file(cig)  into datasetsWithAdapters
 
-  // when:
-  //   !params.debug //omitting this process to speed things up a bit for debug runs
+  when:
+    !params.debug || params.adapters //omitting this process to speed things up a bit for debug runs
 
   script:
     meta = inmeta.clone()
@@ -199,7 +199,7 @@ process addAdapters {
 //  STAR --twopassMode Basic --outSAMunmapped Within --limitOutSJcollapsed 1000000 --limitSjdbInsertNsj 1000000 --outFilterMultimapNmax <NUM_MULTIMAPPER> --outFilterMismatchNmax <NUM_FILTER_MISMATCHES> --outFilterMismatchNoverLmax <RATIO_FILTER_MISMATCHES> --seedSearchStartLmax <SEED_LENGTH> --alignSJoverhangMin <OVERHANG> --alignEndsType <END_ALIGNMENT_TYPE> --outFilterMatchNminOverLread <NUM_FILTER_MATCHES> --outFilterScoreMinOverLread <NUM_FILTER_SCORE> --winAnchorMultimapNmax <NUM_ANCHOR> --alignSJDBoverhangMin <OVERHANG_ANNOTATED> --outFilterType <OUT_FILTER>
 //  NUM_COLLAPSED_JUNCTIONS - NUM_INSERTED_JUNCTIONS - NUM_MULTIMAPPER - NUM_FILTER_MISMATCHES - RATIO_FILTER_MISMATCHES - SEED_LENGTH - OVERHANG - END_ALIGNMENT_TYPE - NUM_FILTER_MATCHES - NUM_FILTER_SCORE - NUM_ANCHOR - OVERHANG_ANNOTATED - OUT_FILTER
 
-
+//reducing requirements if aligning in debug mode (reduced reference, fewer reads)
 alignLabel = params.debug ? 'debugAlign' : 'align'
 
 process align {
