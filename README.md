@@ -6,18 +6,22 @@ Adapting and containerising  earlier experiments (ongoing).
 
 Running the current version requires approximately 220 CPU-hours. For a quick-ish test run use `--debug` flag.
 In this case only the simulated reads coming from a single human chromosome are aligned to it.
- Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`.
+Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`.
 
-There are a few execution options, all require Nextflow and Singularity.
-
-```
-nextflow run csiro-crop-informatics/biokanga-manuscript
-```
-
-See [nextflow.config](nextflow.config#L22-L40) for available execution profiles, e.g. for local execution this could be
+## Quick(-ish) test run
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug
+```
+
+## Full pipeline run
+
+There are a few execution options, all require Nextflow and either Docker or Singularity.
+See [nextflow.config](nextflow.config#L22-L47) for available execution profiles, e.g. for local execution this could be
+
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
 ```
 
 or on a SLURM cluster
@@ -26,12 +30,13 @@ or on a SLURM cluster
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule
 ```
 
+ Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module. This may not be applicable on your system.
+
 ## Experimental pipeline overview
 
-
 ![figures/dag.png](figures/dag.png)
-[Same DAG before generalisation of indexing and alignment processes to work with multiple tools](figures/dag-old-colmplex.png)
 
+[Same DAG before generalisation of indexing and alignment processes to work with multiple tools](figures/dag-old-colmplex.png)
 
 # WRiting:
 
@@ -50,7 +55,6 @@ Among the [alternatives available](https://rmarkdown.rstudio.com/authoring_bibli
 * `LaTeX` e.g. on ubuntu `sudo apt install texlive texlive-latex-extra`
 * additional R packages installed and loaded by [`render.R`](render.R)
 
-**TODO: containerize the rendering environment**
 
 ## Rendering
 

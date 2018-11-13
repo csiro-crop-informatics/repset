@@ -174,7 +174,7 @@ process addAdapters {
     set val(meta), file(a1), file(a2), file(cig)  into datasetsWithAdapters
 
   when:
-    !params.debug //omitting this process to speed things up a bit for debug runs
+    !params.debug || params.adapters //omitting this process to speed things up a bit for debug runs
 
   script:
     meta = inmeta.clone()
