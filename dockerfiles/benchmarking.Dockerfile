@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y gawk wget ruby-full ruby-bundler && gem
 
 # Setup evaluation framework
 #overwrite at build time with e.g. --build-arg EVALU_VERSION=0.2
-ARG EVALU_VERSION=0.9
+ARG EVALU_VERSION=0.7
 WORKDIR /benchmarking
 RUN wget https://github.com/rsuchecki/biokanga_benchmark/archive/v${EVALU_VERSION}.tar.gz \
   && tar xzvf v${EVALU_VERSION}.tar.gz \
