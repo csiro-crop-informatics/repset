@@ -3,8 +3,8 @@
 aligners = Channel.from(['bbmap', 'biokanga','biokanga_4_3_11','dart','gsnap','hisat2','star','subread']).filter{ !params.debug || it.matches("(biokanga|dart|hisat2)\$") } //hera? mapsplice2? Subread
 // alignerparams = Channel.from(['hisat2': ['--sp 2,1', '--sp 2,0', '--sp 1,0', '--sp 0,0']])
 // aligners = Channel.from(['biokanga','gsnap','star']) //hera? mapsplice2? Subread
-// datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
-datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
+datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3']).filter{ !params.debug || it == 'human_t2r1' }
+//datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 // datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
@@ -84,8 +84,6 @@ process extractDatasets {
     #pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${dataset}
     """
 }
-
-
 
 process convertReference {
   input:
@@ -239,7 +237,7 @@ process nameSortSAM {
 
   script:
     """
-    samtools sort --threads ${task.cpus} -n --output-fmt SAM  ${sam} > sortedsam
+    samtools sort --threads ${task.cpus} -n --output-fmt BAM  ${sam} > sortedsam
     """
     // """
     // samtools view -F2304  ${sam} | grep -v '^@' | sort -t'.' -k2,2n --parallel ${task.cpus} > sortedsam
@@ -263,16 +261,15 @@ process fixSAM {
 
   script:
   meta = inmeta.clone() + [uniqed: uniqed]
-  INSAM = uniqed ? "<(awk '\$1 !~ /^@/ && !and(\$2,256) && !and(\$2,2048)' ${sortedsam} ) " : "<(grep -v '^@' ${sortedsam})"
+  INSAM = uniqed ? "<(samtools view -F 2304 ${sortedsam})" : "<(samtools view ${sortedsam})"
   if(params.debug) {
     //1. should probably get exect value not just for --debug run. Otherwise --nummer fixed to 10 mil (?!)
-
     """
-    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${INSAM} > fixedsam
+    fix_sam.rb --nummer \$(paste - - < ${cig} | wc -l) ${INSAM} | gzip -1c > fixedsam
     """
   } else {
     """
-    fix_sam.rb ${INSAM} > fixedsam
+    fix_sam.rb ${INSAM} | gzip -1c > fixedsam
     """
   }
 }
@@ -294,11 +291,15 @@ process compareToTruth {
     outmeta = meta.clone() + [type : action]
     if(action == 'multi') {
       """
-      compare2truth_multi_mappers.rb ${cig} ${fixedsam} > stat
+      gzip -dkc ${fixedsam} > sam
+      compare2truth_multi_mappers.rb ${cig} sam > stat
+      rm sam
       """
     } else {
       """
-      compare2truth.rb ${cig} ${fixedsam} > stat
+      gzip -dkc ${fixedsam} > sam
+      compare2truth.rb ${cig} sam > stat
+      rm sam
       """
     }
 }
