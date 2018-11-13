@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 
-aligners = Channel.from(['bbmap', 'biokanga','biokanga_4_3_11','dart','gsnap','hisat2','star','subread']).filter{ !params.debug || ~/biokanga|dart|hisat2/ } //hera? mapsplice2? Subread
+aligners = Channel.from(['bbmap', 'biokanga','biokanga_4_3_11','dart','gsnap','hisat2','star','subread']).filter{ !params.debug || it.matches("(biokanga|dart|hisat2)\$") } //hera? mapsplice2? Subread
 // alignerparams = Channel.from(['hisat2': ['--sp 2,1', '--sp 2,0', '--sp 1,0', '--sp 0,0']])
 // aligners = Channel.from(['biokanga','gsnap','star']) //hera? mapsplice2? Subread
 // datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
