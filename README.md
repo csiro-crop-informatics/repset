@@ -2,9 +2,13 @@
 A repository for a manuscript (application note?)  about [biokanga](https://github.com/csiro-crop-informatics/biokanga).
 
 # Experiments
-Adapting and containerising  earlier experiments (ongoing).
 
-On our cluster, running the current version requires close to 60 CPU-days. For a quick test run use `--debug` flag.
+On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/tree/v0.5)  consumed 56 CPU-days.
+See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
+and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
+
+
+For a quick test run use `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
 Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`.
 Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting.
@@ -43,7 +47,7 @@ nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singulari
 
 [Same DAG before generalisation of indexing and alignment processes to work with multiple tools](figures/dag-old-colmplex.png)
 
-## Recorded execution
+## Execution environment
 
 All experiments reported in the manuscript were carried out on a SLURM cluster using:
 
@@ -55,6 +59,8 @@ OpenJDK 64-Bit Server VM (build 25.171-b11, mixed mode)
 ```
 * Singularity version 2.5.0 -> 2.6.0
 * Nextflow version 18.10.1.5003
+
+
 
 # WRiting:
 
