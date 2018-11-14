@@ -4,14 +4,19 @@ A repository for a manuscript (application note?)  about [biokanga](https://gith
 # Experiments
 Adapting and containerising  earlier experiments (ongoing).
 
-Running the current version requires approximately 220 CPU-hours. For a quick-ish test run use `--debug` flag.
-In this case only the simulated reads coming from a single human chromosome are aligned to it.
+On our cluster, running the current version requires close to 60 CPU-days. For a quick test run use `--debug` flag.
+In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
 Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`.
+Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting.
 
-## Quick(-ish) test run
+## Quick test run
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug
+```
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity --debug
 ```
 
 ## Full pipeline run
@@ -37,6 +42,19 @@ nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singulari
 ![figures/dag.png](figures/dag.png)
 
 [Same DAG before generalisation of indexing and alignment processes to work with multiple tools](figures/dag-old-colmplex.png)
+
+## Recorded execution
+
+All experiments reported in the manuscript were carried out on a SLURM cluster using:
+
+* Java
+```
+openjdk version "1.8.0_171"
+OpenJDK Runtime Environment (IcedTea 3.8.0) (build 1.8.0_171-b11 suse-27.19.1-x86_64)
+OpenJDK 64-Bit Server VM (build 25.171-b11, mixed mode)
+```
+* Singularity version 2.5.0 -> 2.6.0
+* Nextflow version 18.10.1.5003
 
 # WRiting:
 
