@@ -3,7 +3,7 @@
 aligners = Channel.from(['bbmap', 'biokanga','biokanga_4_3_11','dart','gsnap','hisat2','star','subread']).filter{ !params.debug || it.matches("(biokanga|dart|hisat2)\$") } //hera? mapsplice2? Subread
 // alignerparams = Channel.from(['hisat2': ['--sp 2,1', '--sp 2,0', '--sp 1,0', '--sp 0,0']])
 // aligners = Channel.from(['biokanga','gsnap','star']) //hera? mapsplice2? Subread
-datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3']).filter{ !params.debug || it == 'human_t2r1' }
+datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3']).filter{ !params.debug || it == params.debugDataset }
 //datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 // datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
@@ -306,8 +306,7 @@ process compareToTruth {
 
 process tidyStats {
   label 'rscript'
-  // container 'rocker/verse:3.4.3'
-  // echo true
+  executor 'local' //this is a _very_ quick process, no need to queue
   tag("${meta}")
 
   input:
@@ -317,7 +316,10 @@ process tidyStats {
     file 'tidy.csv' into tidyStats
 
   exec:
+  meta.replicate = meta.dataset[-1] //replicate num is last char
+  meta.dataset = meta.dataset[0..-3] //strip of last 2 chars, eg. r1
   keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
+
 
   shell:
     '''
@@ -335,6 +337,7 @@ process ggplot {
   errorStrategy 'finish'
   label 'rscript'
   label 'stats'
+  executor 'local'
 
   input:
     file csv from tidyStats.collectFile(name: 'all.csv', keepHeader: true)
