@@ -1,5 +1,18 @@
-# biokanga-manuscript
-A repository for a manuscript (application note?)  about [biokanga](https://github.com/csiro-crop-informatics/biokanga).
+<!-- TOC -->
+
+- [Experiments](#experiments)
+  - [Quick test run](#quick-test-run)
+  - [Full pipeline run](#full-pipeline-run)
+  - [Experimental pipeline overview](#experimental-pipeline-overview)
+  - [Execution environment](#execution-environment)
+- [WRiting:](#writing)
+  - [Source](#source)
+  - [Bibliography](#bibliography)
+  - [Rendering dependencies](#rendering-dependencies)
+  - [Rendering](#rendering)
+- [Reproductivity of the results](#reproductivity-of-the-results)
+
+<!-- /TOC -->
 
 # Experiments
 
