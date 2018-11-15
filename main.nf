@@ -1,13 +1,19 @@
 #!/usr/bin/env nextflow
 
-aligners = Channel.from(['bbmap', 'biokanga','biokanga_4_3_11','dart','gsnap','hisat2','star','subread']).filter{ !params.debug || it.matches("(biokanga|dart|hisat2)\$") } //hera? mapsplice2? Subread
-// alignerparams = Channel.from(['hisat2': ['--sp 2,1', '--sp 2,0', '--sp 1,0', '--sp 0,0']])
-// aligners = Channel.from(['biokanga','gsnap','star']) //hera? mapsplice2? Subread
-datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3']).filter{ !params.debug || it == params.debugDataset }
-//datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
-// datasets = Channel.from(['human_t1r1','human_t2r1','human_t3r1']).filter{ !params.debug || it == 'human_t2r1' } //Only one ds if debug
+//RETURNS ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
+aligners = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+  .map { it[0] }
+  .filter{ !params.debug || it.matches("(biokanga|bwa|dart|hisat2)\$") }
+
+//Pre-computed BEERS datasets
+datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
+  .filter{ !params.debug || it == params.debugDataset }
+  .filter{ (it[-1] as Integer) <= params.replicates}
+
+//Download reference: hg19
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
+//For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
 
 def helpMessage() {
@@ -109,8 +115,11 @@ process convertReference {
 
 }
 
+//reducing requirements if aligning in debug mode (reduced reference, fewer reads)
+indexLabel = params.debug ? 'debugIndex' : 'index'
+
 process indexGenerator {
-  label 'index'
+  label indexLabel
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${tool}" as String).get("container") }
   tag("${tool} << ${ref}")
@@ -126,7 +135,6 @@ process indexGenerator {
     meta = [tool: "${tool}", target: "${ref}"]
     template "${tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
 }
-
 
 
 process prepareDatasets {
@@ -428,4 +436,16 @@ ggplot(stats %>% filter(var == "total_read_accuracy", paired == "pairs", uniqed 
         fill = "Alignment classification")
     ggsave(file="align-rates-bases.pdf", width=16, height=9);
   """
+}
+
+
+workflow.onComplete {
+    // any workflow property can be used here
+    println "Pipeline complete"
+    println "Command line: $workflow.commandLine"
+    println(workflow)
+}
+
+workflow.onError {
+    println "Oops .. something when wrong"
 }
