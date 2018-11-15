@@ -1,18 +1,4 @@
-<!-- TOC -->
 
-- [Experiments](#experiments)
-  - [Quick test run](#quick-test-run)
-  - [Full pipeline run](#full-pipeline-run)
-  - [Experimental pipeline overview](#experimental-pipeline-overview)
-  - [Execution environment](#execution-environment)
-- [WRiting:](#writing)
-  - [Source](#source)
-  - [Bibliography](#bibliography)
-  - [Rendering dependencies](#rendering-dependencies)
-  - [Rendering](#rendering)
-- [Reproductivity of the results](#reproductivity-of-the-results)
-
-<!-- /TOC -->
 
 # Experiments
 
@@ -72,6 +58,69 @@ OpenJDK 64-Bit Server VM (build 25.171-b11, mixed mode)
 ```
 * Singularity version 2.5.0 -> 2.6.0
 * Nextflow version 18.10.1.5003
+
+# Adding another aligner
+
+
+After you have cloned this repository:
+
+1. Add an indexing template to [`templates/`](templates/) subdirectory.
+2. Add an alignment template to [`templates/`](templates/) subdirectory.
+2. Update [conf/containers.config](conf/containers.config) by specifying a docker hub repository from which an image will be pulled by the pipeline.
+
+
+## Example
+
+Let's be more specific and follow an example. We will add [bwa](https://github.com/lh3/bwa) - this is just an example
+
+### Add indexing template
+
+```
+echo \
+'#!/usr/bin/env bash
+
+bwa index -a bwtsw -b 1000000000 ${ref}'  \
+> templates/bwa_index.sh
+```
+
+Note that `${ref}` is a nextflow variable which will be replaced with the reference FATSA path/filename.
+
+
+### Add alignment template
+
+```
+echo -e \
+'#!/usr/bin/env bash
+
+bwa mem -t ${task.cpus} -L 1 ${idxmeta.target} ${r1} ${r2}' \
+> templates/bwa_align.sh
+```
+
+Applicable nextflow variables resolve as follows :
+
+* `${task.cpus}` - number of logical cpus available to the alignment process
+* `${idxmeta.target}` - basename of the index file
+* `${r1}` and `${r2}` - path/filenames of paired-end reads
+
+In addition we have lowered the clipping penalty `-L` to increase alignment rates for reads spanning introns.
+
+
+### Specify container
+
+Insert this code
+
+```
+withLabel: bwa {
+  container = 'genomicpariscentre/bwa:v0.7.15'
+}
+```
+
+within the `process { }` block in [conf/containers.config](conf/containers.config).
+
+We opt for docker containers which can also be executed using singularity.
+Container images are pulled from docker hub, but nextflow is able to access other registries as well as local images, see relevant nextflow [documentation](https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub)
+
+
 
 
 
