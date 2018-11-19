@@ -3,7 +3,8 @@
 //RETURNS ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 aligners = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .map { it[0] }
-  .filter{ !params.debug || it.matches("(biokanga|bwa|dart|hisat2)\$") }
+  // .filter{ it.matches("(biokanga|bwa|bowtie2)\$") } //temp
+  .filter{ !params.debug || it.matches("(biokanga|bwa|dart|hisat2|bowtie2)\$") }
 
 //Pre-computed BEERS datasets
 datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
@@ -115,11 +116,8 @@ process convertReference {
 
 }
 
-//reducing requirements if aligning in debug mode (reduced reference, fewer reads)
-indexLabel = params.debug ? 'debugIndex' : 'index'
-
 process indexGenerator {
-  label indexLabel
+  label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${tool}" as String).get("container") }
   tag("${tool} << ${ref}")
@@ -205,16 +203,16 @@ process addAdapters {
 //  STAR --twopassMode Basic --outSAMunmapped Within --limitOutSJcollapsed 1000000 --limitSjdbInsertNsj 1000000 --outFilterMultimapNmax <NUM_MULTIMAPPER> --outFilterMismatchNmax <NUM_FILTER_MISMATCHES> --outFilterMismatchNoverLmax <RATIO_FILTER_MISMATCHES> --seedSearchStartLmax <SEED_LENGTH> --alignSJoverhangMin <OVERHANG> --alignEndsType <END_ALIGNMENT_TYPE> --outFilterMatchNminOverLread <NUM_FILTER_MATCHES> --outFilterScoreMinOverLread <NUM_FILTER_SCORE> --winAnchorMultimapNmax <NUM_ANCHOR> --alignSJDBoverhangMin <OVERHANG_ANNOTATED> --outFilterType <OUT_FILTER>
 //  NUM_COLLAPSED_JUNCTIONS - NUM_INSERTED_JUNCTIONS - NUM_MULTIMAPPER - NUM_FILTER_MISMATCHES - RATIO_FILTER_MISMATCHES - SEED_LENGTH - OVERHANG - END_ALIGNMENT_TYPE - NUM_FILTER_MATCHES - NUM_FILTER_SCORE - NUM_ANCHOR - OVERHANG_ANNOTATED - OUT_FILTER
 
-//reducing requirements if aligning in debug mode (reduced reference, fewer reads)
-alignLabel = params.debug ? 'debugAlign' : 'align'
 
 process align {
-  label alignLabel
+  label 'align'
   // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
   tag("${idxmeta} << ${readsmeta}")
   // cache { idxmeta.tool == 'star' ? 'deep' : 'lenient'}
   // time { idxmeta.tool == 'gsnap' ? '4.h' : '2.h'}
+  //GRAB CPU MODEL
+  //afterScript 'hostname > .command.cpu; fgrep -m1 "model name" /proc/cpuinfo | sed "s/.*: //"  >> .command.cpu'
 
   input:
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
@@ -229,7 +227,7 @@ process align {
 
 
 process nameSortSAM {
-  // label 'sort'
+  label 'sort'
   label 'samtools'
   tag("${meta}")
   input:
@@ -258,7 +256,6 @@ uniqSAM = Channel.from([false, true])
 
 process fixSAM {
   label 'benchmark'
-  label 'slow'
   tag("${meta}")
 
   input:
@@ -315,18 +312,19 @@ process compareToTruth {
 process tidyStats {
   label 'rscript'
   executor 'local' //this is a _very_ quick process, no need to queue
-  tag("${meta}")
+  tag("${inmeta}")
 
   input:
-    set val(meta), file(instats) from stats
+    set val(inmeta), file(instats) from stats
 
   output:
     file 'tidy.csv' into tidyStats
 
   exec:
-  meta.replicate = meta.dataset[-1] //replicate num is last char
-  meta.dataset = meta.dataset[0..-3] //strip of last 2 chars, eg. r1
-  keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
+    meta = inmeta.clone()
+    meta.replicate = meta.dataset[-1] //replicate num is last char
+    meta.dataset = meta.dataset[0..-3] //strip of last 2 chars, eg. r1
+    keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
 
 
   shell:
@@ -345,107 +343,111 @@ process ggplot {
   errorStrategy 'finish'
   label 'rscript'
   label 'stats'
-  executor 'local'
+  executor 'local' //add high-cpu profile to resources if change to slurm etc
 
   input:
     file csv from tidyStats.collectFile(name: 'all.csv', keepHeader: true)
     // file csv from aggregatedStats
 
   output:
-    file '*.pdf'
-    file csv
+    set file(csv), file('*.pdf') into plots
 
-  script:
-  """
-  #!/usr/bin/env r
-
-  library(dplyr)
-  library(readr)
-  library(ggplot2)
-  library(viridis)
-  #library(hrbrthemes)
-  library(ggrepel)
-
-  stats <- read_csv('${csv}') %>%
-    mutate(adapters = case_when(adapters ~ "With adapters",  !adapters  ~ "No adapters")) %>%
-    mutate(uniqed = case_when(!uniqed ~ "With secondary/supplementary",  uniqed  ~ "No secondary/supplementary"))
-
-  #RUN-TIMES
-  ggplot(stats)+ aes(tool, aligntime*10^-3/60) +
-    geom_point(aes(colour = dataset)) +
-    labs(title = "Alignment run times ",
-        subtitle = "using 10 logical cores",
-        x = "Tool",
-        y = "Run time (minutes)") +
-    facet_wrap(~adapters)
-  ggsave(file="runtimes.pdf", width=16, height=9);
-
-ggplot(stats %>% filter(var == "total_read_accuracy", paired == "pairs", uniqed == "With secondary/supplementary"))+
-  aes(value_dbl, aligntime*10^-3/60,colour=tool) +
-  geom_point() +
-  geom_label_repel(aes(label=tool)) +
-  labs(title = "Accuracy vs alignment run times ",
-       subtitle = "using 10 logical cores",
-       x = "Accuracy",
-       y = "Run time (minutes)") +
-  guides(label=FALSE, color=FALSE) +
-  facet_wrap(adapters~dataset)
-  ggsave(file="accuracy-runtime.pdf", width=16, height=9);
-
-  #ALIGNMENT RATES
-  #Get those that report percentages
-  stat_perc <- stats %>%
-    filter(perc)
-
-  cPalette <- c("#000000", "#D55E00", "#999999",  "#009E73")
-
-  stats_prop <- stats %>%
-    filter(var %in% c("total_read_accuracy",
-                      "perc_reads_incorrect",
-                      "perc_reads_unaligned",
-                      "perc_reads_ambiguous"),
-          type == "unique")
-
-  ggplot(stats_prop, aes(tool, value_dbl)) +
-    geom_bar(aes(fill = var), stat = "identity") +
-    facet_wrap(adapters~dataset~uniqed) +
-    scale_fill_manual(values=cPalette) +
-    labs(title = "Read alignment statistics ",
-        subtitle = "uniquely aligned reads",
-        x = "Tool",
-        y = "Percentage",
-        fill = "Alignment classification")
-    ggsave(file="align-rates-reads.pdf", width=16, height=9);
-
-  stats_prop_b <- stats %>%
-    filter(var %in% c("total_bases_accuracy",
-                      "perc_bases_incorrect",
-                      "perc_bases_unaligned",
-                      "perc_bases_ambiguous"),
-          type == "unique")
-
-
-  ggplot(stats_prop_b, aes(tool, value_dbl)) +
-    geom_bar(aes(fill = var), stat = "identity") +
-    facet_wrap(adapters~dataset~uniqed) +
-    scale_fill_manual(values=cPalette) +
-    labs(title = "Base alignment statistics ",
-        subtitle = "uniquely aligned bases",
-        x = "Tool",
-        y = "Percentage",
-        fill = "Alignment classification")
-    ggsave(file="align-rates-bases.pdf", width=16, height=9);
-  """
+  shell:
+    '''
+    < !{csv} stats_figures.R
+    '''
 }
+//   script:
+//   """
+//   #!/usr/bin/env r
+
+//   library(dplyr)
+//   library(readr)
+//   library(ggplot2)
+//   library(viridis)
+//   #library(hrbrthemes)
+//   library(ggrepel)
+
+//   stats <- read_csv('${csv}') %>%
+//     mutate(adapters = case_when(adapters ~ "With adapters",  !adapters  ~ "No adapters")) %>%
+//     mutate(uniqed = case_when(!uniqed ~ "With secondary/supplementary",  uniqed  ~ "No secondary/supplementary"))
+
+//   #RUN-TIMES
+//   ggplot(stats)+ aes(tool, aligntime*10^-3/60) +
+//     geom_point(aes(colour = dataset)) +
+//     labs(title = "Alignment run times ",
+//         subtitle = "using 10 logical cores",
+//         x = "Tool",
+//         y = "Run time (minutes)") +
+//     facet_wrap(~adapters)
+//   ggsave(file="runtimes.pdf", width=16, height=9);
+
+// ggplot(stats %>% filter(var == "total_read_accuracy", paired == "pairs", uniqed == "With secondary/supplementary"))+
+//   aes(value_dbl, aligntime*10^-3/60,colour=tool) +
+//   geom_point() +
+//   geom_label_repel(aes(label=tool)) +
+//   labs(title = "Accuracy vs alignment run times ",
+//        subtitle = "using 10 logical cores",
+//        x = "Accuracy",
+//        y = "Run time (minutes)") +
+//   guides(label=FALSE, color=FALSE) +
+//   facet_wrap(adapters~dataset)
+//   ggsave(file="accuracy-runtime.pdf", width=16, height=9);
+
+//   #ALIGNMENT RATES
+//   #Get those that report percentages
+//   stat_perc <- stats %>%
+//     filter(perc)
+
+//   cPalette <- c("#000000", "#D55E00", "#999999",  "#009E73")
+
+//   stats_prop <- stats %>%
+//     filter(var %in% c("total_read_accuracy",
+//                       "perc_reads_incorrect",
+//                       "perc_reads_unaligned",
+//                       "perc_reads_ambiguous"),
+//           type == "unique")
+
+//   ggplot(stats_prop, aes(tool, value_dbl)) +
+//     geom_bar(aes(fill = var), stat = "identity") +
+//     facet_wrap(adapters~dataset~uniqed) +
+//     scale_fill_manual(values=cPalette) +
+//     labs(title = "Read alignment statistics ",
+//         subtitle = "uniquely aligned reads",
+//         x = "Tool",
+//         y = "Percentage",
+//         fill = "Alignment classification")
+//     ggsave(file="align-rates-reads.pdf", width=16, height=9);
+
+//   stats_prop_b <- stats %>%
+//     filter(var %in% c("total_bases_accuracy",
+//                       "perc_bases_incorrect",
+//                       "perc_bases_unaligned",
+//                       "perc_bases_ambiguous"),
+//           type == "unique")
 
 
-workflow.onComplete {
-    // any workflow property can be used here
-    println "Pipeline complete"
-    println "Command line: $workflow.commandLine"
-    println(workflow)
-}
+//   ggplot(stats_prop_b, aes(tool, value_dbl)) +
+//     geom_bar(aes(fill = var), stat = "identity") +
+//     facet_wrap(adapters~dataset~uniqed) +
+//     scale_fill_manual(values=cPalette) +
+//     labs(title = "Base alignment statistics ",
+//         subtitle = "uniquely aligned bases",
+//         x = "Tool",
+//         y = "Percentage",
+//         fill = "Alignment classification")
+//     ggsave(file="align-rates-bases.pdf", width=16, height=9);
+//   """
+// }
 
-workflow.onError {
-    println "Oops .. something when wrong"
-}
+
+// workflow.onComplete {
+//     // any workflow property can be used here
+//     println "Pipeline complete"
+//     println "Command line: $workflow.commandLine"
+//     println(workflow)
+// }
+
+// workflow.onError {
+//     println "Oops .. something when wrong"
+// }
