@@ -1,5 +1,20 @@
 
-
+- [Experiments](#experiments)
+  - [Quick test run](#quick-test-run)
+  - [Full pipeline run](#full-pipeline-run)
+  - [Experimental pipeline overview](#experimental-pipeline-overview)
+  - [Execution environment](#execution-environment)
+- [Adding another aligner](#adding-another-aligner)
+  - [Example](#example)
+    - [Add indexing template](#add-indexing-template)
+    - [Add alignment template](#add-alignment-template)
+    - [Specify container](#specify-container)
+- [WRiting:](#writing)
+  - [Source](#source)
+  - [Bibliography](#bibliography)
+  - [Rendering dependencies](#rendering-dependencies)
+  - [Rendering](#rendering)
+- [Reproductivity of the results](#reproductivity-of-the-results)
 # Experiments
 
 On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/tree/v0.5)  consumed 56 CPU-days.
@@ -86,7 +101,7 @@ bowtie2-build --threads ${task.cpus} ${ref} ${ref}
 
 Applicable nextflow variables resolve as follows:
 
-* `${task.cpus}` - number of cpus threads available to the alignment process
+* `${task.cpus}` - number of cpu threads available to the alignment process
 * `${ref}` - the reference FASTA path/filename - in this case we use it both to specify the input file and the basename of the generated index
 
 
