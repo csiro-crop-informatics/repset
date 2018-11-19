@@ -5,7 +5,8 @@
 On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/tree/v0.5)  consumed 56 CPU-days.
 See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
 and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
-
+This run included each of the input datasets in three replicates. Given the experimental context,
+replication does not appear to contribute much, so it may suffice to execute the piepeline with a single replicate using `--replicates 1`.
 
 For a quick test run use `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
@@ -103,6 +104,22 @@ Applicable nextflow variables resolve as follows :
 * `${r1}` and `${r2}` - path/filenames of paired-end reads
 
 In addition we have lowered the clipping penalty `-L` to increase alignment rates for reads spanning introns.
+
+For many an aligner this would be it, but as it turns out bwa demands matching read names in a given pair, which is incompatible with the benchamrking framework.
+
+We circumvent that by updating the align template [`templates/bwa_align.sh`](templates/bwa_align.sh), such that the name of the second read in pair is adjusted to match the name of the first read, on the fly, just prior to alignment and the changed read names a reverted to their originals immediately after the alignment.
+
+```
+bwa mem \
+  -t ${task.cpus} \
+  -L 1 \
+  ${idxmeta.target} \
+  ${r1} <(sed 's/b\$/a/' ${r2}) \
+  | gawk -vOFS="\\t" '\$1 !~ /^@/ && and(\$2,128) {sub(/a\$/,"b",\$1)};{print}' \
+  > sam
+```
+
+
 
 
 ### Specify container
