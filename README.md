@@ -72,7 +72,7 @@ After you have cloned this repository:
 
 ## Example
 
-Let's be more specific and follow an example. We will add [bwa](https://github.com/lh3/bwa) - this is just an example
+Let's be more specific and follow an example. We will add [bowtie2](https://github.com/BenLangmead/bowtie2/releases/tag/v2.3.4.1).
 
 ### Add indexing template
 
@@ -80,11 +80,14 @@ Let's be more specific and follow an example. We will add [bwa](https://github.c
 echo \
 '#!/usr/bin/env bash
 
-bwa index -a bwtsw -b 1000000000 ${ref}'  \
-> templates/bwa_index.sh
+bowtie2-build --threads ${task.cpus} ${ref} ${ref}
+> templates/bowtie2_index.sh
 ```
 
-Note that `${ref}` is a nextflow variable which will be replaced with the reference FATSA path/filename.
+Applicable nextflow variables resolve as follows:
+
+* `${task.cpus}` - number of cpus threads available to the alignment process
+* `${ref}` - the reference FASTA path/filename - in this case we use it both to specify the input file and the basename of the generated index
 
 
 ### Add alignment template
@@ -93,8 +96,16 @@ Note that `${ref}` is a nextflow variable which will be replaced with the refere
 echo -e \
 '#!/usr/bin/env bash
 
-bwa mem -t ${task.cpus} -L 1 ${idxmeta.target} ${r1} ${r2}' \
-> templates/bwa_align.sh
+bowtie2 \
+  -p ${task.cpus} \
+  -x ${idxmeta.target} \
+  -1 ${r1} \
+  -2 ${r2} \
+  -f \
+  --threads  ${task.cpus} \
+  --local \
+  > sam' \
+> templates/bowtie2_align.sh
 ```
 
 Applicable nextflow variables resolve as follows :
@@ -103,39 +114,31 @@ Applicable nextflow variables resolve as follows :
 * `${idxmeta.target}` - basename of the index file
 * `${r1}` and `${r2}` - path/filenames of paired-end reads
 
-In addition we have lowered the clipping penalty `-L` to increase alignment rates for reads spanning introns.
-
-For many an aligner this would be it, but as it turns out bwa demands matching read names in a given pair, which is incompatible with the benchamrking framework.
-
-We circumvent that by updating the align template [`templates/bwa_align.sh`](templates/bwa_align.sh), such that the name of the second read in pair is adjusted to match the name of the first read, on the fly, just prior to alignment and the changed read names a reverted to their originals immediately after the alignment.
-
-```
-bwa mem \
-  -t ${task.cpus} \
-  -L 1 \
-  ${idxmeta.target} \
-  ${r1} <(sed 's/b\$/a/' ${r2}) \
-  | gawk -vOFS="\\t" '\$1 !~ /^@/ && and(\$2,128) {sub(/a\$/,"b",\$1)};{print}' \
-  > sam
-```
-
-
+In addition we have used the `--local` flag to increase alignment rates for reads spanning introns.
 
 
 ### Specify container
 
-Insert this code
+
+1. Upload a relevant container image to docker hub or [locate an existing one](https://hub.docker.com/search/?isAutomated=0&isOfficial=0&page=1&pullCount=0&q=bowtie2&starCount=0). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
+
+2. Insert container specification
 
 ```
-withLabel: bwa {
-  container = 'genomicpariscentre/bwa:v0.7.15'
+withLabel: bowtie2 {
+  container = 'comics/bowtie2:2.3.4.1'
 }
 ```
+within the
+```
+process {
 
-within the `process { }` block in [conf/containers.config](conf/containers.config).
+}
+```
+block in [conf/containers.config](conf/containers.config).
 
 We opt for docker containers which can also be executed using singularity.
-Container images are pulled from docker hub, but nextflow is able to access other registries as well as local images, see relevant nextflow [documentation](https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub)
+Container images are pulled from docker hub, but nextflow is able to access other registries and also local images, see relevant [nextflow documentation](https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub)
 
 
 
