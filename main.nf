@@ -4,7 +4,7 @@
 aligners = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .map { it[0] }
   // .filter{ it.matches("(biokanga|bwa|bowtie2)\$") } //temp
-  .filter{ !params.debug || it.matches("(biokanga|bwa|dart|hisat2|bowtie2)\$") }
+  .filter{ !params.debug || it.matches("(biokanga)\$") }//|| it.matches("(biokanga|bwa|dart|hisat2|bowtie2)\$") }
 
 //Pre-computed BEERS datasets
 datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
@@ -38,7 +38,7 @@ if (params.help){
 }
 
 process downloadReference {
-  storeDir "downloaded"
+  storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"}
   scratch false
 
   input:
@@ -56,7 +56,7 @@ process downloadReference {
 process downloadDatasets {
   // label 'download'
   tag("${dataset}")
-  storeDir "downloaded" // storeDir "${workflow.workDir}/downloaded" put the datasets there and prevent generating cost to dataset creators through repeated downloads on re-runs
+  storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"} // storeDir "${workflow.workDir}/downloaded" put the datasets there and prevent generating cost to dataset creators through repeated downloads on re-runs
   scratch false
 
   input:
@@ -151,13 +151,13 @@ process prepareDatasets {
     awk '\$2~/${params.debugChromosome}\$/' ${dataDir}/*.cig \
       | sort -k1,1V --parallel ${task.cpus} \
       | tee >(awk -vOFS="\\t" 'NR%2==1{n++};{gsub(/[0-9]+/,n,\$1);print}' > cig) \
-      | cut -f1 > debug.ids
-    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.forward.fa \
-      | paste - - | sort -k1,1V --parallel ${task.cpus} \
-      | awk -vOFS="\\n" '{gsub(/[0-9]+/,++n,\$1);print \$1,\$2}' > r1
-    fgrep --no-filename --no-group-separator -A1 -wf debug.ids ${dataDir}/*.reverse.fa \
-      | paste - - | sort -k1,1V --parallel ${task.cpus} \
-      | awk -vOFS="\\n" '{gsub(/[0-9]+/,++n,\$1);print \$1,\$2}' > r2
+      | cut -f1 > debug.ids \
+    && paste \
+       <(paste - - < ${dataDir}/*.forward.fa) \
+       <(paste - - < ${dataDir}/*.reverse.fa) \
+       | awk -vOFS='\\t' 'NR==FNR{a[">"\$1]}; NR!=FNR && \$1 in a {n++; gsub(/[0-9]+/,n,\$1); gsub(/[0-9]+/,n,\$3); print}' \
+         debug.ids - \
+       | tee >(cut -f1,2 | tr '\\t' '\\n' > r1) | cut -f3,4 | tr '\\t' '\\n' > r2
     """
   } else {
     """
@@ -167,6 +167,7 @@ process prepareDatasets {
     """
   }
 }
+
 
 process addAdapters {
   tag("${meta.dataset}")
