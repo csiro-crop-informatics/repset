@@ -1,6 +1,8 @@
 
 - [Experiments](#experiments)
   - [Quick test run](#quick-test-run)
+    - [Running nextflow with singularity](#running-nextflow-with-singularity)
+    - [Running nextflow with docker](#running-nextflow-with-docker)
   - [Full pipeline run](#full-pipeline-run)
   - [Experimental pipeline overview](#experimental-pipeline-overview)
   - [Execution environment](#execution-environment)
@@ -30,15 +32,20 @@ Additional flag `--adapters` will make a debug run a bit longer but the output r
 
 ## Quick test run
 
+### Running nextflow with singularity
+
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug
 ```
+
+### Running nextflow with docker
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity --debug
 ```
 
 ## Full pipeline run
+
 
 There are a few execution options, all require Nextflow and either Docker or Singularity.
 See [nextflow.config](nextflow.config#L22-L47) for available execution profiles, e.g. for local execution this could be
