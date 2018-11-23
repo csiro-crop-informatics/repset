@@ -73,6 +73,7 @@ process downloadDatasets {
 }
 
 process extractDatasets {
+  label 'slow'
   tag("${dataset}")
   echo true
 
@@ -86,9 +87,8 @@ process extractDatasets {
   script:
     dataset = datasetfile.name.replaceAll("\\..*","")
     """
-    mkdir -p ${dataset}
-    pbzip2 --decompress --stdout -p${task.cpus} ${datasetfile} | tar -x --directory ${dataset}
-    #pbzip2 --decompress --stdout -p${task.cpus} ${dataset}.tar.bz2 | tar -x --directory ${dataset}
+    mkdir -p ${dataset} \
+    && pbzip2 --decompress --stdout -p${task.cpus} ${datasetfile} | tar -x --directory ${dataset}
     """
 }
 
@@ -312,7 +312,6 @@ process compareToTruth {
 
 process tidyStats {
   label 'rscript'
-  executor 'local' //this is a _very_ quick process, no need to queue
   tag("${inmeta}")
 
   input:
@@ -344,7 +343,6 @@ process ggplot {
   errorStrategy 'finish'
   label 'rscript'
   label 'stats'
-  executor 'local' //add high-cpu profile to resources if change to slurm etc
 
   input:
     file csv from tidyStats.collectFile(name: 'all.csv', keepHeader: true)
@@ -353,6 +351,7 @@ process ggplot {
     set file(csv), file('*.pdf') into plots
 
   shell:
+  println executor
     '''
     < !{csv} stats_figures.R
     '''
