@@ -3,6 +3,7 @@
   - [Quick test run](#quick-test-run)
     - [Running nextflow with singularity](#running-nextflow-with-singularity)
     - [Running nextflow with docker](#running-nextflow-with-docker)
+    - [Running on AWS batch](#running-on-aws-batch)
   - [Full pipeline run](#full-pipeline-run)
   - [Experimental pipeline overview](#experimental-pipeline-overview)
   - [Execution environment](#execution-environment)
@@ -44,8 +45,21 @@ nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity --debug
 ```
 
-## Full pipeline run
+### Running on AWS batch
 
+If you are new to AWS batch and/or nextflow, follow [this blog post](https://antunderwood.gitlab.io/bioinformant-blog/posts/running_nextflow_on_aws_batch/), once you are done, or you already use AWS batch, simply run
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile awsbatch --debug \
+  -work-dir s3://your_s3_bucket/work --outdir s3://your_s3_bucket/results
+```
+
+after replacing `your_s3_bucket` with a bucket you have created on S3.
+
+[**Warning! You will be charged by AWS according to your resource use.**](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/monitoring-costs.html)
+
+
+## Full pipeline run
 
 There are a few execution options, all require Nextflow and either Docker or Singularity.
 See [nextflow.config](nextflow.config#L22-L47) for available execution profiles, e.g. for local execution this could be
@@ -61,7 +75,13 @@ or on a SLURM cluster
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule
 ```
 
- Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module. This may not be applicable on your system.
+Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module. This may not be applicable on your system.
+
+To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](README.md#Running\ on\ AWS\ batch) but drop the `--debug` flag.
+
+
+
+
 
 ## Experimental pipeline overview
 
@@ -89,7 +109,7 @@ After you have cloned this repository:
 
 1. Add an indexing template to [`templates/`](templates/) subdirectory.
 2. Add an alignment template to [`templates/`](templates/) subdirectory.
-2. Update [conf/containers.config](conf/containers.config) by specifying a docker hub repository from which an image will be pulled by the pipeline.
+3. Update [conf/containers.config](conf/containers.config) by specifying a docker hub repository from which an image will be pulled by the pipeline.
 
 
 ## Example

@@ -4,7 +4,7 @@
 aligners = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .map { it[0] }
   // .filter{ it.matches("(biokanga|bwa|bowtie2)\$") } //temp
-  .filter{ !params.debug || it.matches("(biokanga)\$") }//|| it.matches("(biokanga|bwa|dart|hisat2|bowtie2)\$") }
+  .filter{ !params.debug || it.matches("(biokanga|bwa|dart|hisat2)\$") }
 
 //Pre-computed BEERS datasets
 datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
@@ -351,7 +351,6 @@ process ggplot {
     set file(csv), file('*.pdf') into plots
 
   shell:
-  println executor
     '''
     < !{csv} stats_figures.R
     '''
