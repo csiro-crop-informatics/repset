@@ -3,8 +3,8 @@
 //RETURNS ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 aligners = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .map { it[0] }
-  // .filter{ it.matches("(biokanga|bwa|bowtie2)\$") } //temp
-  .filter{ !params.debug || it.matches("(biokanga|bwa|dart|hisat2)\$") }
+  // .filter{ !it.matches("subread\$") } //temp
+  // .filter{ !params.debug || it.matches("(biokanga|bowtie2|bwa|dart|hisat2|star)\$") }
 
 //Pre-computed BEERS datasets
 datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
