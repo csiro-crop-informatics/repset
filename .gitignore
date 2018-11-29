@@ -1,8 +1,11 @@
 biokanga-manuscript.pdf
 .nextflow*
-results/*
+results*
 work/*
 .Rhistory
 #local hardlink to .Rmd :
-biokanga-manuscript.md
+writing/biokanga-manuscript.md
 .vscode/
+figures/*.?
+flowinfo*
+downloaded

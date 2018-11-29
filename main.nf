@@ -3,6 +3,7 @@
 //RETURNS ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 aligners = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .map { it[0] }
+  .filter{ params.aligners == 'all' || it.matches(params.aligners) }
   // .filter{ !it.matches("subread\$") } //temp
   // .filter{ !params.debug || it.matches("(biokanga|bowtie2|bwa|dart|hisat2|star)\$") }
 
@@ -339,10 +340,10 @@ process tidyStats {
 
 
 process ggplot {
-  echo true
+  tag 'figures'
   errorStrategy 'finish'
   label 'rscript'
-  label 'stats'
+  label 'figures'
 
   input:
     file csv from tidyStats.collectFile(name: 'all.csv', keepHeader: true)
@@ -354,6 +355,33 @@ process ggplot {
     '''
     < !{csv} stats_figures.R
     '''
+}
+
+writing = Channel.fromPath("${baseDir}/writing/*")
+process render {
+  tag 'manuscript'
+  label 'rrender'
+  label 'paper'
+  stageInMode 'copy'
+
+  input:
+    file('*') from plots.flatten().toList()
+    file('*') from writing.collect()
+
+  output:
+    file '*'
+
+  script:
+  """
+  #!/usr/bin/env Rscript
+
+  library(rmarkdown)
+  library(rticles)
+  library(bookdown)
+
+  rmarkdown::render(Sys.glob("*.Rmd"))
+  """
+
 }
 
 // workflow.onComplete {

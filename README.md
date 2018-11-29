@@ -12,24 +12,22 @@
     - [Add indexing template](#add-indexing-template)
     - [Add alignment template](#add-alignment-template)
     - [Specify container](#specify-container)
-- [WRiting:](#writing)
-  - [Source](#source)
+- [WRiting](#writing)
   - [Bibliography](#bibliography)
-  - [Rendering dependencies](#rendering-dependencies)
-  - [Rendering](#rendering)
-- [Reproductivity of the results](#reproductivity-of-the-results)
 # Experiments
 
 On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/tree/v0.5)  consumed 56 CPU-days.
 See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
 and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
 This run included each of the input datasets in three replicates. Given the experimental context,
-replication does not appear to contribute much, so it may suffice to execute the piepeline with a single replicate using `--replicates 1`.
+replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`, thus reducing the CPU-time to under 8 days (based on a run of a more recent version of the pipeline - 578a85d16bf1b4a0daa3bc0b5e44de34d421d8ed).
 
 For a quick test run use `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
-Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`.
-Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting.
+Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`. By default, all pre-defined aligners are executed. To only specify a single aligner you can e.g. use `--aligners biokanga` or for several `--aligners 'biokanga|dart|hisat2'`.
+
+Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including adatsets with retained adapters.
+
 
 ## Quick test run
 
@@ -156,7 +154,7 @@ Applicable nextflow variables resolve as follows :
 * `${idxmeta.target}` - basename of the index file
 * `${r1}` and `${r2}` - path/filenames of paired-end reads
 
-In addition we have used the `--local` flag to increase alignment rates for reads spanning introns.
+In addition we have used bowtie's `--local` flag to increase alignment rates for reads spanning introns.
 
 
 ### Specify container
@@ -171,48 +169,23 @@ withLabel: bowtie2 {
   container = 'comics/bowtie2:2.3.4.1'
 }
 ```
-within the
-```
-process {
-
-}
-```
-block in [conf/containers.config](conf/containers.config).
+within the `process {   }` block in [conf/containers.config](conf/containers.config).
 
 We opt for docker containers which can also be executed using singularity.
 Container images are pulled from docker hub, but nextflow is able to access other registries and also local images, see relevant [nextflow documentation](https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub)
 
 
+# WRiting
 
-
-
-# WRiting:
-
-## Source
-
-Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`biokanga-manuscript.Rmd`](biokanga-manuscript.Rmd) file. RMarkdown is well intergrated in RStudio, but if you'd rather write/edit in a text editor of your choice, here is all that should be required to render the manuscript.
-
-## Bibliography
-
-Among the [alternatives available](https://rmarkdown.rstudio.com/authoring_bibliographies_and_citations.html#specifying_a_bibliography) we provisionally opt for BibTeX, see [`references.bib`](references.bib).
-
-## Rendering dependencies
+Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`writing/biokanga-manuscript.Rmd`](writing/biokanga-manuscript.Rmd) file. RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice. Rendering of the manuscript constitutes the final step of our nextflow pipeline which relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment. If you'd like to setup an equivalent environment without docker/singularity, you will need the following:
 
 * `R` e.g. on ubuntu `sudo apt apt install r-base-core`
 * `pandoc` e.g. on ubuntu `sudo apt install pandoc pandoc-citeproc`
 * `LaTeX` e.g. on ubuntu `sudo apt install texlive texlive-latex-extra`
-* additional R packages installed and loaded by [`render.R`](render.R)
+* additional R packages installed and loaded by [`wwriting/render.R`](writing/render.R) which needs to be executed from `writing/` subdirectory.
 
+## Bibliography
 
-## Rendering
+Among the [alternatives available](https://rmarkdown.rstudio.com/authoring_bibliographies_and_citations.html#specifying_a_bibliography) we opted for BibTeX, see [`writing/references.bib`](writing/references.bib).
 
-```
-./render.R
-```
-
-# Reproductivity of the results
-
-**TODO**
-
-All results presented in the manuscript can be reproduced by executing `nextflow run csiro-crop-informatics/biokanaga-manuscript`.
 
