@@ -24,9 +24,10 @@ replication does not appear to contribute much, so it may suffice to execute the
 
 For a quick test run use `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
-Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`. By default, all pre-defined aligners are executed. To only specify a single aligner you can e.g. use `--aligners biokanga` or for several `--aligners 'biokanga|dart|hisat2'`.
+Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`. By default, all pre-defined aligners are executed.
+To only specify a single aligner you can e.g. use `--aligners biokanga` or for several aligners e.g. `--aligners 'biokanga|dart|hisat2'`.
 
-Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including adatsets with retained adapters.
+Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including datsets with retained adapters.
 
 
 ## Quick test run
