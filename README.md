@@ -78,10 +78,6 @@ Note that `singularitymodule` profile is used to ensure singularity is available
 
 To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](README.md#Running\ on\ AWS\ batch) but drop the `--debug` flag.
 
-
-
-
-
 ## Experimental pipeline overview
 
 ![figures/dag.png](figures/dag.png)
