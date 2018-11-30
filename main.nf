@@ -253,7 +253,7 @@ process nameSortSAM {
 }
 
 
-//Repeat downstream processes by either  leaving SAm as is or removing secondary & supplementary alignments
+//Repeat downstream processes by either  leaving SAM as is or removing secondary & supplementary alignments
 uniqSAM = Channel.from([false, true])
 
 process fixSAM {
@@ -265,6 +265,9 @@ process fixSAM {
 
   output:
     set val(meta), file(fixedsam), file(cig) into fixedSAMs
+
+  when:
+    uniqed == false || (params.uniqed == true && uniqed == true) //FILTERING SECONDARY&SUPPLEMENTARY IS OPTIONAL - GENERATES ADDITIONAL PLOTS
 
   script:
   meta = inmeta.clone() + [uniqed: uniqed]
