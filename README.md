@@ -16,11 +16,12 @@
   - [Bibliography](#bibliography)
 # Experiments
 
-On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/tree/v0.5)  consumed 56 CPU-days.
+On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.5) consumed 56 CPU-days.
 See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
 and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
 This run included each of the input datasets in three replicates. Given the experimental context,
-replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`, thus reducing the CPU-time to under 8 days (based on a run of a more recent version of the pipeline - 578a85d16bf1b4a0daa3bc0b5e44de34d421d8ed).
+replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`,
+thus reducing the CPU-time to under 8 days (based on a run of [version 0.6](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.6)).
 
 For a quick test run use `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
