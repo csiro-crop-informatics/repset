@@ -87,7 +87,7 @@ To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [i
 
 ![figures/dag.png](figures/dag.png)
 
-[Same DAG before generalisation of indexing and alignment processes to work with multiple tools](figures/dag-old-colmplex.png)
+For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools.
 
 ## Execution environment
 
@@ -179,7 +179,9 @@ Container images are pulled from docker hub, but nextflow is able to access othe
 
 # WRiting
 
-Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`writing/biokanga-manuscript.Rmd`](writing/biokanga-manuscript.Rmd) file. RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice. Rendering of the manuscript constitutes the final step of our nextflow pipeline which relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment.
+Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`writing/biokanga-manuscript.Rmd`](writing/biokanga-manuscript.Rmd) file.
+RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice.
+Rendering of the manuscript constitutes the final step of our nextflow pipeline which relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment.
 
 ## Rendering outside the pipeline
 
