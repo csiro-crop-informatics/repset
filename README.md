@@ -13,6 +13,10 @@
     - [Add alignment template](#add-alignment-template)
     - [Specify container](#specify-container)
 - [WRiting](#writing)
+  - [Rendering outside the pipeline](#rendering-outside-the-pipeline)
+    - [Using docker](#using-docker)
+    - [Using singularity](#using-singularity)
+    - [Natively](#natively)
   - [Bibliography](#bibliography)
 # Experiments
 
@@ -175,12 +179,41 @@ Container images are pulled from docker hub, but nextflow is able to access othe
 
 # WRiting
 
-Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`writing/biokanga-manuscript.Rmd`](writing/biokanga-manuscript.Rmd) file. RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice. Rendering of the manuscript constitutes the final step of our nextflow pipeline which relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment. If you'd like to setup an equivalent environment without docker/singularity, you will need the following:
+Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`writing/biokanga-manuscript.Rmd`](writing/biokanga-manuscript.Rmd) file. RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice. Rendering of the manuscript constitutes the final step of our nextflow pipeline which relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment.
+
+## Rendering outside the pipeline
+
+### Using docker
+
+```sh
+docker run --rm --user $(id -u):$(id -g) \
+  --volume $(pwd)/writing:/writing \
+  --workdir /writing rsuchecki/renderer:0.1 ./render.R
+```
+
+### Using singularity
+
+```sh
+singularity exec --pwd $(pwd)/writing docker://rsuchecki/renderer:0.1 ./render.R
+```
+
+### Natively
+
+If you'd like to render the manuscript without docker/singularity, you will need the following:
 
 * `R` e.g. on ubuntu `sudo apt apt install r-base-core`
 * `pandoc` e.g. on ubuntu `sudo apt install pandoc pandoc-citeproc`
 * `LaTeX` e.g. on ubuntu `sudo apt install texlive texlive-latex-extra`
-* additional R packages installed and loaded by [`wwriting/render.R`](writing/render.R) which needs to be executed from `writing/` subdirectory.
+* `R` packages:
+  * `rmarkdown`
+  * `rticles`
+  * `bookdown`
+
+Then:
+
+```
+cd writing && ./render.R
+```
 
 ## Bibliography
 
