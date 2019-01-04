@@ -13,14 +13,19 @@
     - [Add alignment template](#add-alignment-template)
     - [Specify container](#specify-container)
 - [WRiting](#writing)
+  - [Rendering outside the pipeline](#rendering-outside-the-pipeline)
+    - [Using docker](#using-docker)
+    - [Using singularity](#using-singularity)
+    - [Natively](#natively)
   - [Bibliography](#bibliography)
 # Experiments
 
-On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/tree/v0.5)  consumed 56 CPU-days.
+On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.5) consumed 56 CPU-days.
 See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
 and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
 This run included each of the input datasets in three replicates. Given the experimental context,
-replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`, thus reducing the CPU-time to under 8 days (based on a run of a more recent version of the pipeline - 578a85d16bf1b4a0daa3bc0b5e44de34d421d8ed).
+replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`,
+thus reducing the CPU-time to under 8 days (based on a run of [version 0.6](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.6)).
 
 For a quick test run use `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
@@ -76,17 +81,13 @@ nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singulari
 
 Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module. This may not be applicable on your system.
 
-To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](README.md#Running\ on\ AWS\ batch) but drop the `--debug` flag.
-
-
-
-
+To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](#running-on-aws-batch) but drop the `--debug` flag.
 
 ## Experimental pipeline overview
 
 ![figures/dag.png](figures/dag.png)
 
-[Same DAG before generalisation of indexing and alignment processes to work with multiple tools](figures/dag-old-colmplex.png)
+For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools.
 
 ## Execution environment
 
@@ -178,12 +179,43 @@ Container images are pulled from docker hub, but nextflow is able to access othe
 
 # WRiting
 
-Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`writing/biokanga-manuscript.Rmd`](writing/biokanga-manuscript.Rmd) file. RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice. Rendering of the manuscript constitutes the final step of our nextflow pipeline which relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment. If you'd like to setup an equivalent environment without docker/singularity, you will need the following:
+Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`writing/biokanga-manuscript.Rmd`](writing/biokanga-manuscript.Rmd) file.
+RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice.
+Rendering of the manuscript constitutes the final step of our nextflow pipeline which relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment.
+
+## Rendering outside the pipeline
+
+### Using docker
+
+```sh
+docker run --rm --user $(id -u):$(id -g) \
+  --volume $(pwd)/writing:/writing \
+  --workdir /writing rsuchecki/renderer:0.1 ./render.R
+```
+
+### Using singularity
+
+```sh
+singularity exec --pwd $(pwd)/writing docker://rsuchecki/renderer:0.1 ./render.R
+```
+
+### Natively
+
+If you'd like to render the manuscript without docker/singularity, you will need the following:
 
 * `R` e.g. on ubuntu `sudo apt apt install r-base-core`
 * `pandoc` e.g. on ubuntu `sudo apt install pandoc pandoc-citeproc`
 * `LaTeX` e.g. on ubuntu `sudo apt install texlive texlive-latex-extra`
-* additional R packages installed and loaded by [`wwriting/render.R`](writing/render.R) which needs to be executed from `writing/` subdirectory.
+* `R` packages:
+  * `rmarkdown`
+  * `rticles`
+  * `bookdown`
+
+Then:
+
+```
+cd writing && ./render.R
+```
 
 ## Bibliography
 
