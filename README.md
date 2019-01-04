@@ -81,7 +81,7 @@ nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singulari
 
 Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module. This may not be applicable on your system.
 
-To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above]((#running-on-aws-batch)) but drop the `--debug` flag.
+To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](#running-on-aws-batch) but drop the `--debug` flag.
 
 ## Experimental pipeline overview
 
