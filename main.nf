@@ -94,6 +94,8 @@ process extractDatasets {
 }
 
 process convertReference {
+  label 'slow'
+
   input:
     file(downloadedRef) from refs
 
@@ -197,6 +199,7 @@ process align {
   tag("${idxmeta} << ${readsmeta}")
   //GRAB CPU MODEL
   //afterScript 'hostname > .command.cpu; fgrep -m1 "model name" /proc/cpuinfo | sed "s/.*: //"  >> .command.cpu'
+
 
   input:
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
