@@ -40,13 +40,13 @@ Additional flag `--adapters` will make a debug run a bit longer but the output r
 ### Running nextflow with singularity
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug --aligners 'biokanga|hisat2|star'
 ```
 
 ### Running nextflow with docker
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity --debug
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity --debug --aligners 'biokanga|hisat2|star'
 ```
 
 ### Running on AWS batch
@@ -54,7 +54,8 @@ nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity --d
 If you are new to AWS batch and/or nextflow, follow [this blog post](https://antunderwood.gitlab.io/bioinformant-blog/posts/running_nextflow_on_aws_batch/), once you are done, or you already use AWS batch, simply run
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile awsbatch --debug \
+nextflow run csiro-crop-informatics/biokanga-manuscript \
+  -profile awsbatch --debug --aligners 'biokanga|hisat2|star' \
   -work-dir s3://your_s3_bucket/work --outdir s3://your_s3_bucket/results
 ```
 
