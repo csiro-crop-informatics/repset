@@ -12,6 +12,7 @@ datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','hu
   .filter{ !params.debug || it == params.debugDataset }
   .filter{ (it[-1] as Integer) <= params.replicates}
 
+
 //Download reference: hg19
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
@@ -66,6 +67,9 @@ process downloadDatasets {
   output:
     file("${dataset}.tar.bz2") into downloadedDatasets
     // set val("${dataset}"), file("${dataset}.tar.bz2") into downloadedDatasets  //not possible when using storeDir
+
+  when:
+    'simulatedRNA'.matches(params.mode)
 
   script:
     """
@@ -130,7 +134,7 @@ process indexGenerator {
     val(tool) from aligners
 
   output:
-    set val(meta), file("*") into indices
+    set val(meta), file("*") into indices, indices4realRNA
 
   script:
     meta = [tool: "${tool}", target: "${ref}"]
@@ -367,6 +371,55 @@ process render {
   rmarkdown::render(Sys.glob("*.Rmd"))
   """
 
+}
+
+process downloadSRA {
+  storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"} // storeDir "${workflow.workDir}/downloaded" put the datasets there and prevent generating cost to dataset creators through repeated downloads on re-runs
+  scratch false
+
+  output:
+    file('*.sra') into downloadedSRA
+
+  when:
+    'realRNA'.matches(params.mode)
+
+  script:
+    """
+    wget ftp://ftp.ddbj.nig.ac.jp/ddbj_database/dra/sralite/ByExp/litesra/SRX/SRX215/SRX2155547/SRR4228250/SRR4228250.sra
+    """
+}
+
+process FASTA_from_SRA {
+  label 'sra'
+  tag("${SRA}")
+
+  input:
+    file SRA from downloadedSRA
+
+  output:
+    set val(readsmeta), file('*.fasta.gz') into sraFASTA
+
+  script:
+  readsmeta = ['sra': SRA]
+  """
+  fastq-dump --fasta --gzip --split-files --origfmt ${SRA}
+  """
+}
+
+processes alignSraFasta {
+  label 'align'
+  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
+  tag("${idxmeta} << ${readsmeta}")
+
+  input:
+    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2) from indices4realRNA.combine(sraFASTA)
+
+  output:
+    set val(meta), file("*sam"), file('.command.trace') into alignedRealRNA
+
+  script:
+    meta = idxmeta.clone() + readsmeta.clone()
+    template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
 // workflow.onComplete {
