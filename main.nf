@@ -391,35 +391,46 @@ process downloadSRA {
 
 process FASTA_from_SRA {
   label 'sra'
+  label 'slow'
   tag("${SRA}")
 
   input:
     file SRA from downloadedSRA
 
   output:
-    set val(readsmeta), file('*.fasta.gz') into sraFASTA
+    // set file('*_1.fasta.gz'), file('*_2.fasta.gz') into sraFASTA
+    set val(readsmeta), file('*_1.fasta.gz'), file('*_2.fasta.gz') into sraFASTA
+    // val(readsmeta) into sraFASTA
 
   script:
-  readsmeta = ['sra': SRA]
+  readsmeta = [sra: SRA.name]
   """
   fastq-dump --fasta --gzip --split-files --origfmt ${SRA}
   """
 }
 
-processes alignSraFasta {
+process alignRealReadsRNA {
+  echo true
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
   tag("${idxmeta} << ${readsmeta}")
+  tag("${idxmeta} << ${readsmeta}")
 
   input:
+    // set file(r1), file(r2) from sraFASTA
+    // val(readsmeta) from sraFASTA
+    // set val(readsmeta), file(r1), file(r2) from sraFASTA
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2) from indices4realRNA.combine(sraFASTA)
 
-  output:
-    set val(meta), file("*sam"), file('.command.trace') into alignedRealRNA
+  // output:
+  //   set val(meta), file("*sam"), file('.command.trace') into alignedRealRNA
 
   script:
     meta = idxmeta.clone() + readsmeta.clone()
     template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    // """
+    // ls -la
+    // """
 }
 
 // workflow.onComplete {
