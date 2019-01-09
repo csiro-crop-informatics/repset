@@ -404,13 +404,13 @@ process FASTA_from_SRA {
 
   script:
   readsmeta = [sra: SRA.name]
+  MAX_READS = params.debug ? '--maxSpotId 10000' : ''
   """
-  fastq-dump --fasta --gzip --split-files --origfmt ${SRA}
+  fastq-dump --fasta 0 --gzip --split-files --origfmt --readids ${MAX_READS} ${SRA}
   """
 }
 
 process alignRealReadsRNA {
-  echo true
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
   tag("${idxmeta} << ${readsmeta}")
