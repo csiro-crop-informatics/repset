@@ -1,4 +1,6 @@
+[![Latest GitHub tag](https://img.shields.io/github/tag/csiro-crop-informatics/biokanga-manuscript.svg?label=latest%20release&logo=github&style=flat-square)](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases)
 
+# Table of Contents <!-- omit in toc -->
 - [Experiments](#experiments)
   - [Quick test run](#quick-test-run)
     - [Running nextflow with singularity](#running-nextflow-with-singularity)
