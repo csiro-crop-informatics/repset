@@ -346,32 +346,7 @@ process ggplot {
     '''
 }
 
-writing = Channel.fromPath("${baseDir}/writing/*")
-process render {
-  tag 'manuscript'
-  label 'rrender'
-  label 'paper'
-  stageInMode 'copy'
 
-  input:
-    file('*') from plots.flatten().toList()
-    file('*') from writing.collect()
-
-  output:
-    file '*'
-
-  script:
-  """
-  #!/usr/bin/env Rscript
-
-  library(rmarkdown)
-  library(rticles)
-  library(bookdown)
-
-  rmarkdown::render(Sys.glob("*.Rmd"))
-  """
-
-}
 
 process downloadSRA {
   storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"} // storeDir "${workflow.workDir}/downloaded" put the datasets there and prevent generating cost to dataset creators through repeated downloads on re-runs
@@ -399,14 +374,14 @@ process FASTA_from_SRA {
 
   output:
     // set file('*_1.fasta.gz'), file('*_2.fasta.gz') into sraFASTA
-    set val(readsmeta), file('*_1.fasta.gz'), file('*_2.fasta.gz') into sraFASTA
+    set val(readsmeta), file('*_1.fasta'), file('*_2.fasta') into sraFASTA
     // val(readsmeta) into sraFASTA
 
   script:
-  readsmeta = [sra: SRA.name]
+  readsmeta = [sra: SRA.name[0..-5]]
   MAX_READS = params.debug ? '--maxSpotId 10000' : ''
   """
-  fastq-dump --fasta 0 --gzip --split-files --origfmt --readids ${MAX_READS} ${SRA}
+  fastq-dump --fasta 0 --split-files --origfmt --readids ${MAX_READS} ${SRA}
   """
 }
 
@@ -422,15 +397,125 @@ process alignRealReadsRNA {
     // set val(readsmeta), file(r1), file(r2) from sraFASTA
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2) from indices4realRNA.combine(sraFASTA)
 
-  // output:
-  //   set val(meta), file("*sam"), file('.command.trace') into alignedRealRNA
+  output:
+    set val(meta), file('*sam'), file('.command.trace') into alignedRealRNA
 
   script:
     meta = idxmeta.clone() + readsmeta.clone()
     template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-    // """
-    // ls -la
-    // """
+}
+
+process samStatsRealRNA {
+  echo true
+  executor 'local'
+  label 'samtools'
+  tag("${inmeta}")
+
+  input:
+    set val(inmeta), file(sam) from alignedRealRNA.map { inmeta, sam, trace ->
+        inmeta.'aligntime' = trace.text.tokenize('\n').last()
+        new Tuple(inmeta, sam)
+      }
+
+  output:
+    file 'csv' into statsRealRNA
+
+  exec:
+  // alntime = meta.tool+" "+(meta.aligntime.toLong()*10**-3/60)+" minutes"
+  // """
+  // echo ${alntime}
+  // samtools flagstat sam \
+  //   | sed -n '5p;9p' \
+  //   | sed 's/^/${meta.tool}/g'
+  // """
+  meta = inmeta.clone()
+  keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
+  shell:
+    '''
+    echo "aligned,paired" > csv
+    samtools view -hF 2304 !{sam} | samtools flagstat - \
+      | sed -n '5p;9p'  | cut -f1 -d' ' | paste - - | tr '\t' ',' >> csv
+    for KV in !{keyValue}; do
+      sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" csv
+    done
+    '''
+}
+
+process ggplotRealRNA {
+  tag 'figures'
+  errorStrategy 'finish'
+  label 'rscript'
+  label 'figures'
+
+  input:
+    file csv from statsRealRNA.collectFile(name: 'real_RNA.csv', keepHeader: true)
+
+  output:
+    set file(csv), file('*.pdf') into plotsRealRNA
+
+  shell:
+  '''
+  #!/usr/bin/env r
+
+  library(dplyr)
+  library(readr)
+  library(ggplot2)
+  library(ggrepel)
+
+  stats <- read_csv("!{csv}")
+  head(stats)
+
+  ggplot(stats) +
+    aes(aligned, aligntime*10^-3/60,colour=tool) +
+    geom_point() +
+    geom_label_repel(aes(label=tool)) +
+    labs(title = "Accuracy vs alignment run times ",
+        subtitle = "using 10 logical cores",
+        x = "Aligned",
+        y = "Run time (minutes)") +
+    guides(label=FALSE, color=FALSE) #+
+    #facet_wrap(adapters~dataset)
+  ggsave(file="realRNA_aligned-runtime.pdf", width=16, height=9);
+
+  ggplot(stats) +
+    aes(paired, aligntime*10^-3/60,colour=tool) +
+    geom_point() +
+    geom_label_repel(aes(label=tool)) +
+    labs(title = "Accuracy vs alignment run times ",
+        subtitle = "using 10 logical cores",
+        x = "Aligned as pairs",
+        y = "Run time (minutes)") +
+    guides(label=FALSE, color=FALSE)
+  ggsave(file="realRNA_aligned-paired-runtime.pdf", width=16, height=9)
+  '''
+}
+
+writing = Channel.fromPath("${baseDir}/writing/*")
+process render {
+  tag 'manuscript'
+  label 'rrender'
+  label 'paper'
+  stageInMode 'copy'
+
+  input:
+    file('*') from plots.flatten().toList()
+    file('*') from plotsRealRNA.flatten().toList()
+    file('*') from writing.collect()
+
+  output:
+    file '*'
+
+  script:
+  """
+  #!/usr/bin/env Rscript
+
+  library(rmarkdown)
+  library(rticles)
+  library(bookdown)
+
+  rmarkdown::render(Sys.glob("*.Rmd"))
+  """
+
 }
 
 // workflow.onComplete {
