@@ -29,15 +29,15 @@ This run included each of the input datasets in three replicates. Given the expe
 replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`,
 thus reducing the CPU-time to under 8 days (based on a run of [version 0.6](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.6)).
 
-For a quick test run use `--debug` flag.
+## Quick test run
+
+For a quick test run use the `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
 Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`. By default, all pre-defined aligners are executed.
 To only specify a single aligner you can e.g. use `--aligners biokanga` or for several aligners e.g. `--aligners 'biokanga|dart|hisat2'`.
 
 Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including datsets with retained adapters.
 
-
-## Quick test run
 
 ### Running nextflow with singularity
 
@@ -71,7 +71,6 @@ after replacing `your_s3_bucket` with a bucket you have created on S3.
 There are a few execution options, all require Nextflow and either Docker or Singularity.
 See [nextflow.config](nextflow.config#L22-L47) for available execution profiles, e.g. for local execution this could be
 
-
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
 ```
@@ -82,7 +81,7 @@ or on a SLURM cluster
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule
 ```
 
-Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module. This may not be applicable on your system.
+Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module. This may need to be adapted for your system.
 
 To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](#running-on-aws-batch) but drop the `--debug` flag.
 
@@ -187,6 +186,8 @@ RMarkdown is well integrated in RStudio, but can be written/edited in a text edi
 Rendering of the manuscript constitutes the final step of our nextflow pipeline which relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment.
 
 ## Rendering outside the pipeline
+
+There are several ways for rendering the manuscript outside the pipeline, with docker being the preferred option.
 
 ### Using docker
 
