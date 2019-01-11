@@ -27,8 +27,8 @@ def helpMessage() {
 
   Default params:
   """.stripIndent()
-  // println(prettyPrint(toJson(params)))
-  println(prettyPrint(toJson(config)))
+  println(prettyPrint(toJson(params)))
+  // println(prettyPrint(toJson(config)))
   // println(prettyPrint(toJson(config.process)))
 }
 
@@ -388,7 +388,6 @@ process FASTA_from_SRA {
 process alignRealReadsRNA {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
-  tag("${idxmeta} << ${readsmeta}")
   tag("${idxmeta} << ${readsmeta}")
 
   input:
