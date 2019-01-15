@@ -4,7 +4,7 @@ LABEL maintainer="Rad Suchecki <rad.suchecki@csiro.au>"
 
 #Adapted from genomicpariscentre/gmap with thanks to author: Aurélien Birer
 
-ARG VERSION="2018-07-04"
+ARG VERSION="2018-10-26"
 WORKDIR /tmp
 
 RUN apt update \
