@@ -20,6 +20,9 @@
     - [Using singularity](#using-singularity)
     - [Natively](#natively)
   - [Bibliography](#bibliography)
+- [Per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
+  - [Setting-up an automated build](#setting-up-an-automated-build)
+  - [Adding or updating a Dockerfile](#adding-or-updating-a-dockerfile)
 
 # Experiments
 
@@ -226,60 +229,40 @@ cd writing && ./render.R
 
 Among the [alternatives available](https://rmarkdown.rstudio.com/authoring_bibliographies_and_citations.html#specifying_a_bibliography) we opted for BibTeX, see [`writing/references.bib`](writing/references.bib).
 
-# Per-tool container images and docker automated builds 
+# Per-tool container images and docker automated builds
 
 _Note: this requires write permissions for this repo._
 
-Dockerfiles for individual tools used can be found under `dockerfiles/`. This includes various aligners but also other tools used by the pipeline. For each tool we created a docker hub/cloud repository and configured automated builds. 
+Dockerfiles for individual tools used can be found under `dockerfiles/`.
+This includes various aligners but also other tools used by the pipeline.
+For each tool we created a docker hub/cloud repository and configured automated builds.
 
-## Adding a Dockerfile and setting-up an automated build
+## Setting-up an automated build
 
-In the appropraite repo on Docker cloud configure automated builds with a rule like this one: 
+Builds can be triggered from branches and tags. To be able to use either,
+
+1. Link Docker Cloud repo with this GitHub repo
+2. Add an automated build rule like one of the following:
 
 | Source type   | Source                   | Docker Tag  | Dockerfile location | Build Context  |
 | ------------- | ------------------------ | ----------- | ------------------- | -------------- |
 | Branch        | `/^docker\/tool\/(.*)$/` | `{\1}`      | `tool.Dockerfile`   | `/dockerfiles` |
+| Tag           | `/^docker\/tool\/(.*)$/` | `{\1}`      | `tool.Dockerfile`   | `/dockerfiles` |
 
+## Adding or updating a Dockerfile
 
-Create a new, orphan branch 
-
-```
-git checkout --orphan docker/tool/version
-git rm --cached $(git ls-files)
-```
-
-Add a `tool.Dockerfile` to `dockerfiles/`
-
-Commit and push to trigger an automated build 
+Checkout a new branch replacing `tool` and `version` with the tool name and version, respectively.
 
 ```
-git commit tool.Dockerfile
+git checkout -b docker/tool/version
+```
+
+Add or modify `dockerfiles/tool.Dockerfile` as required.
+
+Commit and push to trigger an automated build
+
+```
+git commit dockerfiles/tool.Dockerfile
 git push --set-upstream origin docker/tool/version
 ```
-
-
-
-
-## Updating Dockerfile and triggering build for a new version 
-
-Checkout the branch appropriate for the existing version of a tool.
-
-
-```
-git checkout docker/tool/version
-```
-
-Create a new branch 
-
-```
-git checkout -b docker/tool/new-version
-```
-
-Modify the Dockerfile as required for the version update. Commit changes. Push
-
-```
-git commit -m 'tool version bump' dockerfiles/tool.Dockerfile
-git push --set-upstream origin docker/tool/new-version
-```
-
 This should trigger an automated build in the linked Docker Hub/cloud repository.
