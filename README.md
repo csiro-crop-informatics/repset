@@ -231,8 +231,6 @@ Among the [alternatives available](https://rmarkdown.rstudio.com/authoring_bibli
 
 # Per-tool container images and docker automated builds
 
-_Note: this requires write permissions for this repo._
-
 Dockerfiles for individual tools used can be found under `dockerfiles/`.
 This includes various aligners but also other tools used by the pipeline.
 For each tool we created a docker hub/cloud repository and configured automated builds.
