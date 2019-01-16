@@ -167,7 +167,6 @@ In addition we have used bowtie's `--local` flag to increase alignment rates for
 
 ### Specify container
 
-
 1. Upload a relevant container image to docker hub or [locate an existing one](https://hub.docker.com/search/?isAutomated=0&isOfficial=0&page=1&pullCount=0&q=bowtie2&starCount=0). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
 
 2. Insert container specification
