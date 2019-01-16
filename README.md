@@ -239,7 +239,7 @@ For each tool we created a docker hub/cloud repository and configured automated 
 
 Builds can be triggered from branches and tags. To be able to use either,
 
-1. Link Docker Cloud repo with this GitHub repo
+1. Link a [Docker Cloud](https://cloud.docker.com/) repo with this GitHub repo (go to Builds -> Configure Automated Builds)
 2. Add an automated build rule like one of the following:
 
 | Source type   | Source                   | Docker Tag  | Dockerfile location | Build Context  |
@@ -249,10 +249,16 @@ Builds can be triggered from branches and tags. To be able to use either,
 
 ## Adding or updating a Dockerfile
 
-Checkout a new branch replacing `tool` and `version` with the tool name and version, respectively.
+Checkout a new branch replacing `tool` and `version` with the intended tool name and version, respectively.
+For example,
 
 ```
-git checkout -b docker/tool/version
+tool='bwa'
+version='0.7.17'
+```
+
+```
+git checkout -b docker/${tool}/${version}
 ```
 
 Add or modify `dockerfiles/tool.Dockerfile` as required.
@@ -260,7 +266,13 @@ Add or modify `dockerfiles/tool.Dockerfile` as required.
 Commit and push to trigger an automated build
 
 ```
-git commit dockerfiles/tool.Dockerfile
-git push --set-upstream origin docker/tool/version
+git commit dockerfiles/${tool}.Dockerfile
+git push --set-upstream origin docker/${tool}/${version}
 ```
+
 This should trigger an automated build in the linked Docker Hub/cloud repository.
+If everything works as intended, you may
+
+* Update [conf/containers.config](conf/containers.config) to the new tool version
+* create a PR to merge the new branch into the master
+
