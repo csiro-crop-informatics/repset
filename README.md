@@ -72,7 +72,7 @@ after replacing `your_s3_bucket` with a bucket you have created on S3.
 
 ## Full pipeline run
 
-There are a few execution options, all require Nextflow and either Docker or Singularity.
+There are a few ways to execute the pipeline, all require Nextflow and either Docker or Singularity.
 See [nextflow.config](nextflow.config#L22-L47) for available execution profiles, e.g. for local execution this could be
 
 ```
@@ -85,7 +85,9 @@ or on a SLURM cluster
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule
 ```
 
-Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module. This may need to be adapted for your system.
+Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module.
+This may need to be adapted for your system.
+In addition Singularity must also be available on the node where you execute the pipeline.
 
 To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](#running-on-aws-batch) but drop the `--debug` flag.
 
@@ -93,7 +95,7 @@ To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [i
 
 ![figures/dag.png](figures/dag.png)
 
-For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools.
+For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools. This earlier workflow also excludes evaluation based on real RNA-Seq data.
 
 ## Execution environment
 
@@ -197,7 +199,7 @@ There are several ways for rendering the manuscript outside the pipeline, with d
 ```sh
 docker run --rm --user $(id -u):$(id -g) \
   --volume $(pwd)/writing:/writing \
-  --workdir /writing rsuchecki/renderer:0.1 ./render.R
+  --workdir /writing rsuchecki/renderer:0.2 ./render.R
 ```
 
 ### Using singularity
