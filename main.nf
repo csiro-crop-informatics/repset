@@ -1,9 +1,9 @@
 #!/usr/bin/env nextflow
 
 //RETURNS ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
-aligners = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+alignersRNA = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .map { it[0] }
-  .filter{ params.aligners == 'all' || it.matches(params.aligners) }
+  .filter{ params.alignersRNA == 'all' || it.matches(params.alignersRNA) }
   // .filter{ !it.matches("subread\$") } //temp
   // .filter{ !params.debug || it.matches("(biokanga|bowtie2|bwa|dart|hisat2|star)\$") }
 
@@ -131,7 +131,7 @@ process indexGenerator {
 
   input:
     file ref
-    val(tool) from aligners
+    val(tool) from alignersRNA
 
   output:
     set val(meta), file("*") into indices, indices4realRNA

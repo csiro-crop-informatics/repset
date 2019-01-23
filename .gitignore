@@ -5,6 +5,8 @@ work/*
 .Rhistory
 #local hardlink to .Rmd :
 writing/biokanga-manuscript.md
+writing/biokanga-manuscript.log
+writing/biokanga-manuscript.tex
 .vscode/
 figures/*.?
 flowinfo*
