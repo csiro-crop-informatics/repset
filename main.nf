@@ -1,13 +1,13 @@
 #!/usr/bin/env nextflow
 
-//RETURNS ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
+//RETURNS RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 alignersRNA = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .map { it[0] }
   .filter{ params.alignersRNA == 'all' || it.matches(params.alignersRNA) }
   // .filter{ !it.matches("subread\$") } //temp
   // .filter{ !params.debug || it.matches("(biokanga|bowtie2|bwa|dart|hisat2|star)\$") }
 
-//Pre-computed BEERS datasets
+//Pre-computed BEERS datasets (RNA)
 datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
   .filter{ !params.debug || it == params.debugDataset }
   .filter{ (it[-1] as Integer) <= params.replicates}
@@ -18,6 +18,13 @@ url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
 //For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
+
+/*
+  Generic method for extracting a string tag or a file basename from a metadata map
+ */
+ def getTagFromMeta(meta, delim = '_') {
+  return meta.species+delim+meta.version //+(trialLines == null ? "" : delim+trialLines+delim+"trialLines")
+}
 
 def helpMessage() {
   log.info"""
@@ -489,6 +496,139 @@ process ggplotRealRNA {
   '''
 }
 
+
+
+// ----- =======                   ======= -----
+//                 DNA alignment
+// ----- =======                   ======= -----
+
+
+//ARRANGE INPUTS FOR PROCESSES
+referencesLocal = Channel.create()
+referencesRemote = Channel.create()
+params.references.each {
+  //Abbreviate Genus_species name to G_species
+  it.species = (it.species =~ /^./)[0]+(it.species =~ /_.*$/)[0]
+  //EXPECT TO HAVE SOME DATASETS WITH fasta
+  if(it.containsKey("fasta")) {
+    if((it.fasta).matches("^(https?|ftp)://.*\$")) {
+      referencesRemote << it
+    } else {
+      referencesLocal << [it,file(it.fasta)]
+    }
+  }
+}
+referencesRemote.close()
+referencesLocal.close()
+
+
+process fetchRemoteReference {
+  tag{meta.subMap(['species','version'])}
+  label 'download'
+
+  input:
+    val(meta) from referencesRemote
+
+  output:
+    set val(meta), file("${basename}.fasta") into referencesRemoteFasta
+
+  script:
+    basename=getTagFromMeta(meta)
+    //DECOMPRESS?
+    cmd = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
+    //TRIAL RUN? ONLY TAKE FIRST n LINES
+    cmd += trialLines != null ? "| head -n ${trialLines}" : ""
+    """
+    curl ${meta.fasta} ${cmd} > ${basename}.fasta
+    """
+}
+
+//Mix local and remote references then connect o multiple channels
+referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; references4kangaIndex; references4bwaIndex; references4bowtie2Index }
+
+
+process indexReferences4rnfSimReads {
+  tag{meta}
+  label 'samtools'
+
+  input:
+    set val(meta), file(ref) from references4rnfSimReads
+
+  output:
+    set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
+
+  script:
+  """
+  samtools faidx ${ref}
+  """
+}
+
+process rnfSimReads {
+  tag{simmeta}
+  label 'rnftools'
+
+  input:
+    set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
+    each nsimreads from params.simreads.nreads.toString().tokenize(",")*.toInteger()
+    each length from params.simreads.length.toString().tokenize(",")*.toInteger()
+    each simulator from params.simreads.simulator
+    each mode from params.simreads.mode //PE, SE
+    each distance from params.simreads.distance //PE only
+    each distanceDev from params.simreads.distanceDev //PE only
+
+  output:
+    set val(simmeta), file("*.fq.gz") into reads4bwaAlign, reads4bowtie2align, reads4kangaAlign
+
+  when:
+    !(mode == "PE" && simulator == "CuReSim")
+
+  script:
+    tag=meta.species+"_"+meta.version+"_"+simulator
+    simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length ]
+    len1 = length
+    if(mode == "PE") {
+      //FOR rnftools
+      len2 = length
+      tuple = 2
+      dist="distance="+distance+","
+      distDev= "distance_deviation="+distanceDev+","
+      //FOR meta
+      simmeta.dist = distance
+      simmeta.distanceDev = distanceDev
+    } else {
+      len2 = 0
+      tuple = 1
+      dist=""
+      distDev=""
+    }
+    """
+    echo "import rnftools
+    rnftools.mishmash.sample(\\"${tag}_reads\\",reads_in_tuple=${tuple})
+    rnftools.mishmash.${simulator}(
+            fasta=\\"${ref}\\",
+            number_of_read_tuples=${nsimreads},
+            ${dist}
+            ${distDev}
+            read_length_1=${len1},
+            read_length_2=${len2}
+    )
+    include: rnftools.include()
+    rule: input: rnftools.input()
+    " > Snakefile
+    snakemake \
+    && for f in *.fq; do \
+      paste - - - - < \${f} \
+      | awk 'BEGIN{FS=OFS="\\t"};{gsub("[^ACGTUacgtu]","N",\$2); print}' \
+      | tr '\\t' '\\n' \
+      | gzip --stdout  --fast \
+      > \${f}.gz \
+      && rm \${f};
+    done \
+    && find . -type d -mindepth 2 | xargs rm -r
+    """
+}
+
+
 writing = Channel.fromPath("${baseDir}/writing/*")
 process render {
   tag 'manuscript'
@@ -517,6 +657,8 @@ process render {
 
 }
 
+
+
 // workflow.onComplete {
 //     // any workflow property can be used here
 //     println "Pipeline complete"
@@ -527,3 +669,5 @@ process render {
 // workflow.onError {
 //     println "Oops .. something when wrong"
 // }
+
+
