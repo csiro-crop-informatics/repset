@@ -524,7 +524,7 @@ referencesLocal.close()
 
 process fetchRemoteReferenceForDNA {
   tag{meta.subMap(['species','version'])}
-  label 'download'
+  storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"}
 
   input:
     val(meta) from referencesRemote
