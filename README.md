@@ -268,7 +268,7 @@ version='0.7.17'
 git checkout -b docker/${tool}/${version}
 ```
 
-Add or modify `dockerfiles/tool.Dockerfile` as required.
+Add or modify `dockerfiles/${tool}.Dockerfile` as required.
 
 Commit and push to trigger an automated build
 
