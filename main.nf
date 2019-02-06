@@ -522,7 +522,7 @@ referencesRemote.close()
 referencesLocal.close()
 
 
-process fetchRemoteReference {
+process fetchRemoteReferenceForDNA {
   tag{meta.subMap(['species','version'])}
   label 'download'
 
@@ -537,7 +537,7 @@ process fetchRemoteReference {
     //DECOMPRESS?
     cmd = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
     //TRIAL RUN? ONLY TAKE FIRST n LINES
-    cmd += trialLines != null ? "| head -n ${trialLines}" : ""
+    //cmd += trialLines != null ? "| head -n ${trialLines}" : ""
     """
     curl ${meta.fasta} ${cmd} > ${basename}.fasta
     """
@@ -547,7 +547,7 @@ process fetchRemoteReference {
 referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; references4kangaIndex; references4bwaIndex; references4bowtie2Index }
 
 
-process indexReferences4rnfSimReads {
+process indexReferences4rnfSimReadsDNA {
   tag{meta}
   label 'samtools'
 
@@ -563,7 +563,7 @@ process indexReferences4rnfSimReads {
   """
 }
 
-process rnfSimReads {
+process rnfSimReadsDNA {
   tag{simmeta}
   label 'rnftools'
 
@@ -628,6 +628,8 @@ process rnfSimReads {
     """
 }
 
+
+//WRAP-UP
 
 writing = Channel.fromPath("${baseDir}/writing/*")
 process render {
