@@ -62,7 +62,7 @@ process downloadReference {
   """
 }
 
-process downloadDatasets {
+process downloadDatasetsRNA {
   // label 'download'
   tag("${dataset}")
   storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"} // storeDir "${workflow.workDir}/downloaded" put the datasets there and prevent generating cost to dataset creators through repeated downloads on re-runs
@@ -84,7 +84,7 @@ process downloadDatasets {
     """
 }
 
-process extractDatasets {
+process extractDatasetsRNA {
   label 'slow'
   tag("${dataset}")
   echo true
@@ -104,7 +104,7 @@ process extractDatasets {
     """
 }
 
-process convertReference {
+process convertReferenceRNA {
   label 'slow'
 
   input:
@@ -149,7 +149,7 @@ process indexGenerator {
 }
 
 
-process prepareDatasets {
+process prepareDatasetsRNA {
   tag("${dataset}")
 
   input:
@@ -183,7 +183,7 @@ process prepareDatasets {
 }
 
 
-process addAdapters {
+process addAdaptersRNA {
   tag("${meta.dataset}")
 
   input:
@@ -544,7 +544,7 @@ process fetchRemoteReferenceForDNA {
 }
 
 //Mix local and remote references then connect o multiple channels
-referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; references4kangaIndex; references4bwaIndex; references4bowtie2Index }
+referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; referencesForAlignersDNA }
 
 
 process indexReferences4rnfSimReadsDNA {
@@ -630,7 +630,6 @@ process rnfSimReadsDNA {
 
 
 //WRAP-UP
-
 writing = Channel.fromPath("${baseDir}/writing/*")
 process render {
   tag 'manuscript'
