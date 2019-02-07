@@ -16,4 +16,4 @@ RUN apt-get -qq update && apt-get -qq -y install --no-install-recommends libkeyu
 
 ENV PATH /opt/conda/bin:$PATH
 
-RUN conda install -c bioconda rnftools
+RUN conda install --override-channels -c conda-forge -c bioconda -c default rnftools
