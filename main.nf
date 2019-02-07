@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 //RETURNS RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
-alignersRNA = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+alignersRNA = Channel.fromFilePairs("${workflow.projectDir}/templates/rna/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .map { it[0] }
   .filter{ params.alignersRNA == 'all' || it.matches(params.alignersRNA) }
   // .filter{ !it.matches("subread\$") } //temp
@@ -130,7 +130,7 @@ process convertReferenceRNA {
 
 }
 
-process indexGenerator {
+process indexGeneratorRNA {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${tool}" as String).get("container") }
@@ -145,7 +145,7 @@ process indexGenerator {
 
   script:
     meta = [tool: "${tool}", target: "${ref}"]
-    template "${tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
+    template "rna/${tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
 }
 
 
@@ -220,7 +220,7 @@ process alignSimulatedReadsRNA {
 
   script:
     meta = idxmeta.clone() + readsmeta.clone()
-    template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
 
@@ -371,7 +371,7 @@ process downloadSRA {
     """
 }
 
-process FASTA_from_SRA {
+process fromSRAtoFASTA {
   label 'sra'
   label 'slow'
   tag("${SRA}")
@@ -408,7 +408,7 @@ process alignRealReadsRNA {
 
   script:
     meta = idxmeta.clone() + readsmeta.clone()
-    template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
 process samStatsRealRNA {
@@ -531,6 +531,9 @@ process fetchRemoteReferenceForDNA {
 
   output:
     set val(meta), file("${basename}.fasta") into referencesRemoteFasta
+
+  when:
+    'simulatedDNA'.matches(params.mode)
 
   script:
     basename=getTagFromMeta(meta)
