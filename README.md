@@ -242,9 +242,11 @@ Builds can be triggered from branches and tags.
 
 This approach relies on creating a branch for a specific version of a tool.
 The same can be achieved by simply tagging the relevant commit, but this may
-result in prolifiration of tags while branches can be merged into master
-and remain in history.
+result in proliferation of tags while branches can be merged into master and deleted
+while preserving the history.
 If you'd rather use tags, in (2) change the 'Source type' below to 'Tag'
+and later tag an appropriate commit using `docker/tool/version` pattern
+rather than committing to a dedicated branch.
 
 1. Link a [Docker Cloud](https://cloud.docker.com/) repo with this GitHub repo (go to Builds -> Configure Automated Builds)
 2. Add an automated build rule (replace `tool` with the name of the tool).
@@ -279,7 +281,6 @@ git push --set-upstream origin docker/${tool}/${version}
 
 This should trigger an automated build in the linked Docker Hub/cloud repository.
 If everything works as intended, you may update [conf/containers.config](conf/containers.config) to the new tool version
-
 
 Then either create a PR to merge the new branch into master or,
 if you have write permissions for this repository or working on your fork of it, checkout master and merge.
