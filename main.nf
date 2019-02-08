@@ -46,7 +46,7 @@ if (params.help){
     exit 0
 }
 
-process downloadReference {
+process downloadReferenceRNA {
   storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"}
   scratch false
 
@@ -55,6 +55,9 @@ process downloadReference {
 
   output:
     file('chromFa.tar.gz') into refs
+
+  when:
+    'simulatedRNA|realRNA'.matches(params.mode)
 
   script:
   """
@@ -147,7 +150,6 @@ process indexGeneratorRNA {
     meta = [tool: "${tool}", target: "${ref}"]
     template "rna/${tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
 }
-
 
 process prepareDatasetsRNA {
   tag("${dataset}")
@@ -502,52 +504,46 @@ process ggplotRealRNA {
 //                 DNA alignment
 // ----- =======                   ======= -----
 
+/*
+ 1. Input pointers to FASTA converted to files, NF would fetch remote as well and create tmp files,
+    but avoiding that as may not scale with large genomes, prefer to do in process.
+ 2. Conversion would not have been necessary and script could point directly to meta.fasta
+    but local files might not be on paths automatically mounted in the container.
+*/
+referencesDNA = Channel.from(params.references).map { (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)] }
 
-//ARRANGE INPUTS FOR PROCESSES
-referencesLocal = Channel.create()
-referencesRemote = Channel.create()
-params.references.each {
-  //Abbreviate Genus_species name to G_species
-  it.species = (it.species =~ /^./)[0]+(it.species =~ /_.*$/)[0]
-  //EXPECT TO HAVE SOME DATASETS WITH fasta
-  if(it.containsKey("fasta")) {
-    if((it.fasta).matches("^(https?|ftp)://.*\$")) {
-      referencesRemote << it
-    } else {
-      referencesLocal << [it,file(it.fasta)]
-    }
-  }
-}
-referencesRemote.close()
-referencesLocal.close()
-
-
-process fetchRemoteReferenceForDNA {
+process fetchReferenceForDNAAlignment {
   tag{meta.subMap(['species','version'])}
-  storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"}
+  //as above, storeDir not mounted accessible storeDir { (fasta.name).matches("REMOTE") ? (executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded") : null }
 
   input:
-    val(meta) from referencesRemote
+    set val(meta), file(fasta) from referencesDNA
 
   output:
-    set val(meta), file("${basename}.fasta") into referencesRemoteFasta
+    set val(meta), file("${basename}.fasta") into references4rnfSimReads, referencesForAlignersDNA
 
   when:
     'simulatedDNA'.matches(params.mode)
 
   script:
+    //Abbreviate Genus_species name to G_species
+    meta.species = (meta.species =~ /^./)[0]+(meta.species =~ /_.*$/)[0]
     basename=getTagFromMeta(meta)
-    //DECOMPRESS?
-    cmd = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
-    //TRIAL RUN? ONLY TAKE FIRST n LINES
-    //cmd += trialLines != null ? "| head -n ${trialLines}" : ""
-    """
-    curl ${meta.fasta} ${cmd} > ${basename}.fasta
-    """
+    if((fasta.name).matches("REMOTE")) { //REMOTE FILE
+      decompress = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
+      """
+      curl ${meta.fasta} ${decompress} > ${basename}.fasta
+      """
+    } else if((fasta.name).matches("^.*\\.gz\$")){ //LOCAL GZIPPED
+      """
+      gunzip --stdout  ${fasta}  > ${basename}.fasta
+      """
+    } else { //LOCAL FLAT
+      """
+      cp -s  ${fasta} ${basename}.fasta
+      """
+    }
 }
-
-//Mix local and remote references then connect o multiple channels
-referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; referencesForAlignersDNA }
 
 
 process indexReferences4rnfSimReadsDNA {
@@ -559,6 +555,9 @@ process indexReferences4rnfSimReadsDNA {
 
   output:
     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
+
+  when:
+    'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
 
   script:
   """
@@ -639,6 +638,7 @@ process render {
   label 'rrender'
   label 'paper'
   stageInMode 'copy'
+  scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
   input:
     file('*') from plots.flatten().toList()
