@@ -12,7 +12,8 @@
 - [Adding another aligner](#adding-another-aligner)
   - [Example](#example)
     - [Add indexing template](#add-indexing-template)
-    - [Add alignment template](#add-alignment-template)
+    - [Add RNA alignment template](#add-rna-alignment-template)
+    - [Add DNA alignment template](#add-dna-alignment-template)
     - [Specify container](#specify-container)
 - [WRiting](#writing)
   - [Rendering outside the pipeline](#rendering-outside-the-pipeline)
@@ -112,11 +113,12 @@ OpenJDK 64-Bit Server VM (build 25.171-b11, mixed mode)
 
 # Adding another aligner
 
+An aligner may be included for DNA alignment, RNA alignment or both. In each case the same indexing template will be used.
 
 After you have cloned this repository:
 
-1. Add an indexing template to [`templates/`](templates/) subdirectory.
-2. Add an alignment template to [`templates/`](templates/) subdirectory.
+1. Add an indexing template to [`templates/index`](templates/index) subdirectory.
+2. Add an alignment template(s) to [`templates/rna`](templates/rna) and/or [`templates/dna`](templates/dna) subdirectories.
 3. Update [conf/containers.config](conf/containers.config) by specifying a docker hub repository from which an image will be pulled by the pipeline.
 
 
@@ -131,7 +133,7 @@ echo \
 '#!/usr/bin/env bash
 
 bowtie2-build --threads ${task.cpus} ${ref} ${ref}
-> templates/bowtie2_index.sh
+> templates/index/bowtie2_index.sh
 ```
 
 Applicable nextflow variables resolve as follows:
@@ -140,7 +142,7 @@ Applicable nextflow variables resolve as follows:
 * `${ref}` - the reference FASTA path/filename - in this case we use it both to specify the input file and the basename of the generated index
 
 
-### Add alignment template
+### Add RNA alignment template
 
 ```
 echo -e \
@@ -155,7 +157,7 @@ bowtie2 \
   --threads  ${task.cpus} \
   --local \
   > sam' \
-> templates/bowtie2_align.sh
+> templates/rna/bowtie2_align.sh
 ```
 
 Applicable nextflow variables resolve as follows :
@@ -166,6 +168,9 @@ Applicable nextflow variables resolve as follows :
 
 In addition we have used bowtie's `--local` flag to increase alignment rates for reads spanning introns.
 
+### Add DNA alignment template
+
+TODO
 
 ### Specify container
 
