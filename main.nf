@@ -1,23 +1,29 @@
 #!/usr/bin/env nextflow
 
+//For pretty-printing nested maps etc
+import static groovy.json.JsonOutput.*
+
+
+//RETURNS DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
+Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+  .filter{ params.alignersDNA == 'all' || it[0].matches(params.alignersDNA) }
+  .map { [it[0], "DNA"] }
+  .set {alignersDNA}
+
 //RETURNS RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
-alignersRNA = Channel.fromFilePairs("${workflow.projectDir}/templates/rna/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  .map { it[0] }
-  .filter{ params.alignersRNA == 'all' || it.matches(params.alignersRNA) }
-  // .filter{ !it.matches("subread\$") } //temp
-  // .filter{ !params.debug || it.matches("(biokanga|bowtie2|bwa|dart|hisat2|star)\$") }
+Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+  .filter{ params.alignersRNA == 'all' || it[0].matches(params.alignersRNA) }
+  .map { [it[0], "RNA"] }
+  .set { alignersRNA }
 
 //Pre-computed BEERS datasets (RNA)
-datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
+datasetsSimulatedRNA = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
   .filter{ !params.debug || it == params.debugDataset }
   .filter{ (it[-1] as Integer) <= params.replicates}
-
 
 //Download reference: hg19
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
-//For pretty-printing nested maps etc
-import static groovy.json.JsonOutput.*
 
 /*
   Generic method for extracting a string tag or a file basename from a metadata map
@@ -46,18 +52,20 @@ if (params.help){
     exit 0
 }
 
+
 process downloadReferenceRNA {
   storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"}
   scratch false
+  // scratch true
 
   input:
     val(url)
 
   output:
-    file('chromFa.tar.gz') into refs
+    file('chromFa.tar.gz') into downloadedRefsRNA
 
   when:
-    'simulatedRNA|realRNA'.matches(params.mode)
+    'simulatedRNA'.matches(params.mode) || 'realRNA'.matches(params.mode)
 
   script:
   """
@@ -72,7 +80,7 @@ process downloadDatasetsRNA {
   scratch false
 
   input:
-    val(dataset) from datasets
+    val(dataset) from datasetsSimulatedRNA
 
   output:
     file("${dataset}.tar.bz2") into downloadedDatasets
@@ -111,13 +119,14 @@ process convertReferenceRNA {
   label 'slow'
 
   input:
-    file(downloadedRef) from refs
+    file(downloadedRef) from downloadedRefsRNA
 
   output:
-    file ref
+    set val(meta), file(ref) into refsRNA
     // file('ucsc.hg19.fa') into reference
 
   script:
+  meta = [:]
   if(params.debug) {
     ref="${params.debugChromosome}.fa"
     """
@@ -133,22 +142,27 @@ process convertReferenceRNA {
 
 }
 
-process indexGeneratorRNA {
+//DNA and RNA aligners in one channel as single indexing process defined
+alignersDNA.join(alignersRNA , remainder: true)
+  .map { [tool: it[0], dna: it[1]!=null, rna: it[2]!=null] }
+  .set { aligners }
+
+process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  container { this.config.process.get("withLabel:${tool}" as String).get("container") }
-  tag("${tool} << ${ref}")
+  container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") }
+  tag("${alignermeta.tool} << ${ref}")
 
   input:
-    file ref
-    val(tool) from alignersRNA
+    set val(alignermeta), val(refmeta), file(ref) from aligners.combine(refsRNA)
 
   output:
-    set val(meta), file("*") into indices, indices4realRNA
+    set val(meta), file("*") into indices4simulatedRNA, indices4realRNA, indices4simulatedDNA
 
   script:
-    meta = [tool: "${tool}", target: "${ref}"]
-    template "rna/${tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
+    meta = [tool: "${alignermeta.tool}", target: "${ref}"]
+    // meta =  alignermeta+[target: "${ref}"]
+    template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
 }
 
 process prepareDatasetsRNA {
@@ -215,7 +229,7 @@ process alignSimulatedReadsRNA {
 
 
   input:
-    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
+    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices4simulatedRNA.combine(datasetsWithAdapters.mix(preparedDatasets))
 
   output:
     set val(meta), file("*sam"), file(cig), file('.command.trace') into alignedDatasets
@@ -504,6 +518,7 @@ process ggplotRealRNA {
 //                 DNA alignment
 // ----- =======                   ======= -----
 
+
 /*
  1. Input pointers to FASTA converted to files, NF would fetch remote as well and create tmp files,
     but avoiding that as may not scale with large genomes, prefer to do in process.
@@ -579,7 +594,7 @@ process rnfSimReadsDNA {
     each distanceDev from params.simreads.distanceDev //PE only
 
   output:
-    set val(simmeta), file("*.fq.gz") into reads4bwaAlign, reads4bowtie2align, reads4kangaAlign
+    set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
 
   when:
     !(mode == "PE" && simulator == "CuReSim")
