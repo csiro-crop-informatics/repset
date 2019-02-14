@@ -127,6 +127,7 @@ process convertReferenceRNA {
 
   script:
   meta = [:]
+  meta.mode = 'RNA'
   if(params.debug) {
     ref="${params.debugChromosome}.fa"
     """
@@ -139,14 +140,62 @@ process convertReferenceRNA {
     cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V)  > ${ref}
     """
   }
-
 }
 
+/*
+ 1. Input pointers to FASTA converted to files, NF would fetch remote as well and create tmp files,
+    but avoiding that as may not scale with large genomes, prefer to do in process.
+ 2. Conversion would not have been necessary and script could point directly to meta.fasta
+    but local files might not be on paths automatically mounted in the container.
+*/
+referencesDNA = Channel.from(params.references).map { (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)] }
+
+process fetchReferenceForDNAAlignment {
+  tag{meta.subMap(['species','version'])}
+  //as above, storeDir not mounted accessible storeDir { (fasta.name).matches("REMOTE") ? (executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded") : null }
+
+  input:
+    set val(meta), file(fasta) from referencesDNA
+
+  output:
+    set val(meta), file("${basename}.fasta") into references4rnfSimReads, referencesForAlignersDNA
+
+  when:
+    'simulatedDNA'.matches(params.mode)
+
+  script:
+    //Abbreviate Genus_species name to G_species
+    meta.species = (meta.species =~ /^./)[0]+(meta.species =~ /_.*$/)[0]
+    meta.mode = 'DNA'
+    basename=getTagFromMeta(meta)
+    if((fasta.name).matches("REMOTE")) { //REMOTE FILE
+      decompress = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
+      """
+      curl ${meta.fasta} ${decompress} > ${basename}.fasta
+      """
+    } else if((fasta.name).matches("^.*\\.gz\$")){ //LOCAL GZIPPED
+      """
+      gunzip --stdout  ${fasta}  > ${basename}.fasta
+      """
+    } else { //LOCAL FLAT
+      """
+      cp -s  ${fasta} ${basename}.fasta
+      """
+    }
+}
+
+
 //DNA and RNA aligners in one channel as single indexing process defined
-alignersDNA.join(alignersRNA , remainder: true)
+// alignersDNA.println { "$it DNA" }
+// alignersRNA.println { "$it RNA" }
+alignersDNA.join(alignersRNA , remainder: true)//.println { it }
   .map { [tool: it[0], dna: it[1]!=null, rna: it[2]!=null] }
   .set { aligners }
 
+// aligners.combine(referencesForAlignersDNA).println { it }
+
+// // // referencesForAlignersDNA.println { it }
+// // // aligners.println { it }
 process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
@@ -154,15 +203,19 @@ process indexGenerator {
   tag("${alignermeta.tool} << ${ref}")
 
   input:
-    set val(alignermeta), val(refmeta), file(ref) from aligners.combine(refsRNA)
+    set val(alignermeta), val(refmeta), file(ref) from aligners.combine(refsRNA.mix(referencesForAlignersDNA))
 
   output:
     set val(meta), file("*") into indices4simulatedRNA, indices4realRNA, indices4simulatedDNA
 
+  when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
+    (refmeta.mode == 'DNA' && alignermeta.dna) || (refmeta.mode == 'RNA' && alignermeta.rna)
+  // exec: //dev
+  // meta =  alignermeta+refmeta//[target: "${ref}"]
+  // println(meta)
   script:
-    meta = [tool: "${alignermeta.tool}", target: "${ref}"]
-    // meta =  alignermeta+[target: "${ref}"]
-    template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
+    meta = [tool: "${alignermeta.tool}", target: "${ref}", mode: refmeta.mode]
+    template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
 
 process prepareDatasetsRNA {
@@ -519,46 +572,7 @@ process ggplotRealRNA {
 // ----- =======                   ======= -----
 
 
-/*
- 1. Input pointers to FASTA converted to files, NF would fetch remote as well and create tmp files,
-    but avoiding that as may not scale with large genomes, prefer to do in process.
- 2. Conversion would not have been necessary and script could point directly to meta.fasta
-    but local files might not be on paths automatically mounted in the container.
-*/
-referencesDNA = Channel.from(params.references).map { (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)] }
 
-process fetchReferenceForDNAAlignment {
-  tag{meta.subMap(['species','version'])}
-  //as above, storeDir not mounted accessible storeDir { (fasta.name).matches("REMOTE") ? (executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded") : null }
-
-  input:
-    set val(meta), file(fasta) from referencesDNA
-
-  output:
-    set val(meta), file("${basename}.fasta") into references4rnfSimReads, referencesForAlignersDNA
-
-  when:
-    'simulatedDNA'.matches(params.mode)
-
-  script:
-    //Abbreviate Genus_species name to G_species
-    meta.species = (meta.species =~ /^./)[0]+(meta.species =~ /_.*$/)[0]
-    basename=getTagFromMeta(meta)
-    if((fasta.name).matches("REMOTE")) { //REMOTE FILE
-      decompress = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
-      """
-      curl ${meta.fasta} ${decompress} > ${basename}.fasta
-      """
-    } else if((fasta.name).matches("^.*\\.gz\$")){ //LOCAL GZIPPED
-      """
-      gunzip --stdout  ${fasta}  > ${basename}.fasta
-      """
-    } else { //LOCAL FLAT
-      """
-      cp -s  ${fasta} ${basename}.fasta
-      """
-    }
-}
 
 
 process indexReferences4rnfSimReadsDNA {
@@ -643,6 +657,46 @@ process rnfSimReadsDNA {
     done \
     && find . -type d -mindepth 2 | xargs rm -r
     """
+}
+
+process alignSimulatedReadsDNA {
+  echo true
+  label 'align'
+  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  tag("${idxmeta} << ${readsmeta}")
+
+
+input:
+    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+
+  // output:
+  //   set val(alignmeta), file('out.bam') into bwaBAMs
+
+  // when: //only align reads to the corresponding genome
+  //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
+
+  """
+  ls -la
+  """
+
+  // script:
+  //   dbBasename=getTagFromMeta(dbmeta)
+  //   alignmeta = dbmeta + simmeta
+  //   alignmeta.aligner = "bwa"
+  //   if(simmeta.mode == 'SE') {
+  //     """
+  //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz | samtools view -bS > out.bam
+  //     """
+  //   } else {
+  //     """
+  //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
+  //     """
+  //   }
+
+
+  // script:
+  //   meta = idxmeta.clone() + readsmeta.clone()
+  //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
 
