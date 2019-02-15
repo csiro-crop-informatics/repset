@@ -668,45 +668,50 @@ process rnfSimReadsDNA {
     """
 }
 
-// process alignSimulatedReadsDNA {
-//   echo true
-//   label 'align'
-//   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-//   tag("${idxmeta} << ${readsmeta}")
+process alignSimulatedReadsDNA {
+  echo true
+  label 'align'
+  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  tag("${idxmeta} << ${readsmeta}")
+
+  input:
+    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
 
 
-// input:
-//     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+  // output:
+  //   set val(alignmeta), file('out.bam') into bwaBAMs
 
-//   // output:
-//   //   set val(alignmeta), file('out.bam') into bwaBAMs
+  when:
+    idxmeta.seqtype == 'DNA'
 
-//   // when: //only align reads to the corresponding genome
-//   //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
+  // when: //only align reads to the corresponding genome
+  //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
+  script:
+    println simmeta
+    println idxmeta
+    """
+    ls -la
+    """
 
-//   """
-//   ls -la
-//   """
-
-//   // script:
-//   //   dbBasename=getTagFromMeta(dbmeta)
-//   //   alignmeta = dbmeta + simmeta
-//   //   alignmeta.aligner = "bwa"
-//   //   if(simmeta.mode == 'SE') {
-//   //     """
-//   //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz | samtools view -bS > out.bam
-//   //     """
-//   //   } else {
-//   //     """
-//   //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
-//   //     """
-//   //   }
+  // script:
+  //   dbBasename=getTagFromMeta(dbmeta)
+  //   alignmeta = dbmeta + simmeta
+  //   alignmeta.aligner = "bwa"
+  //   if(simmeta.mode == 'SE') {
+  //     """
+  //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz | samtools view -bS > out.bam
+  //     """
+  //   } else {
+  //     """
+  //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
+  //     """
+  //   }
 
 
-//   // script:
-//   //   meta = idxmeta.clone() + readsmeta.clone()
-//   //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-// }
+  // script:
+  //   meta = idxmeta.clone() + readsmeta.clone()
+  //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+}
 
 
 // //WRAP-UP
