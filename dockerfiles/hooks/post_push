@@ -13,8 +13,8 @@ echo "Current branch=${SOURCE_BRANCH}"
 # Tag and push image for each additional tag if the original tag does not look like a version tag as these are triggered separately
 # [[ "${IMAGE_NAME:tagStart}" =~ ^v?([0-9]+\.)?([0-9]+\.)?(\*|[0-9]+)$ ]] \
 [[ "${IMAGE_NAME:tagStart}" =~ ^v?([0-9]+\.)?([0-9]+\.)?(\*|[0-9]+)$ ]] \
-  || for tag in ${SOURCE_COMMIT} ${SOURCE_BRANCH} $(git tag -l --points-at HEAD | sed 's/^v//' || echo ""); do
+  || for tag in ${SOURCE_COMMIT} $(git tag -l --points-at HEAD | sed 's/^v//' || echo ""); do
       echo "Additional tag: ${tag##*/}"
-      echo "docker tag ${IMAGE_NAME} ${DOCKER_REPO}:${tag##*/}"
-      echo "docker push ${DOCKER_REPO}:${tag##*/}"
+      docker tag ${IMAGE_NAME} ${DOCKER_REPO}:${tag##*/}
+      docker push ${DOCKER_REPO}:${tag##*/}
  done
