@@ -16,7 +16,7 @@ for tag in ${SOURCE_COMMIT} $(git tag -l --points-at HEAD | sed 's/^v//' || echo
       docker tag ${IMAGE_NAME} ${DOCKER_REPO}:${tag##*/}
       docker push ${DOCKER_REPO}:${tag##*/}
       CTAG="${IMAGE_NAME:tagStart}_${tag##*/}"
-      echo "Additional compund tag: ${CTAG}"
+      echo "Additional compound tag: ${CTAG}"
       docker tag ${IMAGE_NAME} ${DOCKER_REPO}:${CTAG}
       docker push ${DOCKER_REPO}:${CTAG}
  done
