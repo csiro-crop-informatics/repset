@@ -10,8 +10,13 @@ echo "Post-push processing image: ${IMAGE_NAME}. Tag: ${IMAGE_NAME:tagStart}" ##
 echo "Current commit=${SOURCE_COMMIT}"
 echo "Current branch=${SOURCE_BRANCH}"
 
+#Take commit sha (or git tag if available)
 for tag in ${SOURCE_COMMIT} $(git tag -l --points-at HEAD | sed 's/^v//' || echo ""); do
       echo "Additional tag: ${tag##*/}"
       docker tag ${IMAGE_NAME} ${DOCKER_REPO}:${tag##*/}
       docker push ${DOCKER_REPO}:${tag##*/}
+      CTAG="${IMAGE_NAME:tagStart}_${tag##*/}"
+      echo "Additional compund tag: ${CTAG}"
+      docker tag ${IMAGE_NAME} ${DOCKER_REPO}:${CTAG}
+      docker push ${DOCKER_REPO}:${CTAG}
  done
