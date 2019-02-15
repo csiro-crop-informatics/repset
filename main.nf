@@ -584,89 +584,89 @@ process ggplotRealRNA {
 
 
 
-// process indexReferences4rnfSimReadsDNA {
-//   tag{meta}
-//   label 'samtools'
+process indexReferences4rnfSimReadsDNA {
+  tag{meta}
+  label 'samtools'
 
-//   input:
-//     set val(meta), file(ref) from references4rnfSimReads
+  input:
+    set val(meta), file(ref) from references4rnfSimReads
 
-//   output:
-//     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
+  output:
+    set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
 
-//   when:
-//     'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
+  when:
+    'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
 
-//   script:
-//   """
-//   samtools faidx ${ref}
-//   """
-// }
+  script:
+  """
+  samtools faidx ${ref}
+  """
+}
 
-// process rnfSimReadsDNA {
-//   tag{simmeta}
-//   label 'rnftools'
+process rnfSimReadsDNA {
+  tag{simmeta}
+  label 'rnftools'
 
-//   input:
-//     set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
-//     each nsimreads from params.simreads.nreads.toString().tokenize(",")*.toInteger()
-//     each length from params.simreads.length.toString().tokenize(",")*.toInteger()
-//     each simulator from params.simreads.simulator
-//     each mode from params.simreads.mode //PE, SE
-//     each distance from params.simreads.distance //PE only
-//     each distanceDev from params.simreads.distanceDev //PE only
+  input:
+    set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
+    each nsimreads from params.simreads.nreads.toString().tokenize(",")*.toInteger()
+    each length from params.simreads.length.toString().tokenize(",")*.toInteger()
+    each simulator from params.simreads.simulator
+    each mode from params.simreads.mode //PE, SE
+    each distance from params.simreads.distance //PE only
+    each distanceDev from params.simreads.distanceDev //PE only
 
-//   output:
-//     set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
+  output:
+    set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
 
-//   when:
-//     !(mode == "PE" && simulator == "CuReSim")
+  when:
+    !(mode == "PE" && simulator == "CuReSim")
 
-//   script:
-//     tag=meta.species+"_"+meta.version+"_"+simulator
-//     simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length ]
-//     len1 = length
-//     if(mode == "PE") {
-//       //FOR rnftools
-//       len2 = length
-//       tuple = 2
-//       dist="distance="+distance+","
-//       distDev= "distance_deviation="+distanceDev+","
-//       //FOR meta
-//       simmeta.dist = distance
-//       simmeta.distanceDev = distanceDev
-//     } else {
-//       len2 = 0
-//       tuple = 1
-//       dist=""
-//       distDev=""
-//     }
-//     """
-//     echo "import rnftools
-//     rnftools.mishmash.sample(\\"${tag}_reads\\",reads_in_tuple=${tuple})
-//     rnftools.mishmash.${simulator}(
-//             fasta=\\"${ref}\\",
-//             number_of_read_tuples=${nsimreads},
-//             ${dist}
-//             ${distDev}
-//             read_length_1=${len1},
-//             read_length_2=${len2}
-//     )
-//     include: rnftools.include()
-//     rule: input: rnftools.input()
-//     " > Snakefile
-//     snakemake \
-//     && for f in *.fq; do \
-//       paste - - - - < \${f} \
-//       | awk 'BEGIN{FS=OFS="\\t"};{gsub("[^ACGTUacgtu]","N",\$2); print}' \
-//       | tr '\\t' '\\n' \
-//       | gzip --stdout  --fast \
-//       > \${f}.gz \
-//       && rm \${f};
-//     done \
-//     && find . -type d -mindepth 2 | xargs rm -r
-//     """
-// }
+  script:
+    tag=meta.species+"_"+meta.version+"_"+simulator
+    simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length ]
+    len1 = length
+    if(mode == "PE") {
+      //FOR rnftools
+      len2 = length
+      tuple = 2
+      dist="distance="+distance+","
+      distDev= "distance_deviation="+distanceDev+","
+      //FOR meta
+      simmeta.dist = distance
+      simmeta.distanceDev = distanceDev
+    } else {
+      len2 = 0
+      tuple = 1
+      dist=""
+      distDev=""
+    }
+    """
+    echo "import rnftools
+    rnftools.mishmash.sample(\\"${tag}_reads\\",reads_in_tuple=${tuple})
+    rnftools.mishmash.${simulator}(
+            fasta=\\"${ref}\\",
+            number_of_read_tuples=${nsimreads},
+            ${dist}
+            ${distDev}
+            read_length_1=${len1},
+            read_length_2=${len2}
+    )
+    include: rnftools.include()
+    rule: input: rnftools.input()
+    " > Snakefile
+    snakemake \
+    && for f in *.fq; do \
+      paste - - - - < \${f} \
+      | awk 'BEGIN{FS=OFS="\\t"};{gsub("[^ACGTUacgtu]","N",\$2); print}' \
+      | tr '\\t' '\\n' \
+      | gzip --stdout  --fast \
+      > \${f}.gz \
+      && rm \${f};
+    done \
+    && find . -type d -mindepth 2 | xargs rm -r
+    """
+}
 
 // process alignSimulatedReadsDNA {
 //   echo true
