@@ -127,7 +127,7 @@ process convertReferenceRNA {
 
   script:
   meta = [:]
-  meta.mode = 'RNA'
+  meta.seqtype = 'RNA'
   if(params.debug) {
     ref="${params.debugChromosome}.fa"
     """
@@ -166,7 +166,7 @@ process fetchReferenceForDNAAlignment {
   script:
     //Abbreviate Genus_species name to G_species
     meta.species = (meta.species =~ /^./)[0]+(meta.species =~ /_.*$/)[0]
-    meta.mode = 'DNA'
+    meta.seqtype = 'DNA'
     basename=getTagFromMeta(meta)
     if((fasta.name).matches("REMOTE")) { //REMOTE FILE
       decompress = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
@@ -209,12 +209,12 @@ process indexGenerator {
     set val(meta), file("*") into indices4simulatedRNA, indices4realRNA, indices4simulatedDNA
 
   when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
-    (refmeta.mode == 'DNA' && alignermeta.dna) || (refmeta.mode == 'RNA' && alignermeta.rna)
+    (refmeta.seqtype == 'DNA' && alignermeta.dna) || (refmeta.seqtype == 'RNA' && alignermeta.rna)
   // exec: //dev
   // meta =  alignermeta+refmeta//[target: "${ref}"]
   // println(meta)
   script:
-    meta = [tool: "${alignermeta.tool}", target: "${ref}", mode: refmeta.mode]
+    meta = [tool: "${alignermeta.tool}", target: "${ref}", seqtype: refmeta.seqtype]
     template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
 
@@ -287,8 +287,12 @@ process alignSimulatedReadsRNA {
   output:
     set val(meta), file("*sam"), file(cig), file('.command.trace') into alignedDatasets
 
+  when:
+    idxmeta.seqtype == 'RNA'
+
   script:
     meta = idxmeta.clone() + readsmeta.clone()
+    meta.remove('seqtype') //not needed downstream, would have to modiify tidy-ing to keep
     template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
@@ -303,9 +307,10 @@ process nameSortSAM {
         // meta.'aligntrace'.'duration' = trace.text.tokenize('\n').last()
         //meta.'aligntime' = trace.text.tokenize('\n').last()
         trace.splitEachLine("=", { record ->
-        if(record.size() > 1 && record[0]=='realtime') { //to grab all, remove second condition and { meta."${record[0]}" = record[1] }
-          meta.'aligntime'  = record[1]
-        }
+          if(record.size() > 1 && record[0]=='realtime') { //to grab all, remove second condition and { meta."${record[0]}" = record[1] }
+            meta.'aligntime'  = record[1]
+          }
+        })
         new Tuple(meta, sam, cig)
       }
 
@@ -571,180 +576,180 @@ process ggplotRealRNA {
 
 
 
-// ----- =======                   ======= -----
-//                 DNA alignment
-// ----- =======                   ======= -----
+// // ----- =======                   ======= -----
+// //                 DNA alignment
+// // ----- =======                   ======= -----
 
 
 
 
 
-process indexReferences4rnfSimReadsDNA {
-  tag{meta}
-  label 'samtools'
+// process indexReferences4rnfSimReadsDNA {
+//   tag{meta}
+//   label 'samtools'
 
-  input:
-    set val(meta), file(ref) from references4rnfSimReads
+//   input:
+//     set val(meta), file(ref) from references4rnfSimReads
 
-  output:
-    set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
+//   output:
+//     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
 
-  when:
-    'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
+//   when:
+//     'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
 
-  script:
-  """
-  samtools faidx ${ref}
-  """
-}
-
-process rnfSimReadsDNA {
-  tag{simmeta}
-  label 'rnftools'
-
-  input:
-    set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
-    each nsimreads from params.simreads.nreads.toString().tokenize(",")*.toInteger()
-    each length from params.simreads.length.toString().tokenize(",")*.toInteger()
-    each simulator from params.simreads.simulator
-    each mode from params.simreads.mode //PE, SE
-    each distance from params.simreads.distance //PE only
-    each distanceDev from params.simreads.distanceDev //PE only
-
-  output:
-    set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
-
-  when:
-    !(mode == "PE" && simulator == "CuReSim")
-
-  script:
-    tag=meta.species+"_"+meta.version+"_"+simulator
-    simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length ]
-    len1 = length
-    if(mode == "PE") {
-      //FOR rnftools
-      len2 = length
-      tuple = 2
-      dist="distance="+distance+","
-      distDev= "distance_deviation="+distanceDev+","
-      //FOR meta
-      simmeta.dist = distance
-      simmeta.distanceDev = distanceDev
-    } else {
-      len2 = 0
-      tuple = 1
-      dist=""
-      distDev=""
-    }
-    """
-    echo "import rnftools
-    rnftools.mishmash.sample(\\"${tag}_reads\\",reads_in_tuple=${tuple})
-    rnftools.mishmash.${simulator}(
-            fasta=\\"${ref}\\",
-            number_of_read_tuples=${nsimreads},
-            ${dist}
-            ${distDev}
-            read_length_1=${len1},
-            read_length_2=${len2}
-    )
-    include: rnftools.include()
-    rule: input: rnftools.input()
-    " > Snakefile
-    snakemake \
-    && for f in *.fq; do \
-      paste - - - - < \${f} \
-      | awk 'BEGIN{FS=OFS="\\t"};{gsub("[^ACGTUacgtu]","N",\$2); print}' \
-      | tr '\\t' '\\n' \
-      | gzip --stdout  --fast \
-      > \${f}.gz \
-      && rm \${f};
-    done \
-    && find . -type d -mindepth 2 | xargs rm -r
-    """
-}
-
-process alignSimulatedReadsDNA {
-  echo true
-  label 'align'
-  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  tag("${idxmeta} << ${readsmeta}")
-
-
-input:
-    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-
-  // output:
-  //   set val(alignmeta), file('out.bam') into bwaBAMs
-
-  // when: //only align reads to the corresponding genome
-  //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
-
-  """
-  ls -la
-  """
-
-  // script:
-  //   dbBasename=getTagFromMeta(dbmeta)
-  //   alignmeta = dbmeta + simmeta
-  //   alignmeta.aligner = "bwa"
-  //   if(simmeta.mode == 'SE') {
-  //     """
-  //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz | samtools view -bS > out.bam
-  //     """
-  //   } else {
-  //     """
-  //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
-  //     """
-  //   }
-
-
-  // script:
-  //   meta = idxmeta.clone() + readsmeta.clone()
-  //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-}
-
-
-//WRAP-UP
-writing = Channel.fromPath("${baseDir}/writing/*")
-process render {
-  tag 'manuscript'
-  label 'rrender'
-  label 'paper'
-  stageInMode 'copy'
-  scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
-
-  input:
-    file('*') from plots.flatten().toList()
-    file('*') from plotsRealRNA.flatten().toList()
-    file('*') from writing.collect()
-
-  output:
-    file '*'
-
-  script:
-  """
-  #!/usr/bin/env Rscript
-
-  library(rmarkdown)
-  library(rticles)
-  library(bookdown)
-
-  rmarkdown::render(Sys.glob("*.Rmd"))
-  """
-
-}
-
-
-
-// workflow.onComplete {
-//     // any workflow property can be used here
-//     println "Pipeline complete"
-//     println "Command line: $workflow.commandLine"
-//     println(workflow)
+//   script:
+//   """
+//   samtools faidx ${ref}
+//   """
 // }
 
-// workflow.onError {
-//     println "Oops .. something when wrong"
+// process rnfSimReadsDNA {
+//   tag{simmeta}
+//   label 'rnftools'
+
+//   input:
+//     set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
+//     each nsimreads from params.simreads.nreads.toString().tokenize(",")*.toInteger()
+//     each length from params.simreads.length.toString().tokenize(",")*.toInteger()
+//     each simulator from params.simreads.simulator
+//     each mode from params.simreads.mode //PE, SE
+//     each distance from params.simreads.distance //PE only
+//     each distanceDev from params.simreads.distanceDev //PE only
+
+//   output:
+//     set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
+
+//   when:
+//     !(mode == "PE" && simulator == "CuReSim")
+
+//   script:
+//     tag=meta.species+"_"+meta.version+"_"+simulator
+//     simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length ]
+//     len1 = length
+//     if(mode == "PE") {
+//       //FOR rnftools
+//       len2 = length
+//       tuple = 2
+//       dist="distance="+distance+","
+//       distDev= "distance_deviation="+distanceDev+","
+//       //FOR meta
+//       simmeta.dist = distance
+//       simmeta.distanceDev = distanceDev
+//     } else {
+//       len2 = 0
+//       tuple = 1
+//       dist=""
+//       distDev=""
+//     }
+//     """
+//     echo "import rnftools
+//     rnftools.mishmash.sample(\\"${tag}_reads\\",reads_in_tuple=${tuple})
+//     rnftools.mishmash.${simulator}(
+//             fasta=\\"${ref}\\",
+//             number_of_read_tuples=${nsimreads},
+//             ${dist}
+//             ${distDev}
+//             read_length_1=${len1},
+//             read_length_2=${len2}
+//     )
+//     include: rnftools.include()
+//     rule: input: rnftools.input()
+//     " > Snakefile
+//     snakemake \
+//     && for f in *.fq; do \
+//       paste - - - - < \${f} \
+//       | awk 'BEGIN{FS=OFS="\\t"};{gsub("[^ACGTUacgtu]","N",\$2); print}' \
+//       | tr '\\t' '\\n' \
+//       | gzip --stdout  --fast \
+//       > \${f}.gz \
+//       && rm \${f};
+//     done \
+//     && find . -type d -mindepth 2 | xargs rm -r
+//     """
 // }
+
+// process alignSimulatedReadsDNA {
+//   echo true
+//   label 'align'
+//   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+//   tag("${idxmeta} << ${readsmeta}")
+
+
+// input:
+//     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+
+//   // output:
+//   //   set val(alignmeta), file('out.bam') into bwaBAMs
+
+//   // when: //only align reads to the corresponding genome
+//   //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
+
+//   """
+//   ls -la
+//   """
+
+//   // script:
+//   //   dbBasename=getTagFromMeta(dbmeta)
+//   //   alignmeta = dbmeta + simmeta
+//   //   alignmeta.aligner = "bwa"
+//   //   if(simmeta.mode == 'SE') {
+//   //     """
+//   //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz | samtools view -bS > out.bam
+//   //     """
+//   //   } else {
+//   //     """
+//   //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
+//   //     """
+//   //   }
+
+
+//   // script:
+//   //   meta = idxmeta.clone() + readsmeta.clone()
+//   //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+// }
+
+
+// //WRAP-UP
+// writing = Channel.fromPath("${baseDir}/writing/*")
+// process render {
+//   tag 'manuscript'
+//   label 'rrender'
+//   label 'paper'
+//   stageInMode 'copy'
+//   scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+
+//   input:
+//     file('*') from plots.flatten().toList()
+//     file('*') from plotsRealRNA.flatten().toList()
+//     file('*') from writing.collect()
+
+//   output:
+//     file '*'
+
+//   script:
+//   """
+//   #!/usr/bin/env Rscript
+
+//   library(rmarkdown)
+//   library(rticles)
+//   library(bookdown)
+
+//   rmarkdown::render(Sys.glob("*.Rmd"))
+//   """
+
+// }
+
+
+
+// // workflow.onComplete {
+// //     // any workflow property can be used here
+// //     println "Pipeline complete"
+// //     println "Command line: $workflow.commandLine"
+// //     println(workflow)
+// // }
+
+// // workflow.onError {
+// //     println "Oops .. something when wrong"
+// // }
 
 
