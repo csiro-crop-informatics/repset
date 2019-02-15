@@ -301,7 +301,11 @@ process nameSortSAM {
     set val(meta), file(sam), file(cig) from alignedDatasets.map { meta, sam, cig, trace ->
         // meta.'aligntrace' = trace.splitCsv( header: true, limit: 1, sep: ' ')
         // meta.'aligntrace'.'duration' = trace.text.tokenize('\n').last()
-        meta.'aligntime' = trace.text.tokenize('\n').last()
+        //meta.'aligntime' = trace.text.tokenize('\n').last()
+        trace.splitEachLine("=", { record ->
+        if(record.size() > 1 && record[0]=='realtime') { //to grab all, remove second condition and { meta."${record[0]}" = record[1] }
+          meta.'aligntime'  = record[1]
+        }
         new Tuple(meta, sam, cig)
       }
 
