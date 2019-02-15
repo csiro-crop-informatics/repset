@@ -1,4 +1,4 @@
-FROM rocker/r-ver:3.5.1
+FROM rocker/r-ver:3.5.2
 LABEL maintainer="Rad Suchecki <rad.suchecki@csiro.au>"
 SHELL ["/bin/bash", "-c"]
 
