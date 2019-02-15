@@ -669,49 +669,174 @@ process rnfSimReadsDNA {
 }
 
 process alignSimulatedReadsDNA {
-  echo true
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  tag("${idxmeta} << ${readsmeta}")
+  tag("${idxmeta} << ${simmeta}")
 
   input:
     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
 
-
-  // output:
-  //   set val(alignmeta), file('out.bam') into bwaBAMs
+  output:
+    set val(alignmeta), file('out.bam') into alignedSimulatedDNA
 
   when:
     idxmeta.seqtype == 'DNA'
 
-  // when: //only align reads to the corresponding genome
+  // when: //only align reads to the corresponding genome - TODO UPDATE idxmeta to hold this info!
   //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
   script:
-    println simmeta
-    println idxmeta
-    """
-    ls -la
-    """
-
-  // script:
-  //   dbBasename=getTagFromMeta(dbmeta)
-  //   alignmeta = dbmeta + simmeta
-  //   alignmeta.aligner = "bwa"
-  //   if(simmeta.mode == 'SE') {
-  //     """
-  //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz | samtools view -bS > out.bam
-  //     """
-  //   } else {
-  //     """
-  //     bwa mem -t ${task.cpus} ${dbBasename} 1.fq.gz 2.fq.gz | samtools view -bS > out.bam
-  //     """
-  //   }
-
-
-  // script:
-  //   meta = idxmeta.clone() + readsmeta.clone()
-  //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    alignmeta = idxmeta.clone() + simmeta.clone()
+    // if(simmeta.mode == 'PE') {
+      template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    // } else {
+    //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    // }
 }
+
+process rnfEvaluateSimulatedDNA {
+  label 'rnftools'
+  tag{alignmeta}
+
+
+  input:
+    set val(alignmeta), file('out.bam') from alignedSimulatedDNA
+
+  output:
+     set val(alignmeta), file(summary) into summariesSimulatedDNA
+     set val(alignmeta), file(detail) into detailsSimulatedDNA
+
+  script:
+  // println prettyPrint(toJson(alignmeta))
+  """
+  paste \
+    <( rnftools sam2es -i out.bam -o - | awk '\$1 !~ /^#/' \
+      | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
+    ) \
+    <( samtools view out.bam ) \
+  | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
+  """
+
+// rnftools sam2es OUTPUT header
+// # RN:   read name
+// # Q:    is mapped with quality
+// # Chr:  chr id
+// # D:    direction
+// # L:    leftmost nucleotide
+// # R:    rightmost nucleotide
+// # Cat:  category of alignment assigned by LAVEnder
+// #         M_i    i-th segment is correctly mapped
+// #         m      segment should be unmapped but it is mapped
+// #         w      segment is mapped to a wrong location
+// #         U      segment is unmapped and should be unmapped
+// #         u      segment is unmapped and should be mapped
+// # Segs: number of segments
+// #
+// # RN    Q       Chr     D       L       R       Cat     Segs
+}
+
+process collateDetailsSimulatedDNA {
+  label 'stats'
+  executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+
+  input:
+    val collected from detailsSimulatedDNA.collect()
+
+  output:
+    file 'details.tsv' into collatedDetailsSimulatedDNA
+
+  exec:
+  def outfileTSV = task.workDir.resolve('details.tsv')
+  i = 0;
+  sep = "\t"
+  header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
+  // outfileTSV << header
+  outfileTSV.withWriter { target ->
+    target << header
+    collected.each {
+      if(i++ %2 == 0) {
+        meta = it
+      } else {
+        common = meta.simulator+sep+meta.aligner+sep+meta.mode+"\n"
+        it.withReader { source ->
+          String line
+          while( line=source.readLine() ) {
+            StringBuilder sb = new StringBuilder()
+            sb.append(meta.species).append(sep).append(line).append(sep).append(common)
+            target << sb
+            // target << meta.species+sep+line+sep+common
+          }
+        }
+      }
+      // it.eachLine { line ->
+      //   outfileTSV << meta.species+sep+line+sep+common
+      // }
+    }
+  }
+}
+
+process collateSummariesSimulatedDNA {
+  label 'stats'
+  executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+
+  input:
+    val collected from summariesSimulatedDNA.collect()
+
+  output:
+    file 'summaries.*' into collatedSummariesSimulatedDNA
+
+  exec:
+  def outfileJSON = task.workDir.resolve('summaries.json')
+  def outfileTSV = task.workDir.resolve('summaries.tsv')
+  categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
+  "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
+  "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
+  entry = null
+  entries = []
+  i=0;
+  TreeSet headersMeta = []
+  TreeSet headersResults = []
+  collected.each {
+    if(i++ %2 == 0) {
+      if(entry != null) {
+        entries << entry
+        entry.meta.each {k,v ->
+          headersMeta << k
+        }
+      }
+      entry = [:]
+      entry.meta = it.clone()
+    } else {
+      entry.results = [:]
+      it.eachLine { line ->
+        (k, v) = line.split()
+        //entry.results << [(k) : v ]
+        entry.results << [(categories[(k)]) : v ]
+        // headersResults << (k)
+        headersResults << (categories[(k)])
+      }
+    }
+  }
+  entries << entry
+
+  outfileJSON << prettyPrint(toJson(entries))
+
+  //GENERATE TSV OUTPUT
+  SEP="\t"
+  outfileTSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+  entries.each { entry ->
+    line = ""
+    headersMeta.each { k ->
+      line += line == "" ? (entry.meta[k]) : (SEP+entry.meta[k])
+    }
+    headersResults.each { k ->
+      value = entry.results[k]
+      line += value == null ? SEP+0 : SEP+value //NOT QUITE RIGHT, ok for 'w' not for 'u'
+    }
+    outfileTSV << line+"\n"
+  }
+
+}
+
 
 
 // //WRAP-UP
