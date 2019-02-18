@@ -1,4 +1,4 @@
-FROM rsuchecki/miniconda3:4.5.12_35a77a74877e5577f3c1110e3a6773d85c5c10c1
+FROM rsuchecki/miniconda3:4.5.12_d42c6c234cbabb3737a145df6a52230cf2841923
 
 LABEL maintainer="Rad Suchecki <rad.suchecki@csiro.au>"
 SHELL ["/bin/bash", "-c"]
