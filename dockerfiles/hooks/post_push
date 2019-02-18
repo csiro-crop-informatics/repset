@@ -6,7 +6,7 @@ set -e
 tagStart=$(expr index "${IMAGE_NAME}" :)
 #repoName=${IMAGE_NAME:0:tagStart-1}
 
-echo "Post-push processing image: ${IMAGE_NAME}. Tag: ${IMAGE_NAME:tagStart}" ## For some reason ${CACHE_TAG} is not available
+echo "Post-push processing image: ${IMAGE_NAME}. Tag: ${IMAGE_NAME:tagStart}. Cache tag:  ${CACHE_TAG}."
 echo "Current commit=${SOURCE_COMMIT}"
 echo "Current branch=${SOURCE_BRANCH}"
 
