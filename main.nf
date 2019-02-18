@@ -936,7 +936,7 @@ process render {
   label 'rrender'
   label 'paper'
   stageInMode 'copy'
-  scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+  //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
   input:
     file('*') from plots.flatten().toList()
@@ -956,7 +956,6 @@ process render {
 
   rmarkdown::render(Sys.glob("*.Rmd"))
   """
-
 }
 
 
