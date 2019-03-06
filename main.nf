@@ -1,23 +1,29 @@
 #!/usr/bin/env nextflow
 
+//For pretty-printing nested maps etc
+import static groovy.json.JsonOutput.*
+
+
+//RETURNS DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
+Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+  .filter{ params.alignersDNA == 'all' || it[0].matches(params.alignersDNA) }
+  .map { [it[0], "DNA"] }
+  .set {alignersDNA}
+
 //RETURNS RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
-alignersRNA = Channel.fromFilePairs("${workflow.projectDir}/templates/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  .map { it[0] }
-  .filter{ params.alignersRNA == 'all' || it.matches(params.alignersRNA) }
-  // .filter{ !it.matches("subread\$") } //temp
-  // .filter{ !params.debug || it.matches("(biokanga|bowtie2|bwa|dart|hisat2|star)\$") }
+Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+  .filter{ params.alignersRNA == 'all' || it[0].matches(params.alignersRNA) }
+  .map { [it[0], "RNA"] }
+  .set { alignersRNA }
 
 //Pre-computed BEERS datasets (RNA)
-datasets = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
+datasetsSimulatedRNA = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
   .filter{ !params.debug || it == params.debugDataset }
   .filter{ (it[-1] as Integer) <= params.replicates}
-
 
 //Download reference: hg19
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
 
-//For pretty-printing nested maps etc
-import static groovy.json.JsonOutput.*
 
 /*
   Generic method for extracting a string tag or a file basename from a metadata map
@@ -46,15 +52,20 @@ if (params.help){
     exit 0
 }
 
-process downloadReference {
+
+process downloadReferenceRNA {
   storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"}
   scratch false
+  // scratch true
 
   input:
     val(url)
 
   output:
-    file('chromFa.tar.gz') into refs
+    file('chromFa.tar.gz') into downloadedRefsRNA
+
+  when:
+    'simulatedRNA'.matches(params.mode) || 'realRNA'.matches(params.mode)
 
   script:
   """
@@ -69,7 +80,7 @@ process downloadDatasetsRNA {
   scratch false
 
   input:
-    val(dataset) from datasets
+    val(dataset) from datasetsSimulatedRNA
 
   output:
     file("${dataset}.tar.bz2") into downloadedDatasets
@@ -108,13 +119,15 @@ process convertReferenceRNA {
   label 'slow'
 
   input:
-    file(downloadedRef) from refs
+    file(downloadedRef) from downloadedRefsRNA
 
   output:
-    file ref
+    set val(meta), file(ref) into refsRNA
     // file('ucsc.hg19.fa') into reference
 
   script:
+  meta = [:]
+  meta.seqtype = 'RNA'
   if(params.debug) {
     ref="${params.debugChromosome}.fa"
     """
@@ -127,27 +140,83 @@ process convertReferenceRNA {
     cat \$(ls | grep -E 'chr([0-9]{1,2}|X|Y)\\.fa' | sort -V)  > ${ref}
     """
   }
-
 }
 
+/*
+ 1. Input pointers to FASTA converted to files, NF would fetch remote as well and create tmp files,
+    but avoiding that as may not scale with large genomes, prefer to do in process.
+ 2. Conversion would not have been necessary and script could point directly to meta.fasta
+    but local files might not be on paths automatically mounted in the container.
+*/
+referencesDNA = Channel.from(params.references).map { (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)] }
+
+process fetchReferenceForDNAAlignment {
+  tag{meta.subMap(['species','version'])}
+  //as above, storeDir not mounted accessible storeDir { (fasta.name).matches("REMOTE") ? (executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded") : null }
+
+  input:
+    set val(meta), file(fasta) from referencesDNA
+
+  output:
+    set val(meta), file("${basename}.fasta") into references4rnfSimReads, referencesForAlignersDNA
+
+  when:
+    'simulatedDNA'.matches(params.mode)
+
+  script:
+    //Abbreviate Genus_species name to G_species
+    meta.species = (meta.species =~ /^./)[0]+(meta.species =~ /_.*$/)[0]
+    meta.seqtype = 'DNA'
+    basename=getTagFromMeta(meta)
+    if((fasta.name).matches("REMOTE")) { //REMOTE FILE
+      decompress = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
+      """
+      curl ${meta.fasta} ${decompress} > ${basename}.fasta
+      """
+    } else if((fasta.name).matches("^.*\\.gz\$")){ //LOCAL GZIPPED
+      """
+      gunzip --stdout  ${fasta}  > ${basename}.fasta
+      """
+    } else { //LOCAL FLAT
+      """
+      cp -s  ${fasta} ${basename}.fasta
+      """
+    }
+}
+
+
+//DNA and RNA aligners in one channel as single indexing process defined
+// alignersDNA.println { "$it DNA" }
+// alignersRNA.println { "$it RNA" }
+alignersDNA.join(alignersRNA , remainder: true)//.println { it }
+  .map { [tool: it[0], dna: it[1]!=null, rna: it[2]!=null] }
+  .set { aligners }
+
+// aligners.combine(referencesForAlignersDNA).println { it }
+
+// // // referencesForAlignersDNA.println { it }
+// // // aligners.println { it }
 process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  container { this.config.process.get("withLabel:${tool}" as String).get("container") }
-  tag("${tool} << ${ref}")
+  container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") }
+  tag("${alignermeta.tool} << ${ref}")
 
   input:
-    file ref
-    val(tool) from alignersRNA
+    set val(alignermeta), val(refmeta), file(ref) from aligners.combine(refsRNA.mix(referencesForAlignersDNA))
 
   output:
-    set val(meta), file("*") into indices, indices4realRNA
+    set val(meta), file("*") into indices4simulatedRNA, indices4realRNA, indices4simulatedDNA
 
+  when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
+    (refmeta.seqtype == 'DNA' && alignermeta.dna) || (refmeta.seqtype == 'RNA' && alignermeta.rna)
+  // exec: //dev
+  // meta =  alignermeta+refmeta//[target: "${ref}"]
+  // println(meta)
   script:
-    meta = [tool: "${tool}", target: "${ref}"]
-    template "${tool}_index.sh" //points to e.g. biokanga_index.sh in templates/
+    meta = [tool: "${alignermeta.tool}", target: "${ref}", seqtype: refmeta.seqtype]
+    template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
-
 
 process prepareDatasetsRNA {
   tag("${dataset}")
@@ -213,14 +282,18 @@ process alignSimulatedReadsRNA {
 
 
   input:
-    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices.combine(datasetsWithAdapters.mix(preparedDatasets))
+    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices4simulatedRNA.combine(datasetsWithAdapters.mix(preparedDatasets))
 
   output:
     set val(meta), file("*sam"), file(cig), file('.command.trace') into alignedDatasets
 
+  when:
+    idxmeta.seqtype == 'RNA'
+
   script:
     meta = idxmeta.clone() + readsmeta.clone()
-    template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    meta.remove('seqtype') //not needed downstream, would have to modiify tidy-ing to keep
+    template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
 
@@ -232,7 +305,12 @@ process nameSortSAM {
     set val(meta), file(sam), file(cig) from alignedDatasets.map { meta, sam, cig, trace ->
         // meta.'aligntrace' = trace.splitCsv( header: true, limit: 1, sep: ' ')
         // meta.'aligntrace'.'duration' = trace.text.tokenize('\n').last()
-        meta.'aligntime' = trace.text.tokenize('\n').last()
+        //meta.'aligntime' = trace.text.tokenize('\n').last()
+        trace.splitEachLine("=", { record ->
+          if(record.size() > 1 && record[0]=='realtime') { //to grab all, remove second condition and { meta."${record[0]}" = record[1] }
+            meta.'aligntime'  = record[1]
+          }
+        })
         new Tuple(meta, sam, cig)
       }
 
@@ -371,7 +449,7 @@ process downloadSRA {
     """
 }
 
-process FASTA_from_SRA {
+process fromSRAtoFASTA {
   label 'sra'
   label 'slow'
   tag("${SRA}")
@@ -408,7 +486,7 @@ process alignRealReadsRNA {
 
   script:
     meta = idxmeta.clone() + readsmeta.clone()
-    template "${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
 process samStatsRealRNA {
@@ -498,53 +576,12 @@ process ggplotRealRNA {
 
 
 
-// ----- =======                   ======= -----
-//                 DNA alignment
-// ----- =======                   ======= -----
+// // ----- =======                   ======= -----
+// //                 DNA alignment
+// // ----- =======                   ======= -----
 
 
-//ARRANGE INPUTS FOR PROCESSES
-referencesLocal = Channel.create()
-referencesRemote = Channel.create()
-params.references.each {
-  //Abbreviate Genus_species name to G_species
-  it.species = (it.species =~ /^./)[0]+(it.species =~ /_.*$/)[0]
-  //EXPECT TO HAVE SOME DATASETS WITH fasta
-  if(it.containsKey("fasta")) {
-    if((it.fasta).matches("^(https?|ftp)://.*\$")) {
-      referencesRemote << it
-    } else {
-      referencesLocal << [it,file(it.fasta)]
-    }
-  }
-}
-referencesRemote.close()
-referencesLocal.close()
 
-
-process fetchRemoteReferenceForDNA {
-  tag{meta.subMap(['species','version'])}
-  storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"}
-
-  input:
-    val(meta) from referencesRemote
-
-  output:
-    set val(meta), file("${basename}.fasta") into referencesRemoteFasta
-
-  script:
-    basename=getTagFromMeta(meta)
-    //DECOMPRESS?
-    cmd = (meta.fasta).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
-    //TRIAL RUN? ONLY TAKE FIRST n LINES
-    //cmd += trialLines != null ? "| head -n ${trialLines}" : ""
-    """
-    curl ${meta.fasta} ${cmd} > ${basename}.fasta
-    """
-}
-
-//Mix local and remote references then connect o multiple channels
-referencesRemoteFasta.mix(referencesLocal).into{ references4rnfSimReads; referencesForAlignersDNA }
 
 
 process indexReferences4rnfSimReadsDNA {
@@ -556,6 +593,9 @@ process indexReferences4rnfSimReadsDNA {
 
   output:
     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
+
+  when:
+    'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
 
   script:
   """
@@ -577,7 +617,7 @@ process rnfSimReadsDNA {
     each distanceDev from params.simreads.distanceDev //PE only
 
   output:
-    set val(simmeta), file("*.fq.gz") into reads4bwaAlign, reads4bowtie2align, reads4kangaAlign
+    set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
 
   when:
     !(mode == "PE" && simulator == "CuReSim")
@@ -628,6 +668,266 @@ process rnfSimReadsDNA {
     """
 }
 
+process alignSimulatedReadsDNA {
+  label 'align'
+  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  tag("${idxmeta} << ${simmeta}")
+
+  input:
+    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+
+  output:
+    set val(alignmeta), file('out.bam') into alignedSimulatedDNA
+
+  when:
+    idxmeta.seqtype == 'DNA'
+
+  // when: //only align reads to the corresponding genome - TODO UPDATE idxmeta to hold this info!
+  //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
+  script:
+    alignmeta = idxmeta.clone() + simmeta.clone()
+    // if(simmeta.mode == 'PE') {
+      template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    // } else {
+    //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    // }
+}
+
+process rnfEvaluateSimulatedDNA {
+  label 'rnftools'
+  tag{alignmeta}
+
+
+  input:
+    set val(alignmeta), file('out.bam') from alignedSimulatedDNA
+
+  output:
+     set val(alignmeta), file(summary) into summariesSimulatedDNA
+     set val(alignmeta), file(detail) into detailsSimulatedDNA
+
+  script:
+  // println prettyPrint(toJson(alignmeta))
+  """
+  paste \
+    <( rnftools sam2es -i out.bam -o - | awk '\$1 !~ /^#/' \
+      | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
+    ) \
+    <( samtools view out.bam ) \
+  | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
+  """
+
+// rnftools sam2es OUTPUT header
+// # RN:   read name
+// # Q:    is mapped with quality
+// # Chr:  chr id
+// # D:    direction
+// # L:    leftmost nucleotide
+// # R:    rightmost nucleotide
+// # Cat:  category of alignment assigned by LAVEnder
+// #         M_i    i-th segment is correctly mapped
+// #         m      segment should be unmapped but it is mapped
+// #         w      segment is mapped to a wrong location
+// #         U      segment is unmapped and should be unmapped
+// #         u      segment is unmapped and should be mapped
+// # Segs: number of segments
+// #
+// # RN    Q       Chr     D       L       R       Cat     Segs
+}
+
+process collateDetailsSimulatedDNA {
+  label 'stats'
+  executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+
+  input:
+    val collected from detailsSimulatedDNA.collect()
+
+  output:
+    file 'details.tsv' into collatedDetailsSimulatedDNA
+
+  exec:
+  def outfileTSV = task.workDir.resolve('details.tsv')
+  i = 0;
+  sep = "\t"
+  header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
+  // outfileTSV << header
+  outfileTSV.withWriter { target ->
+    target << header
+    collected.each {
+      if(i++ %2 == 0) {
+        meta = it
+      } else {
+        common = meta.simulator+sep+meta.aligner+sep+meta.mode+"\n"
+        it.withReader { source ->
+          String line
+          while( line=source.readLine() ) {
+            StringBuilder sb = new StringBuilder()
+            sb.append(meta.species).append(sep).append(line).append(sep).append(common)
+            target << sb
+            // target << meta.species+sep+line+sep+common
+          }
+        }
+      }
+      // it.eachLine { line ->
+      //   outfileTSV << meta.species+sep+line+sep+common
+      // }
+    }
+  }
+}
+
+process collateSummariesSimulatedDNA {
+  label 'stats'
+  executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+
+  input:
+    val collected from summariesSimulatedDNA.collect()
+
+  output:
+    file 'summaries.*' into collatedSummariesSimulatedDNA
+
+  exec:
+  def outfileJSON = task.workDir.resolve('summaries.json')
+  def outfileTSV = task.workDir.resolve('summaries.tsv')
+  categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
+  "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
+  "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
+  entry = null
+  entries = []
+  i=0;
+  TreeSet headersMeta = []
+  TreeSet headersResults = []
+  collected.each {
+    if(i++ %2 == 0) {
+      if(entry != null) {
+        entries << entry
+        entry.meta.each {k,v ->
+          headersMeta << k
+        }
+      }
+      entry = [:]
+      entry.meta = it.clone()
+    } else {
+      entry.results = [:]
+      it.eachLine { line ->
+        (k, v) = line.split()
+        //entry.results << [(k) : v ]
+        entry.results << [(categories[(k)]) : v ]
+        // headersResults << (k)
+        headersResults << (categories[(k)])
+      }
+    }
+  }
+  entries << entry
+
+  outfileJSON << prettyPrint(toJson(entries))
+
+  //GENERATE TSV OUTPUT
+  SEP="\t"
+  outfileTSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+  entries.each { entry ->
+    line = ""
+    headersMeta.each { k ->
+      line += line == "" ? (entry.meta[k]) : (SEP+entry.meta[k])
+    }
+    headersResults.each { k ->
+      value = entry.results[k]
+      line += value == null ? SEP+0 : SEP+value //NOT QUITE RIGHT, ok for 'w' not for 'u'
+    }
+    outfileTSV << line+"\n"
+  }
+
+}
+
+// process plotDetailSimulatedDNA {
+//   label 'rscript'
+//   label 'figures'
+
+//   input:
+//     file '*' from collatedDetails
+
+//   output:
+//     file '*'
+
+//   script:        ============================ TODO : move under bin/
+//   binWidth='1E5'
+//   """
+//   #!/usr/bin/env Rscript
+
+//   #args <- commandArgs(TRUE)
+//   location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+//   if(!require(tidyverse)){
+//     install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
+//     library(tidyverse) #, lib.loc = location)
+//   }
+//   #res<-read.delim(gzfile("details.tsv.gz"));
+//   details<-read.delim("details.tsv");
+
+// pdf(file="details.pdf", width=16, height=9);
+// binWidth = ${binWidth}
+//  details %>%
+//    #filter(!Chromosome %in% c("Mt","Pt","*","chrUn")) %>%
+//    #filter(Chromosome %in% c("chr2D")) %>%
+//    #filter(Class %in% c("w")) %>%
+//    ggplot(aes(Position, fill=Class)) +
+//    geom_density(alpha=0.1, bw = ${binWidth}) +
+//    #geom_vline(xintercept = c(peak), colour="red", linetype="longdash", size=0.5) +
+//    facet_grid(Species~Aligner~Chromosome~Mode)
+
+
+
+//     #ggplot(res, aes(x=Position,colour=Class, fill=Class)) +
+//     #  geom_density(alpha=0.1, adjust=1/10) +
+//     #  facet_grid(Species~Chromosome~Simulator~Aligner~Mode);
+//   dev.off();
+
+// pdf(file="details7.pdf", width=16, height=9);
+//   details %>%
+//    # filter(Species %in% c("T_aestivum")) %>% head()
+//    # filter(!Chromosome %in% c("Mt","Pt","*","chrUn")) %>%
+//    # filter(str_detect(Chromosome, "^chr1")) %>%
+//     filter(!Class %in% c("u")) %>%
+//     filter(Simulator %in% c("MasonIllumina")) %>%
+//   ggplot(aes(x=Position, fill = Class, colour=Class)) +
+//     geom_density(aes(x=Position, y=..count..*${binWidth}), alpha=0.1, bw = ${binWidth}) +
+//     facet_grid(Species ~ Chromosome ~ Aligner  ~ Mode)
+// dev.off();
+//   """
+// }
+
+// process plotSummarySimulatedDNA {
+//   label 'rscript'
+//   label 'figures'
+
+//   input:
+//     file '*' from collatedSummaries
+
+//   output:
+//     file '*'
+
+//   script:
+//   '''
+//   #!/usr/bin/env Rscript
+
+//   #args <- commandArgs(TRUE)
+//   #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+//   if(!require(reshape2)){
+//     install.packages("reshape2")
+//     library(reshape2)
+//   }
+//   if(!require(ggplot2)){
+//     install.packages("ggplot2")
+//     library(ggplot2)
+//   }
+//   res<-read.delim("summaries.tsv");
+//   res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
+//   pdf(file="summaries.pdf", width=16, height=9);
+//    ggplot(res2, aes(x=aligner, y=value,fill=variable)) +
+//    geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
+//    coord_flip() +
+//    theme(legend.position = "top") +
+//    facet_grid(simulator~mode~species);
+//   dev.off();
+//   '''
+// }
 
 //WRAP-UP
 writing = Channel.fromPath("${baseDir}/writing/*")
@@ -636,6 +936,7 @@ process render {
   label 'rrender'
   label 'paper'
   stageInMode 'copy'
+  //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
   input:
     file('*') from plots.flatten().toList()
@@ -655,20 +956,19 @@ process render {
 
   rmarkdown::render(Sys.glob("*.Rmd"))
   """
-
 }
 
 
 
-// workflow.onComplete {
-//     // any workflow property can be used here
-//     println "Pipeline complete"
-//     println "Command line: $workflow.commandLine"
-//     println(workflow)
-// }
+// // workflow.onComplete {
+// //     // any workflow property can be used here
+// //     println "Pipeline complete"
+// //     println "Command line: $workflow.commandLine"
+// //     println(workflow)
+// // }
 
-// workflow.onError {
-//     println "Oops .. something when wrong"
-// }
+// // workflow.onError {
+// //     println "Oops .. something when wrong"
+// // }
 
 
