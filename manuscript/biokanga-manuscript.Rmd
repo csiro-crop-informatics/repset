@@ -26,43 +26,45 @@ knitr::opts_chunk$set(
 # ideas/stubs
 - good enough practices paper
 -Sandve GK, Nekrutenko A, Taylor J, Hovig E. Ten Simple Rules for Reproducible Computational Research. PLoS Comput Biol. 2013;9(10). pmid:24204232
-- 
+-
 
-# Summary
+# Introduction
 
 - Challenges around reproducibility/recomputability in computational biology. Usually more than one tool make things hard. Greater complexity and computation intensiveness increases these challenges.
 - Beyond these challenges, how can we make work extensible and reusable?
-- Previous efforts related to aligner benchmarking published a code repository making it technically possible to reproduce the analysis, however several factors meant that it was challenging to extend and reuse (hard paths, dependencies etc)
+- Previous efforts related to aligner benchmarking published a code repository making it technically possible to reproduce the analysis, however several factors meant that it was challenging to extend and reuse (hard paths, dependencies etc).
 - Using thinking around devops (CA paper) can leverage improvements from software engineering for research/analytical code to make it deployable and reusable
-- Key concepts: 
+- Key concepts:
   + code (vcs)
   + environment/dependencies
   + building/exposing containers
   + tracking releases and linking to artefacts
-  + minting of DOIs for code and output
+  + minting of DOIs for code, output and execution metadata
   + workflow management
     + description of workflow in a standard way
-    + sharing of workflow
-    + separation of pipeline logic from execution environment
+    + sharing of workflow - can be re-run by others with minimal effort
+    + separation of pipeline logic from execution environment - (potential for) portability across execution environments
+    + scalability "for free" through implicit parallelisation - independent tasks will be executed separately if resources available
 - Present an implementation of DNA/RNA aligner benchmarking that attempts to address these challenges and introduces biokanga.
-  
+
 - Introduce biokanga
 
 # Methods
 
-- describe workflow
-- describe biokanga align
+## describe workflow
+
+## describe biokanga align
 
 # Results
 
 - show benchmark outputs
-- nextflow graph? 
+- nextflow graph?
 
 # Discussion
 
 - Use of a framework such as this allows for straightforward and consistent deployment of analytical code and tools
 - Clarity around which version and environment was used to produce a particular artefact/output
-- extensible (guide for adding an aligner is clear) 
+- extensible (guide for adding an aligner is clear)
 - biokanga is a reasonable option as an aligner
 
 # Conclusion
@@ -70,6 +72,7 @@ knitr::opts_chunk$set(
 - A comprehensive approach such as the one presented here requires a non-trivial amount of overhead
 - The advantages are significant
 - The framework can be reused very simply (the overhead doesn't need to be spent by someone else)
+- Methodology developed e.g. for container version tracking and deployment can easily be applied elsewhere.
 
 [//]: # (Cite papers like this: `[@Kim2015]` [@Kim2015; @Baruzzo2016] matching entries in `references.bib`.)
 
