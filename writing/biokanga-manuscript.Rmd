@@ -1,5 +1,5 @@
 ---
-title: 'BioKanga – a general purpose bioinformatics toolkit and reproducible evaluation frameworks for RNA- and DNA-Seq aligners'
+title: 'A fully reproducible and extensible evaluation framework for RNA- and DNA-Seq aligners and assessment of biokanga - a general purpose bioinformatics toolkit'
 author:
 - Author First (University of Foo)
 - Another Person (University of Bar)
