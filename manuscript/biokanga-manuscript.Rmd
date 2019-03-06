@@ -25,6 +25,8 @@ knitr::opts_chunk$set(
 
 # ideas/stubs
 - good enough practices paper
+-Sandve GK, Nekrutenko A, Taylor J, Hovig E. Ten Simple Rules for Reproducible Computational Research. PLoS Comput Biol. 2013;9(10). pmid:24204232
+- 
 
 # Summary
 
@@ -62,6 +64,12 @@ knitr::opts_chunk$set(
 - Clarity around which version and environment was used to produce a particular artefact/output
 - extensible (guide for adding an aligner is clear) 
 - biokanga is a reasonable option as an aligner
+
+# Conclusion
+
+- A comprehensive approach such as the one presented here requires a non-trivial amount of overhead
+- The advantages are significant
+- The framework can be reused very simply (the overhead doesn't need to be spent by someone else)
 
 [//]: # (Cite papers like this: `[@Kim2015]` [@Kim2015; @Baruzzo2016] matching entries in `references.bib`.)
 
