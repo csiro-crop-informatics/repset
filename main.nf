@@ -930,9 +930,10 @@ process collateSummariesSimulatedDNA {
 // }
 
 //WRAP-UP
-writing = Channel.fromPath("${params.reportdir}/*")
+path = ["$baseDir/report/*"] //default: only render report
+writing = Channel.fromPath(params.manuscript ? paths + "$baseDir/manuscript/*" : paths)
 process render {
-  tag 'manuscript'
+  tag {'report'+params.manuscript ? " & manuscript" : ""}
   label 'rrender'
   label 'report'
   stageInMode 'copy'
