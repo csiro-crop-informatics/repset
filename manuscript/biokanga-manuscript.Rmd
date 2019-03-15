@@ -60,6 +60,31 @@ The alternative would be to laboriously edit the multitude of hard-coded paths w
 
 # Methods
 
+## reproducibility practices
+
+### Building/exposing containers
+
+- Docker automated build configured for each benchmarked tool
+- Additional docker container images generated for auxiliary tool-sets required for benchmarking, including, but not limited to:
+  + RNA-seq benchmarking toolkit [@Baruzzo2016] modified in https://github.com/rsuchecki/biokanga_benchmark
+  + DNA-seq benchmarking toolkit (automated)
+
+The procedure for adding or updating container images involves creating a dedicated tool/version branch in the main repository.
+Changes committed to that branch are captured in a container image in the associated Docker Hub repository.
+This is done through by an automated build triggered by the push to that branch.
+The generated container image is tagged with the version specified in the git branch name.
+Since a container image captures more than just the primary tool of interest, the tool version tag
+is not sufficient from reproducibility perspective.
+A container image may have to be re-created for a number of reasons other than version change of the main tool.
+An auxiliary tool may have to be added to the container to facilitate its use within a workflow e.g.
+to aid collection of execution statistics. In such case the version tag remains unchanged
+yet the underlying container image has been replaced.
+We provide automation code (a "post_push hook") which ensures that in addition to the container image version tag, which may potentially be overwritten,
+additional tags based on git commit SHA hash are generated.
+This perma-tags are then used when referencing a container in workflow configuration files.
+For example, rather than pointing to `1.9` tag in our `samtools` Docker Hub repository we point to `1.9_ea5d3c82fb85c174dce08a4c736ed44c1e6bb7eb`.
+
+
 ## describe workflow
 
 ## describe biokanga align
