@@ -15,15 +15,17 @@
     - [Add RNA alignment template](#add-rna-alignment-template)
     - [Add DNA alignment template](#add-dna-alignment-template)
     - [Specify container](#specify-container)
-- [WRiting](#writing)
+- [Per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
+  - [Setting-up an automated build](#setting-up-an-automated-build)
+  - [Adding or updating a Dockerfile](#adding-or-updating-a-dockerfile)
+- [Report](#report)
   - [Rendering outside the pipeline](#rendering-outside-the-pipeline)
     - [Using docker](#using-docker)
     - [Using singularity](#using-singularity)
     - [Natively](#natively)
+- [Manuscript](#manuscript)
+  - [Rendering](#rendering)
   - [Bibliography](#bibliography)
-- [Per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
-  - [Setting-up an automated build](#setting-up-an-automated-build)
-  - [Adding or updating a Dockerfile](#adding-or-updating-a-dockerfile)
 
 # Experiments
 
@@ -188,53 +190,6 @@ within the `process {   }` block in [conf/containers.config](conf/containers.con
 We opt for docker containers which can also be executed using singularity.
 Container images are pulled from docker hub, but nextflow is able to access other registries and also local images, see relevant [nextflow documentation](https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub)
 
-
-# WRiting
-
-Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`writing/biokanga-manuscript.Rmd`](writing/biokanga-manuscript.Rmd) file.
-RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice.
-Rendering of the manuscript constitutes the final step of our nextflow pipeline which relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment.
-
-## Rendering outside the pipeline
-
-There are several ways for rendering the manuscript outside the pipeline, with docker being the preferred option.
-
-### Using docker
-
-```sh
-docker run --rm --user $(id -u):$(id -g) \
-  --volume $(pwd)/writing:/writing \
-  --workdir /writing rsuchecki/renderer:0.2 ./render.R
-```
-
-### Using singularity
-
-```sh
-singularity exec --pwd $(pwd)/writing docker://rsuchecki/renderer:0.1 ./render.R
-```
-
-### Natively
-
-If you'd like to render the manuscript without docker/singularity, you will need the following:
-
-* `R` e.g. on ubuntu `sudo apt apt install r-base-core`
-* `pandoc` e.g. on ubuntu `sudo apt install pandoc pandoc-citeproc`
-* `LaTeX` e.g. on ubuntu `sudo apt install texlive texlive-latex-extra`
-* `R` packages:
-  * `rmarkdown`
-  * `rticles`
-  * `bookdown`
-
-Then:
-
-```
-cd writing && ./render.R
-```
-
-## Bibliography
-
-Among the [alternatives available](https://rmarkdown.rstudio.com/authoring_bibliographies_and_citations.html#specifying_a_bibliography) we opted for BibTeX, see [`writing/references.bib`](writing/references.bib).
-
 # Per-tool container images and docker automated builds
 
 Dockerfiles for individual tools used can be found under `dockerfiles/`.
@@ -294,3 +249,78 @@ if you have write permissions for this repository or working on your fork of it,
 git checkout master
 git merge docker/${tool}/${version}
 ```
+
+# Report
+
+TODO: add information on
+
+* how to edit the report template
+* how the final report gets generated
+
+If report template is sufficiently generic we will be able to easily render to html and PDF, otherwise we should settle for HTML(?).
+
+Rendering of the report constitutes the final step of the pipeline and relies on a container defined in [`dockerfiles/renderer.Dockerfile`](dockerfiles/renderer.Dockerfile) for rendering environment.
+
+## Rendering outside the pipeline
+
+There are several ways for rendering of the report outside the pipeline, with docker being the preferred option.
+
+### Using docker
+
+```sh
+docker run --rm --user $(id -u):$(id -g) \
+  --volume $(pwd)/report:/report \
+  --workdir /report rsuchecki/renderer:0.2 ./render.R
+```
+
+### Using singularity
+
+```sh
+singularity exec --pwd $(pwd)/report docker://rsuchecki/renderer:0.1 ./render.R
+```
+
+### Natively
+
+If you'd like to render the report without docker/singularity, you will need the following:
+
+* `R` e.g. on ubuntu `sudo apt apt install r-base-core`
+* `pandoc` e.g. on ubuntu `sudo apt install pandoc pandoc-citeproc`
+* `LaTeX` e.g. on ubuntu `sudo apt install texlive texlive-latex-extra`
+* `R` packages:
+  * `rmarkdown`
+  * `rticles`
+  * `bookdown`
+
+Then:
+
+```
+cd report && ./render.R
+```
+
+
+
+# Manuscript
+
+Manuscript source is under `manuscript/` sub directory on `manuscript` branch which should not be merged into master.
+Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`manuscript/biokanga-manuscript.Rmd`](blob/manuscript/manuscript/biokanga-manuscript.Rmd) file.
+RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice.
+
+## Rendering
+The manuscript will be rendered if
+1. `--manuscript` option is used
+2. The pipeline is executed while `manuscript` branch is checked out, either
+  * locally
+  or
+  * via `nextflow run -revision manuscript`.
+
+The manuscript can be rendered outside the pipeline in a fashion analogous to how this can be done for the [report](#rendering-outside-the-pipeline),
+just replace any use of `report` by `manuscript`.
+
+
+
+
+
+## Bibliography
+
+Among the [alternatives available](https://rmarkdown.rstudio.com/authoring_bibliographies_and_citations.html#specifying_a_bibliography) we opted for BibTeX, see [`writing/references.bib`](writing/references.bib).
+
