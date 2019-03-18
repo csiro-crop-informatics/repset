@@ -60,7 +60,15 @@ The alternative would be to laboriously edit the multitude of hard-coded paths w
 
 # Methods
 
+Our approach relies on several key systems used in concert.
+Use of GitHub offers much more than version control as it offers programmatically accessible spaces
+for other systems to/from which deposit/retrieve information.
+
 ## reproducibility practices
+
+###
+
+### Git version control
 
 ### Building/exposing containers
 
@@ -83,6 +91,32 @@ We provide automation code (a "post_push hook") which ensures that in addition t
 additional tags based on git commit SHA hash are generated.
 These perma-tags are then used when referencing a container in workflow configuration files.
 For example, rather than pointing to `1.9` tag in our `samtools` Docker Hub repository we point to `1.9_ea5d3c82fb85c174dce08a4c736ed44c1e6bb7eb`.
+
+### Capturing code and associated results under DOIs
+
+A particular revision of code in a  git repository
+can be tagged to clearly identify a version which may be deemed important.
+It is standard practice in software development to tag versions
+using semantic versioning e.g. `v1.0.5` the same style may be (and often is (REF) be used for scientific workflows.
+The metadata describing the significance of a tag may be of more importance,
+this could include a high-level description of the changes introduced to code
+but also scientific context relevant to these changes.
+
+The concept of GitHub releases extends that of git tags such that extra information and data can be included.
+In addition to capturing a snapshot of code used to generate some results we are able to capture
+workflow run metadata and, subject to space limitations, the generated results.
+
+Using integration between Zenodo and GitHub where our git repository is hosted,
+DOIs are generated for each GitHub release.
+The end product is a DOI for the project, but also a DOI for each release.
+Given (optional) access to an authentication token, our workflow, on
+completion, using API calls, can create a GitHub release associated with that run,
+upload workflow metadata and results and finally trigger DOI minting on Zenodo.
+
+Others can use this functionality by simply forking our repository,
+generating an access token in their GitHub account and linking their Zenodo account
+with the forked repository.
+
 
 
 ## describe workflow
