@@ -64,10 +64,30 @@ Our approach relies on several key systems used in concert.
 Use of GitHub offers much more than version control as it offers programmatically accessible spaces
 for other systems to/from which deposit/retrieve information.
 
+## Scalability
+
+* NF implicit parallelization
+* Flexible - will make good use of resources whether on a single multi-core machine or a cluster of thin nodes
+
+## Extensibility
+
+Additional aligners can easily be included in and evaluated by the workflow.
+This is facilitated by the pipeline's modular design, the main script which describes
+the pipeline logic remains unchanged and addition of an aligner is done through
+inclusion of a simple genome indexing template and one or two alignment templates
+depending on whether the tool can be configured to align both DNA- and RNA-Seq
+reads.
+The final addition is that of a dedicated container image
+as we outline in the [next section](#Building-and-exposing-containers).
+
+
+
+
+
 ## reproducibility practices
 
 
-### Building/exposing containers
+### Building and exposing containers
 
 - Docker automated build configured for each benchmarked tool
 - Additional docker container images generated for auxiliary tool-sets required for benchmarking, including, but not limited to:
