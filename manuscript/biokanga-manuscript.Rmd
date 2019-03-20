@@ -7,6 +7,7 @@ output:
   bookdown::pdf_document2:
     number_sections: yes
     toc: false
+    # keep_tex: yes #if needed for final submission
 abstract:
   This is the abstract.
 bibliography: references.bib
@@ -114,19 +115,22 @@ For example, rather than pointing to `1.9` tag in our `samtools` Docker Hub repo
 A particular revision of code in a  git repository
 can be tagged to clearly identify a version which may be deemed important.
 It is standard practice in software development to tag versions
-using semantic versioning e.g. `v1.0.5` the same style may be (and often is (REF) be used for scientific workflows.
+using semantic versioning e.g. `v1.0.5` the same style may be, and often is (REF) used for scientific workflows.
 The metadata describing the significance of a tag may be of more importance,
 this could include a high-level description of the changes introduced to code
 but also scientific context relevant to these changes.
 
 The concept of GitHub releases extends that of git tags such that extra information and data can be included.
 In addition to capturing a snapshot of code used to generate some results we are able to capture
-workflow run metadata and, subject to space limitations, the generated results.
+workflow run metadata and the generated results.
+GitHub does not limit the total size of binary release files,
+but each individual file must be under 2 GB in size.
+Larger result files can be split or GitHub Large File Storage can be used.
 
 Using integration between Zenodo and GitHub where our git repository is hosted,
 DOIs are generated for each GitHub release.
 The end product is a DOI for the project, but also a DOI for each release.
-Given (optional) access to an authentication token, our workflow, on
+Given an (optional) authentication token, our workflow, on
 completion, using API calls, can create a GitHub release associated with that run,
 upload workflow metadata and results and finally trigger DOI minting on Zenodo.
 
