@@ -90,12 +90,25 @@ as we outline in the [next section](#Building-and-exposing-containers).
 
 ### Building and exposing containers
 
-- Docker automated build configured for each benchmarked tool
-- Additional docker container images generated for auxiliary tool-sets required for benchmarking, including, but not limited to:
-  + RNA-seq benchmarking toolkit [@Baruzzo2016] modified in https://github.com/rsuchecki/biokanga_benchmark
-  + DNA-seq benchmarking toolkit (automated)
+A single container image capturing the software environment for a workflow should suffice in most cases.
+For some workflows however, it may be preferable to have a separate container image for each tool.
+In the case of our workflow, this enables easy addition and benchmarking of a new tool
+while the rest of the workflow remains unchanged, with the exception of some downstream processes
+which aggregate data produced by all of the evaluated tools.
+The container per tool or perhaps per branch of the workflow may also be advantageous
+for computationally intensive or long-running workflows as this approach limits the need to
+re-run parts of the pipeline due to global software environment being modified.
 
-The procedure for adding or updating container images involves creating a dedicated tool/version (e.g. `samtools/1.9`) branch in the main repository.
+We provide a Docker Hub repository for each of the benchmarked tools.
+Each repository is configured to automatically build a version of the container
+for a tool given an appropriate trigger in our workflow repository.
+
+Additional docker container images are provided with auxiliary tools required for benchmarking,
+including, but not limited to the RNA-seq benchmarking toolkit [@Baruzzo2016] (modified in https://github.com/rsuchecki/biokanga_benchmark)
+and the DNA-seq benchmarking toolkit [@Brinda2015] (automated).
+
+The procedure for adding or updating individual container images
+involves creating a dedicated tool/version (e.g. `samtools/1.9`) branch in the main repository.
 Changes committed to that branch are captured in a container image in the associated Docker Hub repository.
 This is done through an automated build triggered by code being push to that branch on GitHub.
 The generated container image is tagged with the version specified in the git branch name.
