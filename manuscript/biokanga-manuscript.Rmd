@@ -194,6 +194,50 @@ pre-installed on the system, we are forced to explicitly configure the software 
 In conjunction with other practices proposed in this work, this ensures that
 a complete record of software used is preserved and readily available for re-use.
 
+# Reproducibility overhead
+
+Building workflows for reproducibility creates a number of challenges for the developer,
+depending on developer's past experience and expertise these may include the need for mastering
+new concepts, new tools and potentially also a new programming language at least up to a point
+required to glue scripts and programs into a coherent whole.
+
+Containerisation of software environment means that some of system administration responsibilities
+are effectively transferred to the developer who, for example, needs to ensure that the entire tool-set
+required for a given task is included in the container.
+This may include software tools which we take for granted in a HPC environment but may not be available
+in source images commonly used for building custom containers.
+
+Portability of workflows across execution environment can be difficult to achieve.
+Main risks lie in the ease of a quick and often compute-specific solutions to problems arising in the development.
+Nextflow enables the separation of workflow logic and configuration but it is not enforced as this would
+be detrimental to flexibility and usability of the system.
+Given execution environments may pose some constraints which have to be addressed and as a result,
+additional code is required to ensure that workflow behaviour conforms to those constraints.
+For example, when running the workflow in the cloud (AWS Batch), input/output locations for data and workflow metadata
+have to be handled differently the in the case of a HPC cluster.
+This is done seamlessly by our workflow, but required additional time invested upfront to develop and test
+an appropriate configuration.
+
+Although substantial, all these overheads can be seen as investments. Carefully designed portable workflow configuration
+can be easily re-used such that subsequent workflows can be developed much quicker.
+
+* consider also modularity
+  * NF under dev
+  * Snakemake wrappers
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ## describe workflow
