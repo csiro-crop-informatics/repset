@@ -31,6 +31,8 @@ knitr::opts_chunk$set(
 - [Developing a modern data workflow for regularly updated data](https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.3000125)
 - [Practical Computational Reproducibility in the Life Sciences](https://doi.org/10.1016/j.cels.2018.03.014)
 - [Methods for enhancing the reproducibility of biomedical research findings using electronic health records](https://doi.org/10.1186/s13040-017-0151-7)
+- [Systematic benchmarking of omics computational tools](https://www.nature.com/articles/s41467-019-09406-4) - a Review
+- [Critical Assessment of Metagenome Interpretation—a benchmark of metagenomics software](https://www.nature.com/articles/nmeth.4458) - with containers and Zenodo
 
 
 # Introduction
