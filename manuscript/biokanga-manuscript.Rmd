@@ -38,13 +38,12 @@ knitr::opts_chunk$set(
 
 # Introduction
 
+- Why does computational reproducibility matter? Point to refs, needs to very brief
+- Value in reproducibility for analysis generally, and benchmarking
 - Challenges around reproducibility/recomputability in computational biology. Usually more than one tool make things hard. Greater complexity and computation intensiveness increases these challenges.
 - Beyond these challenges, how can we make work extensible and reusable?
 
-Previous efforts related to aligner benchmarking published a code repository making it technically possible to reproduce the analysis, however several factors meant that it was challenging to extend and reuse.
-Even though versions of the required software were specifically stated, re-running of the analysis would require downloading and installing all the required software tools.
-Furthermore, the original analyses were carried out in specific directory structure which could not be reproduced on another system by an unprivileged user.
-The alternative would be to laboriously edit the multitude of hard-coded paths while not being able to test the code until sufficient changes have been made to make it functional again.
+### key concepts
 
 - Using thinking around devops (CA paper) can leverage improvements from software engineering for research/analytical code to make it deployable and reusable
 - Key concepts:
@@ -58,8 +57,17 @@ The alternative would be to laboriously edit the multitude of hard-coded paths w
     + sharing of workflow - can be re-run by others with minimal effort
     + separation of pipeline logic from execution environment - (potential for) portability across execution environments
     + scalability "for free" through implicit parallelisation - independent tasks will be executed separately if resources available
-- Present an implementation of DNA/RNA aligner benchmarking that attempts to address these challenges and introduces biokanga.
 
+### This work
+- In an effort to demonstrate a framework that implements these principles of reprocomputability, extensibility and transparency, we chose to implement an entirely existing toolset in the context of previously published work, in an effort to highlight the fact that the technology and support already exists to make these practices the norm - the challenge is orchestrating the range of tools to enable a complete solution. We have chosen the space of DNA/RNA aligner benchmarking so that we can illustrate these approaches in the description of the BioKanga suite of tools, specifically its aligner.
+
+### Previous work
+Previous efforts related to aligner benchmarking published a code repository making it technically possible to reproduce the analysis, however several factors meant that it was challenging to extend and reuse.
+Even though versions of the required software were specifically stated, re-running of the analysis would require downloading and installing all the required software tools (assuming they are availiable).
+Furthermore, the original analyses were carried out in specific directory structure which could not be reproduced on another system by an unprivileged user.
+The alternative would be to laboriously edit the multitude of hard-coded paths while not being able to test the code until sufficient changes have been made to make it functional again.
+
+### biokanga align
 - Introduce biokanga
 
 # Methods
