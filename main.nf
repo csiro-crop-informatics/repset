@@ -966,12 +966,50 @@ process render {
 
 
 
-// // workflow.onComplete {
-// //     // any workflow property can be used here
-// //     println "Pipeline complete"
-// //     println "Command line: $workflow.commandLine"
-// //     println(workflow)
-// // }
+// workflow.onComplete {
+// //   // any workflow property can be used here
+// //   println "Pipeline complete"
+// //   println "Command line: $workflow.commandLine"
+// //   println(workflow)
+
+
+// //   def command = "ls -lth flowinfo"
+// //   def proc = command.execute()
+// //   proc.waitFor()
+
+// //   println "Process exit code: ${proc.exitValue()}"
+// //   println "Std Err: ${proc.err.text}"
+// //   println "Std Out: ${proc.in.text}"
+
+//     def runmeta = [:]
+//     runmeta['Version'] = workflow.manifest.version
+//     runmeta['Run name'] = workflow.runName
+//     runmeta['Success'] = workflow.success
+//     runmeta['Duration'] = workflow.duration
+//     runmeta['Exit status'] = workflow.exitStatus
+//     runmeta['Error message'] = (workflow.errorMessage ?: 'None')
+//     runmeta['Error report'] = (workflow.errorReport ?: 'None')
+//     runmeta['Command line'] = workflow.commandLine
+//     runmeta['projectDir'] = workflow.projectDir
+//     runmeta['Date started'] = workflow.start
+//     runmeta['Date completed'] = workflow.complete
+//     runmeta['Pipeline script path'] = workflow.scriptFile
+//     runmeta['Pipeline script hash ID'] = workflow.scriptId
+//     if(workflow.repository)
+//       runmeta['Pipeline repository Git URL'] = workflow.repository
+//     if(workflow.commitId)
+//       runmeta['Pipeline repository Git Commit'] = workflow.commitId
+//     if(workflow.revision)
+//       runmeta['Pipeline Git branch/tag'] = workflow.revision
+//     if(workflow.container)
+//       runmeta['Container image'] = workflow.container
+//     runmeta['Nextflow version'] = workflow.nextflow.version
+//     runmeta['Nextflow build'] = workflow.nextflow.build
+//     runmeta['Nextflow compile timestamp'] = workflow.nextflow.timestamp
+
+//     println(prettyPrint(toJson(runmeta)))
+
+// }
 
 // // workflow.onError {
 // //     println "Oops .. something when wrong"
