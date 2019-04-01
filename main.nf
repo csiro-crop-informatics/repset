@@ -677,7 +677,7 @@ process alignSimulatedReadsDNA {
     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
 
   output:
-    set val(alignmeta), file('out.bam') into alignedSimulatedDNA
+    set val(alignmeta), file('out.?am') into alignedSimulatedDNA
 
   when:
     idxmeta.seqtype == 'DNA'
@@ -699,7 +699,7 @@ process rnfEvaluateSimulatedDNA {
 
 
   input:
-    set val(alignmeta), file('out.bam') from alignedSimulatedDNA
+    set val(alignmeta), file(samOrBam) from alignedSimulatedDNA
 
   output:
      set val(alignmeta), file(summary) into summariesSimulatedDNA
@@ -709,10 +709,10 @@ process rnfEvaluateSimulatedDNA {
   // println prettyPrint(toJson(alignmeta))
   """
   paste \
-    <( rnftools sam2es -i out.bam -o - | awk '\$1 !~ /^#/' \
+    <( rnftools sam2es -i ${samOrBam} -o - | awk '\$1 !~ /^#/' \
       | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
     ) \
-    <( samtools view out.bam ) \
+    <( samtools view ${samOrBam} ) \
   | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
   """
 
@@ -837,18 +837,21 @@ process collateSummariesSimulatedDNA {
 
 }
 
-// process plotDetailSimulatedDNA {
-//   label 'rscript'
-//   label 'figures'
+process plotDetailSimulatedDNA {
+  label 'rscript'
+  label 'figures'
 
-//   input:
-//     file '*' from collatedDetails
+  input:
+    file '*' from collatedDetailsSimulatedDNA
 
-//   output:
-//     file '*'
+  output:
+    file '*' into collatedDetailsPlotsSimulatedDNA
 
-//   script:        ============================ TODO : move under bin/
-//   binWidth='1E5'
+  script:        //============================ TODO : move under bin/
+  binWidth='1E5'
+  """
+  touch plotPlaceholderD
+  """
 //   """
 //   #!/usr/bin/env Rscript
 
@@ -891,46 +894,46 @@ process collateSummariesSimulatedDNA {
 //     facet_grid(Species ~ Chromosome ~ Aligner  ~ Mode)
 // dev.off();
 //   """
-// }
+}
 
-// process plotSummarySimulatedDNA {
-//   label 'rscript'
-//   label 'figures'
+process plotSummarySimulatedDNA {
+  label 'rscript'
+  label 'figures'
 
-//   input:
-//     file '*' from collatedSummaries
+  input:
+    file '*' from collatedSummariesSimulatedDNA
 
-//   output:
-//     file '*'
+  output:
+    file '*' into collatedSummariesPlotsSimulatedDNA
 
-//   script:
-//   '''
-//   #!/usr/bin/env Rscript
+  script:
+  '''
+  #!/usr/bin/env Rscript
 
-//   #args <- commandArgs(TRUE)
-//   #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-//   if(!require(reshape2)){
-//     install.packages("reshape2")
-//     library(reshape2)
-//   }
-//   if(!require(ggplot2)){
-//     install.packages("ggplot2")
-//     library(ggplot2)
-//   }
-//   res<-read.delim("summaries.tsv");
-//   res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
-//   pdf(file="summaries.pdf", width=16, height=9);
-//    ggplot(res2, aes(x=aligner, y=value,fill=variable)) +
-//    geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
-//    coord_flip() +
-//    theme(legend.position = "top") +
-//    facet_grid(simulator~mode~species);
-//   dev.off();
-//   '''
-// }
+  #args <- commandArgs(TRUE)
+  #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
+  if(!require(reshape2)){
+    install.packages("reshape2")
+    library(reshape2)
+  }
+  if(!require(ggplot2)){
+    install.packages("ggplot2")
+    library(ggplot2)
+  }
+  res<-read.delim("summaries.tsv");
+  res2 <- melt(res, id.vars = c("tool", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
+  pdf(file="summaries.pdf", width=16, height=9);
+   ggplot(res2, aes(x=tool, y=value,fill=variable)) +
+   geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
+   coord_flip() +
+   theme(legend.position = "top") +
+   facet_grid(simulator~mode~species);
+  dev.off();
+  '''
+}
 
 //WRAP-UP
-path = ["$baseDir/report/*"] //default: only render report
+paths = ["$baseDir/report/*"] //default: only render report
 writing = Channel.fromPath(params.manuscript ? paths + "$baseDir/manuscript/*" : paths)
 process render {
   tag {'report'+params.manuscript ? " & manuscript" : ""}
@@ -943,6 +946,8 @@ process render {
     file('*') from plots.flatten().toList()
     file('*') from plotsRealRNA.flatten().toList()
     file('*') from writing.collect()
+    file('*') from collatedDetailsPlotsSimulatedDNA.collect()
+    file('*') from collatedSummariesPlotsSimulatedDNA.collect()
 
   output:
     file '*'
