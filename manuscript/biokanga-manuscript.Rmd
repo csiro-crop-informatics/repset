@@ -229,8 +229,13 @@ have to be handled differently the in the case of a HPC cluster.
 This is done seamlessly by our workflow, but required additional time invested upfront to develop and test
 an appropriate configuration.
 
-Although substantial, all these overheads can be seen as investments. Carefully designed portable workflow configuration
-can be easily re-used such that subsequent workflows can be developed much quicker.
+Although substantial, all these overheads can be seen as investments.
+Carefully designed portable workflow configuration can be easily re-used
+such that subsequent workflows can be developed much quicker.
+The container images tagged with respective tool versions and commit SHA hashes
+are freely available, so anyone who needs to use the specific version of a tool,
+can simply point to an image in their workflow definition or pull, build and use the  container directly.
+
 
 * consider also modularity
   * NF under dev
@@ -252,6 +257,16 @@ can be easily re-used such that subsequent workflows can be developed much quick
 
 
 ## describe workflow
+
+### Use of containers
+
+The workflow relies on multiple containers executed either through Docker or Singularity.
+Core to the workflow design is having a separate container for each aligner.
+Additional containers provide the tool-sets required to pre- post-process data
+and evaluate results. For example the RNFtools container is used to simulate
+the DNA-Seq reads and later to evaluate the alignment results.
+
+
 
 ## describe biokanga align
 
