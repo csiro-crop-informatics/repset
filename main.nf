@@ -933,10 +933,9 @@ process plotSummarySimulatedDNA {
 }
 
 //WRAP-UP
-paths = ["$baseDir/report/*"] //default: only render report
-writing = Channel.fromPath(params.manuscript ? paths + "$baseDir/manuscript/*" : paths)
+writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 process render {
-  tag {'report'+params.manuscript ? " & manuscript" : ""}
+  tag {'report'}
   label 'rrender'
   label 'report'
   stageInMode 'copy'
