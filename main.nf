@@ -148,7 +148,7 @@ process convertReferenceRNA {
  2. Conversion would not have been necessary and script could point directly to meta.fasta
     but local files might not be on paths automatically mounted in the container.
 */
-referencesDNA = Channel.from(params.references).map { (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)] }
+referencesDNA = Channel.from(params.referencesDNA).map { (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)] }
 
 process fetchReferenceForDNAAlignment {
   tag{meta.subMap(['species','version'])}
@@ -609,12 +609,12 @@ process rnfSimReadsDNA {
 
   input:
     set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
-    each nsimreads from params.simreads.nreads.toString().tokenize(",")*.toInteger()
-    each length from params.simreads.length.toString().tokenize(",")*.toInteger()
-    each simulator from params.simreads.simulator
-    each mode from params.simreads.mode //PE, SE
-    each distance from params.simreads.distance //PE only
-    each distanceDev from params.simreads.distanceDev //PE only
+    each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
+    each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
+    each simulator from params.simreadsDNA.simulator
+    each mode from params.simreadsDNA.mode //PE, SE
+    each distance from params.simreadsDNA.distance //PE only
+    each distanceDev from params.simreadsDNA.distanceDev //PE only
 
   output:
     set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
