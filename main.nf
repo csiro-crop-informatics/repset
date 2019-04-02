@@ -1,5 +1,11 @@
 #!/usr/bin/env nextflow
 
+
+if( !nextflow.version.matches(workflow.manifest.nextflowVersion) ) {
+    println "This workflow requires Nextflow version ${workflow.manifest.nextflowVersion} or greater -- You are running version $nextflow.version"
+    exit 1
+}
+
 //For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
 
