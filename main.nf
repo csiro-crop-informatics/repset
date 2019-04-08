@@ -297,7 +297,7 @@ process alignSimulatedReadsRNA {
 }
 
 
-process nameSortSAM {
+process nameSortSamSimulatedRNA {
   label 'sort'
   label 'samtools'
   tag("${meta}")
