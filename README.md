@@ -1,12 +1,16 @@
-[![Latest GitHub tag](https://img.shields.io/github/tag/csiro-crop-informatics/biokanga-manuscript.svg?label=latest%20release&logo=github&style=flat-square)](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases)
+[![Latest GitHub release](https://img.shields.io/github/release/csiro-crop-informatics/biokanga-manuscript.svg?style=flat-square&logo=github&label=latest%20release)](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases)
+[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.02.0--edge-orange.svg)](https://www.nextflow.io/)
+
 
 # Table of Contents <!-- omit in toc -->
 - [Experiments](#experiments)
-  - [Quick test run](#quick-test-run)
+  - [Simulated RNA-Seq](#simulated-rna-seq)
+    - [Quick test run](#quick-test-run)
     - [Running nextflow with singularity](#running-nextflow-with-singularity)
     - [Running nextflow with docker](#running-nextflow-with-docker)
     - [Running on AWS batch](#running-on-aws-batch)
   - [Full pipeline run](#full-pipeline-run)
+    - [Capturing results and run metadata](#capturing-results-and-run-metadata)
   - [Experimental pipeline overview](#experimental-pipeline-overview)
   - [Execution environment](#execution-environment)
 - [Adding another aligner](#adding-another-aligner)
@@ -29,6 +33,7 @@
 
 # Experiments
 
+## Simulated RNA-Seq
 On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.5) consumed 56 CPU-days.
 See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
 and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
@@ -36,7 +41,7 @@ This run included each of the input datasets in three replicates. Given the expe
 replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`,
 thus reducing the CPU-time to under 8 days (based on a run of [version 0.6](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.6)).
 
-## Quick test run
+### Quick test run
 
 For a quick test run use the `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
@@ -49,13 +54,13 @@ Additional flag `--adapters` will make a debug run a bit longer but the output r
 ### Running nextflow with singularity
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug --aligners 'biokanga|hisat2|star'
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug --alignersRNA 'biokanga|hisat2|star'
 ```
 
 ### Running nextflow with docker
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity --debug --aligners 'biokanga|hisat2|star'
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity --debug --alignersRNA 'biokanga|hisat2|star'
 ```
 
 ### Running on AWS batch
@@ -64,7 +69,7 @@ If you are new to AWS batch and/or nextflow, follow [this blog post](https://ant
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript \
-  -profile awsbatch --debug --aligners 'biokanga|hisat2|star' \
+  -profile awsbatch --debug --alignersRNA 'biokanga|hisat2|star' \
   -work-dir s3://your_s3_bucket/work --outdir s3://your_s3_bucket/results
 ```
 
@@ -93,6 +98,23 @@ This may need to be adapted for your system.
 In addition Singularity must also be available on the node where you execute the pipeline.
 
 To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](#running-on-aws-batch) but drop the `--debug` flag.
+
+### Capturing results and run metadata
+
+Each pipeline run generates a number of files including
+* results in the form of report, figures, tables etc.
+* run metadata reflecting information about the pipeline version, software and compute environment etc.
+
+These can be simply collected from the output directories but for full traceability of the results, the following procedure is preferable:
+1. Select a tagged revision or add a tag (adhering to the usual semantic versioning approach)
+2. Generate a Git Hub access token which will allow the pipeline to create releases (in this or a forked repository)
+3. Make the access token accessible as an environmental variable e.g. `export GH_TOKEN='your-token-goes-here'`
+4. Run the pipeline from the remote repository, specifying
+    - the required revision  e.g. `-revision v0.8.3`
+    - the `--release` flag
+
+On successful completion of the pipeline a series of API calls will be made to create a new release, upload results and metadata files as artefacts for that release and finalize the release.
+The last of this calls will trigger minting of a DOI for that release if Zenodo integration is configured and enabled for the repository.
 
 ## Experimental pipeline overview
 
@@ -177,6 +199,7 @@ TODO
 ### Specify container
 
 1. Upload a relevant container image to docker hub or [locate an existing one](https://hub.docker.com/search/?isAutomated=0&isOfficial=0&page=1&pullCount=0&q=bowtie2&starCount=0). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
+Alternatively, follow our procedure below for [defining per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
 
 2. Insert container specification
 
@@ -306,9 +329,7 @@ Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`
 RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice.
 
 ## Rendering
-The manuscript will be rendered if
-1. `--manuscript` option is used
-2. The pipeline is executed while `manuscript` branch is checked out, either
+The manuscript will be rendered the pipeline is executed while `manuscript` branch is checked out, either
   * locally
   or
   * via `nextflow run -revision manuscript`.
