@@ -8,6 +8,7 @@ def gitHubRelease(Map args) {
     return
   } else {
     println "GH_TOKEN found, attempting to create a GH release"
+    println args
   }
 
   //CREATE RELEASE
