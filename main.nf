@@ -499,7 +499,11 @@ process samStatsRealRNA {
 
   input:
     set val(inmeta), file(sam) from alignedRealRNA.map { inmeta, sam, trace ->
-        inmeta.'aligntime' = trace.text.tokenize('\n').last()
+        trace.splitEachLine("=", { record ->
+          if(record.size() > 1 && record[0]=='realtime') { //to grab all, remove second condition and { meta."${record[0]}" = record[1] }
+            inmeta.'aligntime'  = record[1]
+          }
+        })
         new Tuple(inmeta, sam)
       }
 
