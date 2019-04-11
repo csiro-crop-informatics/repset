@@ -200,7 +200,7 @@ process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") }
-  tag("${alignermeta.tool} << ${ref}")
+  tag("${alignermeta.tool} << ${refmeta}")
 
   input:
     set val(alignermeta), val(refmeta), file(ref) from aligners.combine(refsRNA.mix(referencesForAlignersDNA))
@@ -214,7 +214,7 @@ process indexGenerator {
   // meta =  alignermeta+refmeta//[target: "${ref}"]
   // println(meta)
   script:
-    meta = [tool: "${alignermeta.tool}", target: "${ref}", seqtype: refmeta.seqtype]
+    meta = [tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
     template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
 
@@ -602,7 +602,7 @@ process rnfSimReadsDNA {
 
   script:
     tag=meta.species+"_"+meta.version+"_"+simulator
-    simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length ]
+    simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length]
     len1 = length
     if(mode == "PE") {
       //FOR rnftools
@@ -658,7 +658,7 @@ process alignSimulatedReadsDNA {
     set val(alignmeta), file('out.?am') into alignedSimulatedDNA
 
   when:
-    idxmeta.seqtype == 'DNA'
+    idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version
 
   // when: //only align reads to the corresponding genome - TODO UPDATE idxmeta to hold this info!
   //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
@@ -891,6 +891,7 @@ process plotSummarySimulatedDNA {
 
 //WRAP-UP
 writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+
 process render {
   tag {'report'}
   label 'rrender'

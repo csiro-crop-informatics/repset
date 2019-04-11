@@ -1,11 +1,12 @@
-  #!/usr/bin/env Rscript
+#!/usr/bin/env r
 
-  #args <- commandArgs(TRUE)
-  library(reshape2)
-  library(ggplot2)
 
-  res<-read.delim('/dev/stdin');
-  res2 <- melt(res, id.vars = c("tool", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
+library(ggplot2)
+library(readr)
+library(reshape2)
+
+res<-read_csv('/dev/stdin');
+res2 <- melt(res, id.vars = c("tool", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
   pdf(file="simulatedDNA_summaries.pdf", width=16, height=9);
    ggplot(res2, aes(x=tool, y=value,fill=variable)) +
    geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +

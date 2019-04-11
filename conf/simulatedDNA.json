@@ -1,5 +1,5 @@
 {
-  "simreads": {
+  "simreadsDNA": {
     "simulator": [
       "ArtIllumina",
       "MasonIllumina"
@@ -17,7 +17,7 @@
       50
     ]
   },
-  "references" : [
+  "referencesDNA" : [
     {
       "species" : "Arabidopsis_thaliana",
       "version" : "TAIR10",
