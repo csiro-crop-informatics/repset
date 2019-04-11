@@ -427,7 +427,7 @@ process ggplotSimulatedRNA {
 
   shell:
     '''
-    < !{csv} stats_figures.R
+    < !{csv} plot_simulatedRNA.R
     '''
 }
 
@@ -485,6 +485,9 @@ process alignReadsRealRNA {
 
   output:
     set val(meta), file('*sam'), file('.command.trace') into alignedRealRNA
+
+  when:
+    idxmeta.seqtype == 'RNA'
 
   script:
     meta = idxmeta.clone() + readsmeta.clone()
@@ -731,7 +734,7 @@ process collateDetailsSimulatedDNA {
       if(i++ %2 == 0) {
         meta = it
       } else {
-        common = meta.simulator+sep+meta.aligner+sep+meta.mode+"\n"
+        common = meta.simulator+sep+meta.tool+sep+meta.mode+"\n"
         it.withReader { source ->
           String line
           while( line=source.readLine() ) {
@@ -757,11 +760,11 @@ process collateSummariesSimulatedDNA {
     val collected from summariesSimulatedDNA.collect()
 
   output:
-    file 'summaries.*' into collatedSummariesSimulatedDNA
+    set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
 
   exec:
   def outfileJSON = task.workDir.resolve('summaries.json')
-  def outfileTSV = task.workDir.resolve('summaries.tsv')
+  def outfileCSV = task.workDir.resolve('summaries.csv')
   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
@@ -792,12 +795,11 @@ process collateSummariesSimulatedDNA {
     }
   }
   entries << entry
-
   outfileJSON << prettyPrint(toJson(entries))
 
-  //GENERATE TSV OUTPUT
-  SEP="\t"
-  outfileTSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+  //GENERATE CSV OUTPUT
+  SEP=","
+  outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
   entries.each { entry ->
     line = ""
     headersMeta.each { k ->
@@ -807,7 +809,7 @@ process collateSummariesSimulatedDNA {
       value = entry.results[k]
       line += value == null ? SEP+0 : SEP+value //NOT QUITE RIGHT, ok for 'w' not for 'u'
     }
-    outfileTSV << line+"\n"
+    outfileCSV << line+"\n"
   }
 
 }
@@ -876,34 +878,14 @@ process plotSummarySimulatedDNA {
   label 'figures'
 
   input:
-    file '*' from collatedSummariesSimulatedDNA
+    set file(csv), file(json) from collatedSummariesSimulatedDNA
 
   output:
     file '*' into collatedSummariesPlotsSimulatedDNA
 
-  script:
+  shell:
   '''
-  #!/usr/bin/env Rscript
-
-  #args <- commandArgs(TRUE)
-  #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-  if(!require(reshape2)){
-    install.packages("reshape2")
-    library(reshape2)
-  }
-  if(!require(ggplot2)){
-    install.packages("ggplot2")
-    library(ggplot2)
-  }
-  res<-read.delim("summaries.tsv");
-  res2 <- melt(res, id.vars = c("tool", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
-  pdf(file="summaries.pdf", width=16, height=9);
-   ggplot(res2, aes(x=tool, y=value,fill=variable)) +
-   geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
-   coord_flip() +
-   theme(legend.position = "top") +
-   facet_grid(simulator~mode~species);
-  dev.off();
+  < !{csv} plot_simulatedDNA.R
   '''
 }
 
