@@ -13,4 +13,3 @@ WORKDIR /
 RUN wget https://sourceforge.net/projects/bbmap/files/BBMap_${VERSION}.tar.gz \
   && tar xzvf BBMap_${VERSION}.tar.gz && rm BBMap_${VERSION}.tar.gz
 ENV PATH "${PATH}:/bbmap"
-
