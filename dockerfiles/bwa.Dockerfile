@@ -16,4 +16,6 @@ RUN make
 RUN cp -p bwa /usr/local/bin
 
 # Cleanup
-RUN rm -rf /tmp/bwa && apt-get clean && apt-get remove --yes --purge build-essential gcc-multilib apt-utils zlib1g-dev wget
+RUN rm -rf /tmp/bwa \
+  && apt-get clean \
+  && apt-get remove --yes --purge build-essential gcc-multilib apt-utils zlib1g-dev wget
