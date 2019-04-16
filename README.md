@@ -177,7 +177,7 @@ After you have cloned this repository:
 
 ## Example
 
-Let's be more specific and follow an example. We will add [bowtie2](https://github.com/BenLangmead/bowtie2/releases/tag/v2.3.4.1).
+Let's be more specific and follow an example. We will add [bowtie2](https://github.com/BenLangmead/bowtie2/releases/tag/v2.3.5).
 
 ### Add indexing template
 
@@ -234,7 +234,7 @@ Alternatively, follow our procedure below for [defining per-tool container image
 
 ```
 withLabel: bowtie2 {
-  container = 'comics/bowtie2:2.3.4.1'
+  quay.io/biocontainers/bowtie2:2.3.5--py27he860b03_0
 }
 ```
 within the `process {   }` block in [conf/containers.config](conf/containers.config).
