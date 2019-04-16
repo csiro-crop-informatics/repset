@@ -6,7 +6,7 @@ LABEL maintainer="Rad Suchecki <rad.suchecki@csiro.au>"
 RUN apt-get update
 
 #overwrite at build time with e.g. --build-arg VERSION=38.26
-ARG VERSION=38.34
+ARG VERSION=38.44
 
 #Install dart
 WORKDIR /
