@@ -21,9 +21,8 @@ datasetsSimulatedRNA = Channel.from(['human_t1r1','human_t1r2','human_t1r3','hum
   .filter{ !params.debug || it == params.debugDataset }
   .filter{ (it[-1] as Integer) <= params.replicates}
 
-//Download reference: hg19
+//Download reference for RNA alignment: hg19
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
-
 
 /*
   Generic method for extracting a string tag or a file basename from a metadata map
@@ -37,6 +36,7 @@ def helpMessage() {
   Usage:
 
   nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
+  nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
 
   Default params:
   """.stripIndent()
@@ -51,7 +51,6 @@ if (params.help){
     helpMessage()
     exit 0
 }
-
 
 process downloadReferenceRNA {
   storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"}
@@ -280,7 +279,6 @@ process alignSimulatedReadsRNA {
   //GRAB CPU MODEL
   //afterScript 'hostname > .command.cpu; fgrep -m1 "model name" /proc/cpuinfo | sed "s/.*: //"  >> .command.cpu'
 
-
   input:
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices4simulatedRNA.combine(datasetsWithAdapters.mix(preparedDatasets))
 
@@ -295,7 +293,6 @@ process alignSimulatedReadsRNA {
     meta.remove('seqtype') //not needed downstream, would have to modiify tidy-ing to keep
     template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
-
 
 process nameSortSamSimulatedRNA {
   label 'sort'
@@ -322,7 +319,6 @@ process nameSortSamSimulatedRNA {
     samtools sort --threads ${task.cpus} -n --output-fmt BAM  ${sam} > sortedsam
     """
 }
-
 
 //Repeat downstream processes by either  leaving SAM as is or removing secondary & supplementary alignments
 uniqSAM = Channel.from([false, true])
@@ -401,7 +397,6 @@ process tidyStatsSimulatedRNA {
     meta.dataset = meta.dataset[0..-3] //strip of last 2 chars, eg. r1
     keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
 
-
   shell:
     '''
     < !{instats} stats_parser.R !{meta.type} > tidy.csv
@@ -411,7 +406,6 @@ process tidyStatsSimulatedRNA {
     '''
   //sed adds key to the header line and the value to each remaining line
 }
-
 
 process ggplotSimulatedRNA {
   tag 'figures'
