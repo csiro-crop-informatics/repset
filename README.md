@@ -1,4 +1,5 @@
 [![Latest GitHub release](https://img.shields.io/github/release/csiro-crop-informatics/biokanga-manuscript.svg?style=flat-square&logo=github&label=latest%20release)](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases)
+![GitHub commits since latest release](https://img.shields.io/github/commits-since/csiro-crop-informatics/biokanga-manuscript/latest.svg?style=flat-square&logo=github)
 [![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.02.0--edge-orange.svg)](https://www.nextflow.io/)
 
 
@@ -37,6 +38,11 @@
 
 # Experiments
 
+The pipeline consists of several, partly dependent paths
+which facilitate the evaluation of aligners using
+either DNA-  or RNA-Seq data, either real or simulated.
+
+
 ## Simulated RNA-Seq
 On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.5) consumed 56 CPU-days.
 See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
@@ -50,9 +56,9 @@ thus reducing the CPU-time to under 8 days (based on a run of [version 0.6](http
 For a quick test run use the `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
 Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`. By default, all pre-defined aligners are executed.
-To only specify a single aligner you can e.g. use `--aligners biokanga` or for several aligners e.g. `--aligners 'biokanga|dart|hisat2'`.
+To only specify a single aligner you can e.g. use `--aligners biokanga` or for several aligners e.g. `--alignersRNA 'biokanga|dart|hisat2'`.
 
-Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including datsets with retained adapters.
+Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including datasets with retained adapters.
 
 
 
