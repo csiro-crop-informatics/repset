@@ -106,13 +106,23 @@ For some workflows however, it may be preferable to have a separate container im
 In the case of our workflow, this enables easy addition and benchmarking of a new tool
 while the rest of the workflow remains unchanged, with the exception of some downstream processes
 which aggregate data produced by all of the evaluated tools.
-The container per tool or perhaps per branch of the workflow may also be advantageous
+Having a separate container per tool or perhaps per branch of the workflow may also be advantageous
 for computationally intensive or long-running workflows as this approach limits the need to
 re-run parts of the pipeline due to global software environment being modified.
 
-We provide a Docker Hub repository for each of the benchmarked tools.
+Meaningful benchmarking requires precise traceability of each evaluated tool
+e.g. by stating the version of the tool being used.
+More broadly, reproducibility of computational analyses demands that we not only capture
+the version of a given tool but the entire software environment.
+To address this and the additional goals of reusability and extensibility,
+we also require robust procedures for building, distributing
+and using the containers.
+
+
+For a handful of benchmarked tools we rely on containers from BioContainers collection.
+For most of the remaining tools however, we provide a dedicated Docker Hub repositories.
 Each repository is configured to automatically build a version of the container
-for a tool given an appropriate trigger in our workflow repository.
+for a tool, given an appropriate trigger in our workflow GitHub repository.
 
 Additional docker container images are provided with auxiliary tools required for benchmarking,
 including, but not limited to the RNA-seq benchmarking toolkit [@Baruzzo2016] (modified in https://github.com/rsuchecki/biokanga_benchmark)
@@ -129,10 +139,21 @@ A container image may have to be re-created for a number of reasons other than v
 An underlying base image may need to be patched or an auxiliary tool may have to be added to the container
 to facilitate its use within a workflow e.g. to aid collection of execution statistics.
 In such case the version tag remains unchanged even though the underlying container image has been replaced.
-We provide automation code (a "post_push hook") which ensures that in addition to the container image version tag, which may potentially be overwritten,
+We provide automation code (a "`post_push` hook") which ensures that in addition to the container image version tag, which may potentially be overwritten,
 additional tags based on git commit SHA hash are generated.
-These perma-tags are then used when referencing a container in workflow configuration files.
+These effectively permanent tags are then used when referencing a container in workflow configuration files.
 For example, rather than pointing to `1.9` tag in our `samtools` Docker Hub repository we point to `1.9_ea5d3c82fb85c174dce08a4c736ed44c1e6bb7eb`.
+
+Docker v2 specification provides another (partial?) solution of addressing the problem
+of container image permanence (?) via [content digests](https://docs.docker.com/registry/spec/api/#content-digests).
+A digest contains a SHA-256 collision-resistant hash of the content of an image.
+Implemented by Docker registries such as Docker Hub or Quay,
+a digest is returned when an image is pushed to a repository.
+It then can be used to pull this exact version of the container image.
+We use this functionality to address the BioContainer images.
+For example we
+The ideal
+
 
 ### Capturing code and associated results under DOIs
 
