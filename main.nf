@@ -21,9 +21,8 @@ datasetsSimulatedRNA = Channel.from(['human_t1r1','human_t1r2','human_t1r3','hum
   .filter{ !params.debug || it == params.debugDataset }
   .filter{ (it[-1] as Integer) <= params.replicates}
 
-//Download reference: hg19
+//Download reference for RNA alignment: hg19
 url = 'http://hgdownload.cse.ucsc.edu/goldenPath/hg19/bigZips/chromFa.tar.gz'
-
 
 /*
   Generic method for extracting a string tag or a file basename from a metadata map
@@ -37,6 +36,7 @@ def helpMessage() {
   Usage:
 
   nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
+  nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
 
   Default params:
   """.stripIndent()
@@ -51,7 +51,6 @@ if (params.help){
     helpMessage()
     exit 0
 }
-
 
 process downloadReferenceRNA {
   storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"}
@@ -148,7 +147,7 @@ process convertReferenceRNA {
  2. Conversion would not have been necessary and script could point directly to meta.fasta
     but local files might not be on paths automatically mounted in the container.
 */
-referencesDNA = Channel.from(params.references).map { (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)] }
+referencesDNA = Channel.from(params.referencesDNA).map { (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)] }
 
 process fetchReferenceForDNAAlignment {
   tag{meta.subMap(['species','version'])}
@@ -200,7 +199,7 @@ process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") }
-  tag("${alignermeta.tool} << ${ref}")
+  tag("${alignermeta.tool} << ${refmeta}")
 
   input:
     set val(alignermeta), val(refmeta), file(ref) from aligners.combine(refsRNA.mix(referencesForAlignersDNA))
@@ -214,7 +213,7 @@ process indexGenerator {
   // meta =  alignermeta+refmeta//[target: "${ref}"]
   // println(meta)
   script:
-    meta = [tool: "${alignermeta.tool}", target: "${ref}", seqtype: refmeta.seqtype]
+    meta = [tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
     template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
 
@@ -280,7 +279,6 @@ process alignSimulatedReadsRNA {
   //GRAB CPU MODEL
   //afterScript 'hostname > .command.cpu; fgrep -m1 "model name" /proc/cpuinfo | sed "s/.*: //"  >> .command.cpu'
 
-
   input:
     set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices4simulatedRNA.combine(datasetsWithAdapters.mix(preparedDatasets))
 
@@ -296,8 +294,7 @@ process alignSimulatedReadsRNA {
     template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
-
-process nameSortSAM {
+process nameSortSamSimulatedRNA {
   label 'sort'
   label 'samtools'
   tag("${meta}")
@@ -323,11 +320,10 @@ process nameSortSAM {
     """
 }
 
-
 //Repeat downstream processes by either  leaving SAM as is or removing secondary & supplementary alignments
 uniqSAM = Channel.from([false, true])
 
-process fixSAM {
+process fixSamSimulatedRNA {
   label 'benchmark'
   tag("${meta}")
 
@@ -356,7 +352,7 @@ process fixSAM {
 }
 
 actions = Channel.from(['unique', 'multi'])
-process compareToTruth {
+process compareToTruthSimulatedRNA {
   label 'benchmark'
   // label 'stats'
   tag("${outmeta}")
@@ -385,7 +381,7 @@ process compareToTruth {
     }
 }
 
-process tidyStats {
+process tidyStatsSimulatedRNA {
   label 'rscript'
   tag("${inmeta}")
 
@@ -401,7 +397,6 @@ process tidyStats {
     meta.dataset = meta.dataset[0..-3] //strip of last 2 chars, eg. r1
     keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
 
-
   shell:
     '''
     < !{instats} stats_parser.R !{meta.type} > tidy.csv
@@ -412,8 +407,7 @@ process tidyStats {
   //sed adds key to the header line and the value to each remaining line
 }
 
-
-process ggplot {
+process ggplotSimulatedRNA {
   tag 'figures'
   errorStrategy 'finish'
   label 'rscript'
@@ -427,13 +421,15 @@ process ggplot {
 
   shell:
     '''
-    < !{csv} stats_figures.R
+    < !{csv} plot_simulatedRNA.R
     '''
 }
 
+// // ----- =======                   ======= -----
+// //                Real RNA alignment
+// // ----- =======                   ======= -----
 
-
-process downloadSRA {
+process downloadSraRealRNA {
   storeDir {executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded"} // storeDir "${workflow.workDir}/downloaded" put the datasets there and prevent generating cost to dataset creators through repeated downloads on re-runs
   scratch false
 
@@ -449,7 +445,7 @@ process downloadSRA {
     """
 }
 
-process fromSRAtoFASTA {
+process fromSRAtoFastaRealRNA {
   label 'sra'
   label 'slow'
   tag("${SRA}")
@@ -470,7 +466,7 @@ process fromSRAtoFASTA {
   """
 }
 
-process alignRealReadsRNA {
+process alignReadsRealRNA {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
   tag("${idxmeta} << ${readsmeta}")
@@ -483,6 +479,9 @@ process alignRealReadsRNA {
 
   output:
     set val(meta), file('*sam'), file('.command.trace') into alignedRealRNA
+
+  when:
+    idxmeta.seqtype == 'RNA'
 
   script:
     meta = idxmeta.clone() + readsmeta.clone()
@@ -497,7 +496,11 @@ process samStatsRealRNA {
 
   input:
     set val(inmeta), file(sam) from alignedRealRNA.map { inmeta, sam, trace ->
-        inmeta.'aligntime' = trace.text.tokenize('\n').last()
+        trace.splitEachLine("=", { record ->
+          if(record.size() > 1 && record[0]=='realtime') { //to grab all, remove second condition and { meta."${record[0]}" = record[1] }
+            inmeta.'aligntime'  = record[1]
+          }
+        })
         new Tuple(inmeta, sam)
       }
 
@@ -539,38 +542,7 @@ process ggplotRealRNA {
 
   shell:
   '''
-  #!/usr/bin/env r
-
-  library(dplyr)
-  library(readr)
-  library(ggplot2)
-  library(ggrepel)
-
-  stats <- read_csv("!{csv}")
-  head(stats)
-
-  ggplot(stats) +
-    aes(aligned, aligntime*10^-3/60,colour=tool) +
-    geom_point() +
-    geom_label_repel(aes(label=tool)) +
-    labs(title = "Accuracy vs alignment run times ",
-        subtitle = "using 10 logical cores",
-        x = "Aligned",
-        y = "Run time (minutes)") +
-    guides(label=FALSE, color=FALSE) #+
-    #facet_wrap(adapters~dataset)
-  ggsave(file="realRNA_aligned-runtime.pdf", width=16, height=9);
-
-  ggplot(stats) +
-    aes(paired, aligntime*10^-3/60,colour=tool) +
-    geom_point() +
-    geom_label_repel(aes(label=tool)) +
-    labs(title = "Accuracy vs alignment run times ",
-        subtitle = "using 10 logical cores",
-        x = "Aligned as pairs",
-        y = "Run time (minutes)") +
-    guides(label=FALSE, color=FALSE)
-  ggsave(file="realRNA_aligned-paired-runtime.pdf", width=16, height=9)
+  < !{csv} plot_realRNA.R
   '''
 }
 
@@ -609,12 +581,12 @@ process rnfSimReadsDNA {
 
   input:
     set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
-    each nsimreads from params.simreads.nreads.toString().tokenize(",")*.toInteger()
-    each length from params.simreads.length.toString().tokenize(",")*.toInteger()
-    each simulator from params.simreads.simulator
-    each mode from params.simreads.mode //PE, SE
-    each distance from params.simreads.distance //PE only
-    each distanceDev from params.simreads.distanceDev //PE only
+    each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
+    each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
+    each simulator from params.simreadsDNA.simulator
+    each mode from params.simreadsDNA.mode //PE, SE
+    each distance from params.simreadsDNA.distance //PE only
+    each distanceDev from params.simreadsDNA.distanceDev //PE only
 
   output:
     set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
@@ -624,7 +596,7 @@ process rnfSimReadsDNA {
 
   script:
     tag=meta.species+"_"+meta.version+"_"+simulator
-    simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length ]
+    simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length]
     len1 = length
     if(mode == "PE") {
       //FOR rnftools
@@ -677,10 +649,10 @@ process alignSimulatedReadsDNA {
     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
 
   output:
-    set val(alignmeta), file('out.bam') into alignedSimulatedDNA
+    set val(alignmeta), file('out.?am') into alignedSimulatedDNA
 
   when:
-    idxmeta.seqtype == 'DNA'
+    idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version
 
   // when: //only align reads to the corresponding genome - TODO UPDATE idxmeta to hold this info!
   //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
@@ -699,7 +671,7 @@ process rnfEvaluateSimulatedDNA {
 
 
   input:
-    set val(alignmeta), file('out.bam') from alignedSimulatedDNA
+    set val(alignmeta), file(samOrBam) from alignedSimulatedDNA
 
   output:
      set val(alignmeta), file(summary) into summariesSimulatedDNA
@@ -709,10 +681,10 @@ process rnfEvaluateSimulatedDNA {
   // println prettyPrint(toJson(alignmeta))
   """
   paste \
-    <( rnftools sam2es -i out.bam -o - | awk '\$1 !~ /^#/' \
+    <( rnftools sam2es -i ${samOrBam} -o - | awk '\$1 !~ /^#/' \
       | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
     ) \
-    <( samtools view out.bam ) \
+    <( samtools view ${samOrBam} ) \
   | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
   """
 
@@ -756,7 +728,7 @@ process collateDetailsSimulatedDNA {
       if(i++ %2 == 0) {
         meta = it
       } else {
-        common = meta.simulator+sep+meta.aligner+sep+meta.mode+"\n"
+        common = meta.simulator+sep+meta.tool+sep+meta.mode+"\n"
         it.withReader { source ->
           String line
           while( line=source.readLine() ) {
@@ -782,11 +754,11 @@ process collateSummariesSimulatedDNA {
     val collected from summariesSimulatedDNA.collect()
 
   output:
-    file 'summaries.*' into collatedSummariesSimulatedDNA
+    set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
 
   exec:
   def outfileJSON = task.workDir.resolve('summaries.json')
-  def outfileTSV = task.workDir.resolve('summaries.tsv')
+  def outfileCSV = task.workDir.resolve('summaries.csv')
   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
@@ -817,12 +789,11 @@ process collateSummariesSimulatedDNA {
     }
   }
   entries << entry
-
   outfileJSON << prettyPrint(toJson(entries))
 
-  //GENERATE TSV OUTPUT
-  SEP="\t"
-  outfileTSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+  //GENERATE CSV OUTPUT
+  SEP=","
+  outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
   entries.each { entry ->
     line = ""
     headersMeta.each { k ->
@@ -832,108 +803,51 @@ process collateSummariesSimulatedDNA {
       value = entry.results[k]
       line += value == null ? SEP+0 : SEP+value //NOT QUITE RIGHT, ok for 'w' not for 'u'
     }
-    outfileTSV << line+"\n"
+    outfileCSV << line+"\n"
   }
 
 }
 
-// process plotDetailSimulatedDNA {
-//   label 'rscript'
-//   label 'figures'
+process plotDetailSimulatedDNA {
+  label 'rscript'
+  label 'figures'
 
-//   input:
-//     file '*' from collatedDetails
+  input:
+    file '*' from collatedDetailsSimulatedDNA
 
-//   output:
-//     file '*'
+  output:
+    file '*' into collatedDetailsPlotsSimulatedDNA
 
-//   script:        ============================ TODO : move under bin/
-//   binWidth='1E5'
-//   """
-//   #!/usr/bin/env Rscript
+  script:        //============================ TODO : move under bin/
+  binWidth='1E5'
+  """
+  touch plotPlaceholderD
+  #< !{csv} plot_details_simulatedDNA.R
+  """
 
-//   #args <- commandArgs(TRUE)
-//   location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-//   if(!require(tidyverse)){
-//     install.packages("tidyverse", lib = location, repos='https://cran.csiro.au')
-//     library(tidyverse) #, lib.loc = location)
-//   }
-//   #res<-read.delim(gzfile("details.tsv.gz"));
-//   details<-read.delim("details.tsv");
+}
 
-// pdf(file="details.pdf", width=16, height=9);
-// binWidth = ${binWidth}
-//  details %>%
-//    #filter(!Chromosome %in% c("Mt","Pt","*","chrUn")) %>%
-//    #filter(Chromosome %in% c("chr2D")) %>%
-//    #filter(Class %in% c("w")) %>%
-//    ggplot(aes(Position, fill=Class)) +
-//    geom_density(alpha=0.1, bw = ${binWidth}) +
-//    #geom_vline(xintercept = c(peak), colour="red", linetype="longdash", size=0.5) +
-//    facet_grid(Species~Aligner~Chromosome~Mode)
+process plotSummarySimulatedDNA {
+  label 'rscript'
+  label 'figures'
 
+  input:
+    set file(csv), file(json) from collatedSummariesSimulatedDNA
 
+  output:
+    file '*' into collatedSummariesPlotsSimulatedDNA
 
-//     #ggplot(res, aes(x=Position,colour=Class, fill=Class)) +
-//     #  geom_density(alpha=0.1, adjust=1/10) +
-//     #  facet_grid(Species~Chromosome~Simulator~Aligner~Mode);
-//   dev.off();
-
-// pdf(file="details7.pdf", width=16, height=9);
-//   details %>%
-//    # filter(Species %in% c("T_aestivum")) %>% head()
-//    # filter(!Chromosome %in% c("Mt","Pt","*","chrUn")) %>%
-//    # filter(str_detect(Chromosome, "^chr1")) %>%
-//     filter(!Class %in% c("u")) %>%
-//     filter(Simulator %in% c("MasonIllumina")) %>%
-//   ggplot(aes(x=Position, fill = Class, colour=Class)) +
-//     geom_density(aes(x=Position, y=..count..*${binWidth}), alpha=0.1, bw = ${binWidth}) +
-//     facet_grid(Species ~ Chromosome ~ Aligner  ~ Mode)
-// dev.off();
-//   """
-// }
-
-// process plotSummarySimulatedDNA {
-//   label 'rscript'
-//   label 'figures'
-
-//   input:
-//     file '*' from collatedSummaries
-
-//   output:
-//     file '*'
-
-//   script:
-//   '''
-//   #!/usr/bin/env Rscript
-
-//   #args <- commandArgs(TRUE)
-//   #location <- "~/local/R_libs/"; dir.create(location, recursive = TRUE  )
-//   if(!require(reshape2)){
-//     install.packages("reshape2")
-//     library(reshape2)
-//   }
-//   if(!require(ggplot2)){
-//     install.packages("ggplot2")
-//     library(ggplot2)
-//   }
-//   res<-read.delim("summaries.tsv");
-//   res2 <- melt(res, id.vars = c("aligner", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
-//   pdf(file="summaries.pdf", width=16, height=9);
-//    ggplot(res2, aes(x=aligner, y=value,fill=variable)) +
-//    geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
-//    coord_flip() +
-//    theme(legend.position = "top") +
-//    facet_grid(simulator~mode~species);
-//   dev.off();
-//   '''
-// }
+  shell:
+  '''
+  < !{csv} plot_simulatedDNA.R
+  '''
+}
 
 //WRAP-UP
-path = ["$baseDir/report/*"] //default: only render report
-writing = Channel.fromPath(params.manuscript ? paths + "$baseDir/manuscript/*" : paths)
+writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+
 process render {
-  tag {'report'+params.manuscript ? " & manuscript" : ""}
+  tag {'report'}
   label 'rrender'
   label 'report'
   stageInMode 'copy'
@@ -943,6 +857,8 @@ process render {
     file('*') from plots.flatten().toList()
     file('*') from plotsRealRNA.flatten().toList()
     file('*') from writing.collect()
+    file('*') from collatedDetailsPlotsSimulatedDNA.collect()
+    file('*') from collatedSummariesPlotsSimulatedDNA.collect()
 
   output:
     file '*'
@@ -958,18 +874,5 @@ process render {
   rmarkdown::render(Sys.glob("*.Rmd"))
   """
 }
-
-
-
-// // workflow.onComplete {
-// //     // any workflow property can be used here
-// //     println "Pipeline complete"
-// //     println "Command line: $workflow.commandLine"
-// //     println(workflow)
-// // }
-
-// // workflow.onError {
-// //     println "Oops .. something when wrong"
-// // }
 
 

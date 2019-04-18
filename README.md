@@ -1,12 +1,21 @@
-[![Latest GitHub tag](https://img.shields.io/github/tag/csiro-crop-informatics/biokanga-manuscript.svg?label=latest%20release&logo=github&style=flat-square)](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases)
+[![Latest GitHub release](https://img.shields.io/github/release/csiro-crop-informatics/biokanga-manuscript.svg?style=flat-square&logo=github&label=latest%20release)](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases)
+![GitHub commits since latest release](https://img.shields.io/github/commits-since/csiro-crop-informatics/biokanga-manuscript/latest.svg?style=flat-square&logo=github)
+[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.02.0--edge-orange.svg)](https://www.nextflow.io/)
+
 
 # Table of Contents <!-- omit in toc -->
 - [Experiments](#experiments)
-  - [Quick test run](#quick-test-run)
-    - [Running nextflow with singularity](#running-nextflow-with-singularity)
+  - [Simulated RNA-Seq](#simulated-rna-seq)
+    - [Quick test run](#quick-test-run)
+  - [Real RNA-Seq](#real-rna-seq)
+  - [Simulated DNA-Seq](#simulated-dna-seq)
+  - [Real DNA-Seq](#real-dna-seq)
+  - [Execution environments](#execution-environments)
     - [Running nextflow with docker](#running-nextflow-with-docker)
+    - [Running nextflow with singularity](#running-nextflow-with-singularity)
     - [Running on AWS batch](#running-on-aws-batch)
   - [Full pipeline run](#full-pipeline-run)
+    - [Capturing results and run metadata](#capturing-results-and-run-metadata)
   - [Experimental pipeline overview](#experimental-pipeline-overview)
   - [Execution environment](#execution-environment)
 - [Adding another aligner](#adding-another-aligner)
@@ -29,6 +38,12 @@
 
 # Experiments
 
+The pipeline consists of several, partly dependent paths
+which facilitate the evaluation of aligners using
+either DNA-  or RNA-Seq data, either real or simulated.
+
+
+## Simulated RNA-Seq
 On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.5) consumed 56 CPU-days.
 See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
 and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
@@ -36,26 +51,45 @@ This run included each of the input datasets in three replicates. Given the expe
 replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`,
 thus reducing the CPU-time to under 8 days (based on a run of [version 0.6](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.6)).
 
-## Quick test run
+### Quick test run
 
 For a quick test run use the `--debug` flag.
 In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
 Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`. By default, all pre-defined aligners are executed.
-To only specify a single aligner you can e.g. use `--aligners biokanga` or for several aligners e.g. `--aligners 'biokanga|dart|hisat2'`.
+To only specify a single aligner you can e.g. use `--aligners biokanga` or for several aligners e.g. `--alignersRNA 'biokanga|dart|hisat2'`.
 
-Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including datsets with retained adapters.
+Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including datasets with retained adapters.
 
 
-### Running nextflow with singularity
 
-```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug --aligners 'biokanga|hisat2|star'
-```
+## Real RNA-Seq
+
+TODO
+
+## Simulated DNA-Seq
+
+TODO
+
+
+## Real DNA-Seq
+
+TODO
+
+
+## Execution environments
+
+We provide several execution profiles, as before, you may use the `--debug` to test the pipeline and the execution environment before a full run.
 
 ### Running nextflow with docker
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity --debug --aligners 'biokanga|hisat2|star'
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
+```
+
+### Running nextflow with singularity
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
 ```
 
 ### Running on AWS batch
@@ -64,8 +98,9 @@ If you are new to AWS batch and/or nextflow, follow [this blog post](https://ant
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript \
-  -profile awsbatch --debug --aligners 'biokanga|hisat2|star' \
-  -work-dir s3://your_s3_bucket/work --outdir s3://your_s3_bucket/results
+  -profile awsbatch \
+  -work-dir s3://your_s3_bucket/work \
+  --outdir s3://your_s3_bucket/results
 ```
 
 after replacing `your_s3_bucket` with a bucket you have created on S3.
@@ -76,7 +111,7 @@ after replacing `your_s3_bucket` with a bucket you have created on S3.
 ## Full pipeline run
 
 There are a few ways to execute the pipeline, all require Nextflow and either Docker or Singularity.
-See [nextflow.config](nextflow.config#L22-L47) for available execution profiles, e.g. for local execution this could be
+See [nextflow.config](nextflow.config#L46-L84) for available execution profiles, e.g. for local execution this could be
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
@@ -92,26 +127,42 @@ Note that `singularitymodule` profile is used to ensure singularity is available
 This may need to be adapted for your system.
 In addition Singularity must also be available on the node where you execute the pipeline.
 
-To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](#running-on-aws-batch) but drop the `--debug` flag.
+To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](#running-on-aws-batch).
+
+### Capturing results and run metadata
+
+Each pipeline run generates a number of files including
+* results in the form of report, figures, tables etc.
+* run metadata reflecting information about the pipeline version, software and compute environment etc.
+
+These can be simply collected from the output directories but for full traceability of the results, the following procedure is preferable:
+1. Select a tagged revision or add a tag (adhering to the usual semantic versioning approach)
+2. Generate a [Git Hub access token](https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line)
+   which will allow the pipeline to create releases in this or a forked repository,
+   when creating the token it suffices to select only the following scope:
+   > `public_repo`   Access public repositories
+3. Make the access token accessible as an environmental variable e.g. `GH_TOKEN='your-token-goes-here'`
+4. Run the pipeline from the remote repository, specifying
+    - the required revision  e.g. `-revision v0.8.3`
+    - the `--release` flag
+
+On successful completion of the pipeline a series of API calls will be made to
+
+1. create a new release
+2. upload results and metadata files as artefacts for that release
+3. finalize the release
+
+The last of this calls will trigger minting of a DOI for that release if Zenodo integration is configured and enabled for the repository.
 
 ## Experimental pipeline overview
 
 ![figures/dag.png](figures/dag.png)
 
-For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools. This earlier workflow also excludes evaluation based on real RNA-Seq data.
+<!-- For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools. This earlier workflow also excludes evaluation based on real RNA-Seq data. -->
 
 ## Execution environment
 
-All experiments reported in the manuscript were carried out on a SLURM cluster using:
-
-* Java
-```
-openjdk version "1.8.0_171"
-OpenJDK Runtime Environment (IcedTea 3.8.0) (build 1.8.0_171-b11 suse-27.19.1-x86_64)
-OpenJDK 64-Bit Server VM (build 25.171-b11, mixed mode)
-```
-* Singularity version 2.5.0 -> 2.6.0
-* Nextflow version 18.10.1.5003
+Execution environment is captured in `runmeta.json`.
 
 # Adding another aligner
 
@@ -126,7 +177,7 @@ After you have cloned this repository:
 
 ## Example
 
-Let's be more specific and follow an example. We will add [bowtie2](https://github.com/BenLangmead/bowtie2/releases/tag/v2.3.4.1).
+Let's be more specific and follow an example. We will add [bowtie2](https://github.com/BenLangmead/bowtie2/releases/tag/v2.3.5).
 
 ### Add indexing template
 
@@ -177,12 +228,13 @@ TODO
 ### Specify container
 
 1. Upload a relevant container image to docker hub or [locate an existing one](https://hub.docker.com/search/?isAutomated=0&isOfficial=0&page=1&pullCount=0&q=bowtie2&starCount=0). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
+Alternatively, follow our procedure below for [defining per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
 
 2. Insert container specification
 
 ```
 withLabel: bowtie2 {
-  container = 'comics/bowtie2:2.3.4.1'
+  quay.io/biocontainers/bowtie2:2.3.5--py27he860b03_0
 }
 ```
 within the `process {   }` block in [conf/containers.config](conf/containers.config).
@@ -306,12 +358,12 @@ Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`
 RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice.
 
 ## Rendering
-The manuscript will be rendered if
-1. `--manuscript` option is used
-2. The pipeline is executed while `manuscript` branch is checked out, either
+The manuscript will be rendered the pipeline is executed while `manuscript` branch is checked out, either
   * locally
   or
-  * via `nextflow run -revision manuscript`.
+  * by specifying `-revision manuscript` at run-time
+
+Appropriate revision of the master branch should first be mnerged into the `manuscript` branch.
 
 The manuscript can be rendered outside the pipeline in a fashion analogous to how this can be done for the [report](#rendering-outside-the-pipeline),
 just replace any use of `report` by `manuscript`.
