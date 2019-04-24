@@ -104,32 +104,32 @@ as we outline in the [next section](#Building-and-exposing-containers).
 A single container image capturing the software environment for a workflow should suffice in most cases.
 For some workflows however, it may be preferable to have a separate container image for each tool.
 In the case of our workflow, this enables easy addition and benchmarking of a new tool
-while the rest of the workflow remains unchanged, with the exception of some downstream processes
+while the rest of the workflow remains unaffected, with the exception of some downstream processes
 which aggregate data produced by all of the evaluated tools.
+Such processes need to be re run regardless.
 Having a separate container per tool or perhaps per branch of the workflow may also be advantageous
 for computationally intensive or long-running workflows as this approach limits the need to
-re-run parts of the pipeline due to global software environment being modified.
+re-run the  entire pipeline or its substantial parts due to global software environment being modified.
 
-Meaningful benchmarking requires precise traceability of each evaluated tool
-e.g. by stating the version of the tool being used.
+Meaningful benchmarking requires precise traceability of each evaluated software tool.
+The minimum is the stating of the version of the tool being used and perhaps providing
+the appropriate binary executable.
 More broadly, reproducibility of computational analyses demands that we not only capture
 the version of a given tool but the entire software environment.
 To address this and the additional goals of reusability and extensibility,
-we also require robust procedures for building, distributing
-and using the containers.
-
+we propose procedures for building, distributing and using the containers.
 
 For a handful of benchmarked tools we rely on containers from BioContainers collection.
 For most of the remaining tools however, we provide a dedicated Docker Hub repositories.
 Each repository is configured to automatically build a version of the container
-for a tool, given an appropriate trigger in our workflow GitHub repository.
+for a tool, given an appropriate trigger in our workflow's GitHub repository.
 
 Additional docker container images are provided with auxiliary tools required for benchmarking,
 including, but not limited to the RNA-seq benchmarking toolkit [@Baruzzo2016] (modified in https://github.com/rsuchecki/biokanga_benchmark)
-and the DNA-seq benchmarking toolkit [@Brinda2015] (automated).
+and the DNA-seq benchmarking toolkit [@Brinda2015] (builds automated as for benchmarked tools).
 
 The procedure for adding or updating individual container images
-involves creating a dedicated tool/version (e.g. `samtools/1.9`) branch in the main repository.
+involves creating a dedicated `tool/version` branch in the main repository, for example `samtools/1.9`.
 Changes committed to that branch are captured in a container image in the associated Docker Hub repository.
 This is done through an automated build triggered by code being push to that branch on GitHub.
 The generated container image is tagged with the version specified in the git branch name.
@@ -143,6 +143,7 @@ We provide automation code (a "`post_push` hook") which ensures that in addition
 additional tags based on git commit SHA hash are generated.
 These effectively permanent tags are then used when referencing a container in workflow configuration files.
 For example, rather than pointing to `1.9` tag in our `samtools` Docker Hub repository we point to `1.9_ea5d3c82fb85c174dce08a4c736ed44c1e6bb7eb`.
+The permanence of such created container images relies on the procedure being followed.
 
 Docker v2 specification provides another (partial?) solution of addressing the problem
 of container image permanence (?) via [content digests](https://docs.docker.com/registry/spec/api/#content-digests).
@@ -152,14 +153,14 @@ a digest is returned when an image is pushed to a repository.
 The digest can later be used to pull this exact version of the container image.
 We use this functionality to reference the BioContainer images.
 For example
-`quay.io/biocontainers/subread@sha256:a27dcc4f335d8f98346a9b9d886230de6bba2bf7518372c2022c22ab225c09ff`
-
-Specification of container images is clearer if a tag containing the version number is used
+`quay.io/biocontainers/subread@sha256:a27dcc4f335d8f98346a9b9d886230de6bba2bf7518372c2022c22ab225c09ff`.
+Our container images hosted on DockerHub could be accessed in the same fashion.
+However, specification of a container image is clearer if a tag containing the version number is used,
 so the `repository:tag@digest` is optimal as in addition to having an explicit version tag,
 the image is only pulled if the specified digest matches the one in the registry.
 Our workflow is compatible with this syntax, but Singularity currently (as of version 3.1.1) does not support it.
 Since we already have a mechanism for ensuring permanence of container images we opt for
-not applying this approach to maintain the portability of the workflow - unlike DOcker, Singularity is commonly available on HPC clusters.
+not applying this approach to maintain the portability of the workflow - unlike Docker, Singularity is commonly available on HPC clusters.
 
 
 
