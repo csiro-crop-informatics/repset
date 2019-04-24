@@ -24,6 +24,7 @@ knitr::opts_chunk$set(
 )
 ```
 
+
 # ideas/stubs
 - good enough practices paper
 - Sandve GK, Nekrutenko A, Taylor J, Hovig E. Ten Simple Rules for Reproducible Computational Research. PLoS Comput Biol. 2013;9(10). pmid:24204232
@@ -161,6 +162,30 @@ the image is only pulled if the specified digest matches the one in the registry
 Our workflow is compatible with this syntax, but Singularity currently (as of version 3.1.1) does not support it.
 Since we already have a mechanism for ensuring permanence of container images we opt for
 not applying this approach to maintain the portability of the workflow - unlike Docker, Singularity is commonly available on HPC clusters.
+
+We maintain support of Singularity for portability of our workflow
+but currently not for reproducibility since we only specify Docker containers
+and each needs to be converted to a Singularity container.
+This conversion is supposedly not fully consistent,
+although this is apparently due to potential change to the layers in the input Docker container image.
+Since we ensure the stability of those container images, this should not be an issue.
+If we were to use Singularity directly for reproducibility of our results
+we would opt for providing and maintaining Singularity container images
+on Singularity Hub the means of insuring the stability of the containers used.
+We provide an example of how this can be achieved
+in [https://github.com/rsuchecki/miniconda3](https://github.com/rsuchecki/miniconda3).
+Briefly, for a given software tool a repository needs to be created on Singularity Hub
+and linked to a GitHub repository containing the recipe for creating the container image.
+With the already available Docker container image, it suffices
+for the corresponding Singularity recipe to simply point
+to the Docker container image as its source.
+Building of the container image is triggered by changes made to the GitHub repository
+and a fixed version of the container image remains available from Singularity Hub.
+Functionality and flexibility of Singularity Hub is currently somewhat limited
+as compared to Docker registries which makes it less suited for the type of work
+we present here. For a project relying on fewer containers it could already be
+an equally good and potentially a superior solution, given for example,
+the ability to easily freeze a container image build/tag, to ensure it will not overwritten.
 
 
 
