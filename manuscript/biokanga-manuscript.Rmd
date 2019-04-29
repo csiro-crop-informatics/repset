@@ -148,25 +148,9 @@ These effectively permanent tags are then used when referencing a container in w
 For example, rather than pointing to `1.9` tag in our `samtools` Docker Hub repository we point to `1.9_ea5d3c82fb85c174dce08a4c736ed44c1e6bb7eb`.
 The permanence of such created container images relies on the procedure being followed.
 
-Docker v2 specification provides another solution of addressing the problem
-of container image identity and persistence via [content digests](https://docs.docker.com/registry/spec/api/#content-digests).
-A digest contains a SHA-256 collision-resistant hash of the content of an image.
-Implemented by Docker registries such as Docker Hub or Quay,
-a digest is returned when an image is pushed to a repository.
-The digest can later be used to pull this exact version of the container image.
-We use this functionality to reference the BioContainer images.
-For example
-`quay.io/biocontainers/subread@sha256:a27dcc4f335d8f98346a9b9d886230de6bba2bf7518372c2022c22ab225c09ff`.
-Our container images hosted on DockerHub can be accessed in the same fashion.
-However, specification of a container image is clearer if a tag containing the version number is used,
-so the `repository:tag@digest` is optimal as in addition to having an explicit version tag,
-the image is only pulled if the specified digest matches the one in the registry.
-Our workflow is compatible with this syntax, but Singularity currently (as of version 3.1.1) does not support it.
-Since we already have a mechanism for ensuring permanence of container images we opt for
-not applying this approach to maintain the portability of the workflow - unlike Docker, Singularity is commonly available on HPC clusters.
 
 Our workflow can be run with either Docker or Singularity
-with the later relying on conversion of Docker container images to its ow format.
+with the later relying on conversion of Docker container images to its own format.
 This conversion is said not to be fully reproducible,
 but this is apparently due to potential for the layers underlying a Docker container image being changed.
 Since we ensure the stability of our container images, this should not be an issue.
@@ -191,6 +175,33 @@ Furthermore, as commercial cloud providers integrate Singularity into their serv
 ([https://azure.microsoft.com/en-au/blog/azure-container-registry-now-supports-singularity-image-format-containers/](https://azure.microsoft.com/en-au/blog/azure-container-registry-now-supports-singularity-image-format-containers/))
 the benefits of this container format designed for reproducibility [@Kurtzer2017]
 may outweigh its current practical limitations.
+
+Docker v2 specification provides another solution of addressing the problem
+of container image identity and to en extent its persistence
+via [content digests](https://docs.docker.com/registry/spec/api/#content-digests).
+A digest contains a SHA-256 collision-resistant hash of the content of an image.
+Implemented by Docker registries such as Docker Hub or Quay,
+a digest is returned when an image is pushed to a repository.
+The digest can later be used to pull this exact version of the container image.
+We use this functionality to reference the BioContainer images.
+For example
+`quay.io/biocontainers/subread@sha256:a27dcc4f335d8f98346a9b9d886230de6bba2bf7518372c2022c22ab225c09ff`.
+Our container images hosted on DockerHub can be accessed in the same fashion.
+However, specification of a container image is clearer if a tag containing the version number is used,
+so syntax which includes both the version tag and the digest hash (`repository:tag@digest`)
+is optimal as the image is only pulled if the specified digest hash matches the one in the registry.
+Our workflow is compatible with this syntax, but Singularity currently (as of version 3.1.1) does not support it.
+Since we already have a mechanism for ensuring permanence of container images we opt for
+not applying this approach to maintain the portability of the workflow - unlike Docker,
+Singularity is commonly available on HPC clusters.
+One limitation of Docker Hub is that digests are not easily accessible
+without either authentication or simply pulling an image container and re-computing its digest.
+This can be circumvented, at the some cost to readability, by embedding the digest hash
+in another tag pushed to Docker Hub.
+
+
+
+
 
 
 
