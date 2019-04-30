@@ -1,0 +1,1 @@
+FROM quay.io/biocontainers/subread:1.6.4--h84994c4_1@sha256:a27dcc4f335d8f98346a9b9d886230de6bba2bf7518372c2022c22ab225c09ff
