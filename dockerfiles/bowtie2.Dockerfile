@@ -1,0 +1,1 @@
+FROM quay.io/biocontainers/bowtie2:2.3.5--py27he860b03_0@sha256:c28992b35b89d353beefdaaf1ee216432524ca5a3276284258594190f33e145b
