@@ -250,15 +250,11 @@ For each tool we created a docker hub/cloud repository and configured automated 
 
 ## Setting-up an automated build
 
-Builds can be triggered from branches and tags.
+Builds can be triggered from branches ~~and tags~~.
 
-This approach relies on creating a branch for a specific version of a tool.
-The same can be achieved by simply tagging the relevant commit, but this may
-result in proliferation of tags while branches can be merged into master and deleted
-while preserving the history.
-If you'd rather use tags, in (2) change the 'Source type' below to 'Tag'
-and later tag an appropriate commit using `docker/tool/version` pattern
-rather than committing to a dedicated branch.
+The following approach relies on creating a branch for a specific version of a tool.
+~~The same can be achieved by simply tagging the relevant commit, but this may result in proliferation of tags while branches can be merged into master and deleted while preserving the history.~~
+~~If you'd rather use tags, in (2) change the 'Source type' below to 'Tag' and later tag an appropriate commit using `docker/tool/version` pattern rather than committing to a dedicated branch.~~ (tags can be problematic - if tag is based on version of a tool and container needs to be updated, tags may have to be removed/re-added)
 
 1. Link a [Docker Cloud](https://cloud.docker.com/) repo with this GitHub repo (go to Builds -> Configure Automated Builds)
 2. Add an automated build rule (replace `tool` with the name of the tool).
@@ -287,7 +283,8 @@ Add or modify `dockerfiles/${tool}.Dockerfile` as required.
 Commit and push to trigger an automated build
 
 ```
-git commit dockerfiles/${tool}.Dockerfile
+git add dockerfiles/${tool}.Dockerfile
+git commit
 git push --set-upstream origin docker/${tool}/${version}
 ```
 
