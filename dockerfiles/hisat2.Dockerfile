@@ -1,14 +1,1 @@
-FROM ubuntu:16.04
-LABEL maintainer="Rad Suchecki <rad.suchecki@csiro.au>"
-SHELL ["/bin/bash", "-c"]
-
-RUN apt-get update && apt-get install -y wget unzip
-
-# Install hisat2
-ARG HISAT_VERSION=2.1.0
-RUN wget ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat2/downloads/hisat2-${HISAT_VERSION}-Linux_x86_64.zip \
-  && unzip hisat2-${HISAT_VERSION}-Linux_x86_64.zip \
-  && rm hisat2-${HISAT_VERSION}-Linux_x86_64.zip
-RUN cp -p hisat2-${HISAT_VERSION}/hisat2 hisat2-${HISAT_VERSION}/hisat2-* /usr/bin
-
-RUN apt-get install -y python
+FROM quay.io/biocontainers/hisat2:2.1.0--py27h6bb024c_3@sha256:973042b0b6c5b86a3ad0f24036be5a90203f55df85f0eece6190903f96e138bf
