@@ -5,4 +5,4 @@ dart -i ${idxmeta.target} \
   -f2 ${r2} \
   -t ${task.cpus} \
   -intron 100000 \
-  > sam
+  -o sam
