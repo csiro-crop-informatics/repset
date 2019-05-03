@@ -539,14 +539,15 @@ process samStatsRealRNA {
   //   | sed 's/^/${meta.tool}/g'
   // """
   meta = inmeta.clone()
-  keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
+  //keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
+  keyValue = meta.inspect().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE').replaceAll('\'','\"')
   shell:
     '''
     echo "aligned,paired" > csv
     samtools view -hF 2304 !{sam} | samtools flagstat - \
       | sed -n '5p;9p'  | cut -f1 -d' ' | paste - - | tr '\t' ',' >> csv
     for KV in !{keyValue}; do
-      sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" csv
+      sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,\\"${KV#*:}\\"/" csv
     done
     '''
 }

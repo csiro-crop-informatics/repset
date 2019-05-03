@@ -7,6 +7,6 @@ bowtie2 \
   -2 ${r2} \
   -f \
   --threads  ${task.cpus} \
-  --local \
+  ${ALIGN_PARAMS} \
   > sam
 
