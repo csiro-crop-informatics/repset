@@ -1,0 +1,8 @@
+---
+alignersParamsRNA:
+  biokanga:
+    alternative: "--mode 0 --pemode 3 --pairmaxlen 100000 --substitutions 2 --minchimeric 50"
+    another: "--mode 0 --pemode 3 --pairmaxlen 100000 --substitutions 2 --minchimeric 75"
+  bbmap:
+    custom: "maxindel=200000 ambiguous=best intronlen=20 local=f"
+

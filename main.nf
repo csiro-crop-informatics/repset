@@ -3,6 +3,27 @@
 //For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
 
+/*
+ * Add to or overwrite map content recursively
+ */
+Map.metaClass.addNested = { Map rhs ->
+    def lhs = delegate
+    rhs.each { k, v -> lhs[k] = lhs[k] in Map ? lhs[k].addNested(v) : v }
+    lhs
+}
+
+//Extend or overwrite params
+// alignersParamsDNA = params.defaults.alignersParamsDNA.addNested(params.alignersParamsDNA)
+
+alignersParamsListRNA = []
+params.defaults.alignersParamsRNA.addNested(params.alignersParamsRNA).each { tool,v ->
+    v.each { paramslabel, ALIGN_PARAMS ->
+      alignersParamsListRNA << [tool: tool, paramslabel: paramslabel,ALIGN_PARAMS:ALIGN_PARAMS  ]
+    }
+}
+
+Channel.from(alignersParamsListRNA).into {alignersParams4realRNA; alignersParams4SimulatedRNA; alignersParams4realDNA}
+
 
 //RETURNS DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
@@ -469,22 +490,24 @@ process fromSRAtoFastaRealRNA {
 process alignReadsRealRNA {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
-  tag("${idxmeta} << ${readsmeta}")
+  tag("${idxmeta} << ${readsmeta} @ ${paramsmeta.subMap(['paramslabel'])}" )
 
   input:
     // set file(r1), file(r2) from sraFASTA
     // val(readsmeta) from sraFASTA
     // set val(readsmeta), file(r1), file(r2) from sraFASTA
-    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2) from indices4realRNA.combine(sraFASTA)
+    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), val(paramsmeta) from indices4realRNA.combine(sraFASTA).combine(alignersParams4realRNA)
 
   output:
     set val(meta), file('*sam'), file('.command.trace') into alignedRealRNA
 
   when:
-    idxmeta.seqtype == 'RNA'
+    idxmeta.seqtype == 'RNA' && paramsmeta.tool == idxmeta.tool
 
   script:
-    meta = idxmeta.clone() + readsmeta.clone()
+    meta = idxmeta.clone() + readsmeta.clone() + paramsmeta.clone()
+    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
+    // ALIGN_PARAMS = alignersParamsRNA.(idxmeta.tool).default
     template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
@@ -492,7 +515,7 @@ process samStatsRealRNA {
   echo true
   executor 'local'
   label 'samtools'
-  tag("${inmeta}")
+  tag("${inmeta.subMap(['tool','target','paramslabel'])}")
 
   input:
     set val(inmeta), file(sam) from alignedRealRNA.map { inmeta, sam, trace ->
@@ -651,11 +674,9 @@ process alignSimulatedReadsDNA {
   output:
     set val(alignmeta), file('out.?am') into alignedSimulatedDNA
 
-  when:
+  when: //only align DNA reads to the corresponding genome
     idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version
 
-  // when: //only align reads to the corresponding genome - TODO UPDATE idxmeta to hold this info!
-  //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
   script:
     alignmeta = idxmeta.clone() + simmeta.clone()
     // if(simmeta.mode == 'PE') {
