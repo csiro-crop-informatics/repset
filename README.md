@@ -4,7 +4,9 @@
 
 
 # Table of Contents <!-- omit in toc -->
+- [Dependencies](#dependencies)
 - [Experiments](#experiments)
+  - [Quick start](#quick-start)
   - [Simulated RNA-Seq](#simulated-rna-seq)
     - [Quick test run](#quick-test-run)
   - [Real RNA-Seq](#real-rna-seq)
@@ -36,11 +38,45 @@
   - [Rendering](#rendering)
   - [Bibliography](#bibliography)
 
+# Dependencies
+
+* Nextflow [![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.04.0-orange.svg)](https://www.nextflow.io/)
+* and
+  * either Singularity [![Singularity](https://img.shields.io/badge/Singularity-%E2%89%A53.1.1-orange.svg)](https://www.sylabs.io/singularity/)
+   * or Docker
+
 # Experiments
 
 The pipeline consists of several, partly dependent paths
 which facilitate the evaluation of aligners using
 either DNA-  or RNA-Seq data, either real or simulated.
+The paths can be executed separately or in a single run.
+When running separately or re-running the pipeline
+the `-resume` flag ensures that previously computed
+results (or partial results) are reused.
+
+## Quick start
+
+Use the `--debug` flag to run the whole pipeline or part of it with reduced input data.
+
+There are several ways to execute the pipeline, each requires Nextflow and either Docker or Singularity.
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug
+```
+
+or on a SLURM cluster
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule --debug
+```
+
+Note:
+1. `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module.
+This may need to be adapted for your system in [nextflow.config](https://github.com/csiro-crop-informatics/biokanga-manuscript/blob/6d0be3f77603f67d13ceeee18de83c517e39db96/nextflow.config#L82).
+2. Singularity must also be available on the node where you execute the pipeline, e.g. by running `module load singularity/3.1.1` prior to running the pipeline.
+3.
+
 
 
 ## Simulated RNA-Seq
