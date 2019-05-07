@@ -21,10 +21,13 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna}/*_{index,ali
 // alignersRNA.println { "$it RNA" }
 alignersDNA.join(alignersRNA , remainder: true)//.println { it }
   .map { [tool: it[0], dna: it[1]!=null, rna: it[2]!=null] }
-  // .tap ( aligners )
-  // .map
-  .set { aligners }
+  .tap ( aligners )
+  .map { it[0] }
+  .toList()
+  .set { alignerNames }
 
+println alignerNames
+System.exit 0
 
 // aligners.combine(referencesForAlignersDNA).println { it }
 
