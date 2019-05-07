@@ -1,3 +1,1 @@
-FROM rsuchecki/miniconda3:4.5.12_d42c6c234cbabb3737a145df6a52230cf2841923
-
-RUN conda install --override-channels -c conda-forge -c bioconda -c default rnftools
+FROM quay.io/biocontainers/rnftools:0.3.1.3--py36_0@sha256:8b588055977bbf83116f394d755c088c885b37b2ccce0b81d50b2d87ba0d2f29
