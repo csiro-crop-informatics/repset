@@ -3,33 +3,33 @@
 //For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
 
+//make sure empty default param set available for every templated aligner
+alignersParamsList = []
 
 //RETURNS DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .filter{ params.alignersDNA == 'all' || it[0].matches(params.alignersDNA) }
-  .map { [it[0], "DNA"] }
+  .map {
+    params.defaults.alignersParams.DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
+    params.defaults.alignersParams.DNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
+    [it[0], "DNA"]
+  }
   .set {alignersDNA}
 
 //RETURNS RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .filter{ params.alignersRNA == 'all' || it[0].matches(params.alignersRNA) }
-  .map { [it[0], "RNA"] }
+  .map {
+    params.defaults.alignersParams.RNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
+    params.defaults.alignersParams.RNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
+    [it[0], "RNA"]
+  }
   .set { alignersRNA }
 
 //DNA and RNA aligners in one channel as single indexing process defined
-// alignersDNA.println { "$it DNA" }
-// alignersRNA.println { "$it RNA" }
-alignersDNA.join(alignersRNA , remainder: true)//.println { it }
+alignersDNA.join(alignersRNA , remainder: true)
   .map { [tool: it[0], dna: it[1]!=null, rna: it[2]!=null] }
-  .tap ( aligners )
-  .map { it[0] }
-  .toList()
-  .set { alignerNames }
-
-println alignerNames
-System.exit 0
-
-// aligners.combine(referencesForAlignersDNA).println { it }
+  .set { aligners }
 
 /*
  * Add to or overwrite map content recursively
@@ -40,19 +40,15 @@ Map.metaClass.addNested = { Map rhs ->
     lhs
 }
 
-//Extend or overwrite params
-// alignersParamsDNA = params.defaults.alignersParamsDNA.addNested(params.alignersParamsDNA)
-
-//Combine default and user parmas maps, then transform into a list into a channel
-alignersParamsListRNA = []
-params.defaults.alignersParamsRNA.addNested(params.alignersParamsRNA).each { tool, paramsets ->
-  paramsets.each { paramslabel, ALIGN_PARAMS ->
-    alignersParamsListRNA << [tool: tool, paramslabel: paramslabel, ALIGN_PARAMS:ALIGN_PARAMS]
+//Combine default and user parmas maps, then transform into a list and read into a channel to be consumed by alignment process(es)
+params.defaults.alignersParams.addNested(params.alignersParams).each { seqtype, rnaOrDnaParams ->
+  rnaOrDnaParams.each { tool, paramsets ->
+    paramsets.each { paramslabel, ALIGN_PARAMS ->
+      alignersParamsList << [tool: tool, paramslabel: paramslabel, seqtype: seqtype, ALIGN_PARAMS:ALIGN_PARAMS]
+    }
   }
 }
-Channel.from(alignersParamsListRNA).into {alignersParams4realRNA; alignersParams4SimulatedRNA; alignersParams4realDNA}
-
-
+Channel.from(alignersParamsList).into {alignersParams4realRNA; alignersParams4SimulatedRNA; alignersParams4realDNA}
 
 //Pre-computed BEERS datasets (RNA)
 datasetsSimulatedRNA = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
@@ -280,7 +276,6 @@ process prepareDatasetsRNA {
     """
   }
 }
-
 
 process addAdaptersRNA {
   tag("${meta.dataset}")
@@ -512,7 +507,7 @@ process alignReadsRealRNA {
     set val(meta), file('*sam'), file('.command.trace') into alignedRealRNA
 
   when:
-    idxmeta.seqtype == 'RNA' && paramsmeta.tool == idxmeta.tool
+    idxmeta.seqtype == 'RNA' && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'RNA'
 
   script:
     meta = idxmeta.clone() + readsmeta.clone() + paramsmeta.clone()
