@@ -3,27 +3,6 @@
 //For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
 
-/*
- * Add to or overwrite map content recursively
- */
-Map.metaClass.addNested = { Map rhs ->
-    def lhs = delegate
-    rhs.each { k, v -> lhs[k] = lhs[k] in Map ? lhs[k].addNested(v) : v }
-    lhs
-}
-
-//Extend or overwrite params
-// alignersParamsDNA = params.defaults.alignersParamsDNA.addNested(params.alignersParamsDNA)
-
-alignersParamsListRNA = []
-params.defaults.alignersParamsRNA.addNested(params.alignersParamsRNA).each { tool,v ->
-    v.each { paramslabel, ALIGN_PARAMS ->
-      alignersParamsListRNA << [tool: tool, paramslabel: paramslabel,ALIGN_PARAMS:ALIGN_PARAMS  ]
-    }
-}
-
-Channel.from(alignersParamsListRNA).into {alignersParams4realRNA; alignersParams4SimulatedRNA; alignersParams4realDNA}
-
 
 //RETURNS DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
@@ -36,6 +15,41 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna}/*_{index,ali
   .filter{ params.alignersRNA == 'all' || it[0].matches(params.alignersRNA) }
   .map { [it[0], "RNA"] }
   .set { alignersRNA }
+
+//DNA and RNA aligners in one channel as single indexing process defined
+// alignersDNA.println { "$it DNA" }
+// alignersRNA.println { "$it RNA" }
+alignersDNA.join(alignersRNA , remainder: true)//.println { it }
+  .map { [tool: it[0], dna: it[1]!=null, rna: it[2]!=null] }
+  // .tap ( aligners )
+  // .map
+  .set { aligners }
+
+
+// aligners.combine(referencesForAlignersDNA).println { it }
+
+/*
+ * Add to or overwrite map content recursively
+ */
+Map.metaClass.addNested = { Map rhs ->
+    def lhs = delegate
+    rhs.each { k, v -> lhs[k] = lhs[k] in Map ? lhs[k].addNested(v) : v }
+    lhs
+}
+
+//Extend or overwrite params
+// alignersParamsDNA = params.defaults.alignersParamsDNA.addNested(params.alignersParamsDNA)
+
+//Combine default and user parmas maps, then transform into a list into a channel
+alignersParamsListRNA = []
+params.defaults.alignersParamsRNA.addNested(params.alignersParamsRNA).each { tool, paramsets ->
+  paramsets.each { paramslabel, ALIGN_PARAMS ->
+    alignersParamsListRNA << [tool: tool, paramslabel: paramslabel, ALIGN_PARAMS:ALIGN_PARAMS]
+  }
+}
+Channel.from(alignersParamsListRNA).into {alignersParams4realRNA; alignersParams4SimulatedRNA; alignersParams4realDNA}
+
+
 
 //Pre-computed BEERS datasets (RNA)
 datasetsSimulatedRNA = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
@@ -205,14 +219,7 @@ process fetchReferenceForDNAAlignment {
 }
 
 
-//DNA and RNA aligners in one channel as single indexing process defined
-// alignersDNA.println { "$it DNA" }
-// alignersRNA.println { "$it RNA" }
-alignersDNA.join(alignersRNA , remainder: true)//.println { it }
-  .map { [tool: it[0], dna: it[1]!=null, rna: it[2]!=null] }
-  .set { aligners }
 
-// aligners.combine(referencesForAlignersDNA).println { it }
 
 // // // referencesForAlignersDNA.println { it }
 // // // aligners.println { it }

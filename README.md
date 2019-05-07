@@ -23,6 +23,7 @@
     - [Add indexing template](#add-indexing-template)
     - [Add RNA alignment template](#add-rna-alignment-template)
     - [Add DNA alignment template](#add-dna-alignment-template)
+    - [Add additional alignment parameters](#add-additional-alignment-parameters)
     - [Specify container](#specify-container)
 - [Per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
   - [Setting-up an automated build](#setting-up-an-automated-build)
@@ -172,7 +173,8 @@ After you have cloned this repository:
 
 1. Add an indexing template to [`templates/index`](templates/index) subdirectory.
 2. Add an alignment template(s) to [`templates/rna`](templates/rna) and/or [`templates/dna`](templates/dna) subdirectories.
-3. Update [conf/containers.config](conf/containers.config) by specifying a docker hub repository from which an image will be pulled by the pipeline.
+3. Add one or more sets of aligner parameters to [conf/aligners.config](conf/aligners.config).
+4. Update [conf/containers.config](conf/containers.config) by specifying a docker hub repository from which an image will be pulled by the pipeline.
 
 
 ## Example
@@ -224,6 +226,10 @@ In addition we have used bowtie's `--local` flag to increase alignment rates for
 ### Add DNA alignment template
 
 TODO
+
+### Add additional alignment parameters
+
+
 
 ### Specify container
 
