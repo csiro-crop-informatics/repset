@@ -3,9 +3,6 @@
 //For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
 
-//make sure empty default param set available for every templated aligner
-alignersParamsList = []
-
 //RETURNS DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .filter{ params.alignersDNA == 'all' || it[0].matches(params.alignersDNA) }
@@ -41,6 +38,7 @@ Map.metaClass.addNested = { Map rhs ->
 }
 
 //Combine default and user parmas maps, then transform into a list and read into a channel to be consumed by alignment process(es)
+alignersParamsList = []
 params.defaults.alignersParams.addNested(params.alignersParams).each { seqtype, rnaOrDnaParams ->
   rnaOrDnaParams.each { tool, paramsets ->
     paramsets.each { paramslabel, ALIGN_PARAMS ->
@@ -48,7 +46,7 @@ params.defaults.alignersParams.addNested(params.alignersParams).each { seqtype, 
     }
   }
 }
-Channel.from(alignersParamsList).into {alignersParams4realRNA; alignersParams4SimulatedRNA; alignersParams4realDNA}
+Channel.from(alignersParamsList).into {alignersParams4realRNA; alignersParams4SimulatedRNA; alignersParams4realDNA; alignersParams4SimulatedDNA}
 
 //Pre-computed BEERS datasets (RNA)
 datasetsSimulatedRNA = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
@@ -672,20 +670,21 @@ process rnfSimReadsDNA {
 process alignSimulatedReadsDNA {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  tag("${idxmeta} << ${simmeta}")
+  tag("${idxmeta} << ${simmeta} @ ${paramsmeta.subMap(['paramslabel'])}")
 
   input:
-    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices4simulatedDNA).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
 
   output:
     set val(alignmeta), file('out.?am') into alignedSimulatedDNA
 
-  when: //only align DNA reads to the corresponding genome
-    idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version
+  when: //only align DNA reads to the corresponding genome, using the corresponding params set
+    idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'DNA'
 
   script:
-    alignmeta = idxmeta.clone() + simmeta.clone()
+    alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
     // if(simmeta.mode == 'PE') {
+    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
       template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
     // } else {
     //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
