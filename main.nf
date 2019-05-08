@@ -773,6 +773,7 @@ process collateDetailsSimulatedDNA {
 }
 
 process collateSummariesSimulatedDNA {
+  echo true
   label 'stats'
   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
@@ -823,11 +824,14 @@ process collateSummariesSimulatedDNA {
   entries.each { entry ->
     line = ""
     headersMeta.each { k ->
-      line += line == "" ? (entry.meta[k]) : (SEP+entry.meta[k])
+      val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
+      line += line == "" ? val : (SEP+val)
     }
     headersResults.each { k ->
       value = entry.results[k]
-      line += value == null ? SEP+0 : SEP+value //NOT QUITE RIGHT, ok for 'w' not for 'u'
+      line += SEP
+      // println(k + ' -> ' + value)
+      line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
     }
     outfileCSV << line+"\n"
   }
