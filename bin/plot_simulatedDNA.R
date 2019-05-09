@@ -1,17 +1,29 @@
 #!/usr/bin/env r
 
-
+library(jsonlite)
 library(ggplot2)
-library(readr)
 library(reshape2)
 
-res<-read_csv('/dev/stdin');
-res2 <- melt(res, id.vars = c("tool", "dist", "distanceDev", "mode", "nreads", "simulator", "species", "version","length"))
-head(res2)
-pdf(file="simulatedDNA_summaries.pdf", width=16, height=9);
- ggplot(res2, aes(x=tool, y=value,fill=variable)) +
- geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
- coord_flip() +
- theme(legend.position = "top") +
- facet_grid(simulator~mode~species);
-dev.off();
+res <- fromJSON("summaries.json", flatten = TRUE)
+
+res2 <- melt(res, na.rm = TRUE, id.vars = c("meta.tool",
+                              "meta.dist",
+                              "meta.distanceDev",
+                              "meta.mode",
+                              "meta.nreads",
+                              "meta.simulator",
+                              "meta.species",
+                              "meta.version",
+                              "meta.length",
+                              "meta.paramslabel",
+                              "meta.ALIGN_PARAMS",
+                              "meta.seqtype",
+                              "meta.target"))
+
+ggplot(res2, aes(x=meta.tool, y=value, fill=variable)) +
+  geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
+  coord_flip() +
+  theme(legend.position = "top") +
+  facet_grid(meta.simulator~meta.mode~meta.species)
+
+ggsave(file="simulatedDNA_summaries.pdf", width=16, height=9);

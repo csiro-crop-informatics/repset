@@ -3,18 +3,50 @@
 //For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
 
-
 //RETURNS DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .filter{ params.alignersDNA == 'all' || it[0].matches(params.alignersDNA) }
-  .map { [it[0], "DNA"] }
+  .map {
+    params.defaults.alignersParams.DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
+    params.defaults.alignersParams.DNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
+    [it[0], "DNA"]
+  }
   .set {alignersDNA}
 
 //RETURNS RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .filter{ params.alignersRNA == 'all' || it[0].matches(params.alignersRNA) }
-  .map { [it[0], "RNA"] }
+  .map {
+    params.defaults.alignersParams.RNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
+    params.defaults.alignersParams.RNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
+    [it[0], "RNA"]
+  }
   .set { alignersRNA }
+
+//DNA and RNA aligners in one channel as single indexing process defined
+alignersDNA.join(alignersRNA , remainder: true)
+  .map { [tool: it[0], dna: it[1]!=null, rna: it[2]!=null] }
+  .set { aligners }
+
+/*
+ * Add to or overwrite map content recursively
+ */
+Map.metaClass.addNested = { Map rhs ->
+    def lhs = delegate
+    rhs.each { k, v -> lhs[k] = lhs[k] in Map ? lhs[k].addNested(v) : v }
+    lhs
+}
+
+//Combine default and user parmas maps, then transform into a list and read into a channel to be consumed by alignment process(es)
+alignersParamsList = []
+params.defaults.alignersParams.addNested(params.alignersParams).each { seqtype, rnaOrDnaParams ->
+  rnaOrDnaParams.each { tool, paramsets ->
+    paramsets.each { paramslabel, ALIGN_PARAMS ->
+      alignersParamsList << [tool: tool, paramslabel: paramslabel, seqtype: seqtype, ALIGN_PARAMS:ALIGN_PARAMS]
+    }
+  }
+}
+Channel.from(alignersParamsList).into {alignersParams4realRNA; alignersParams4SimulatedRNA; alignersParams4realDNA; alignersParams4SimulatedDNA}
 
 //Pre-computed BEERS datasets (RNA)
 datasetsSimulatedRNA = Channel.from(['human_t1r1','human_t1r2','human_t1r3','human_t2r1','human_t2r2','human_t2r3','human_t3r1','human_t3r2','human_t3r3'])
@@ -184,14 +216,7 @@ process fetchReferenceForDNAAlignment {
 }
 
 
-//DNA and RNA aligners in one channel as single indexing process defined
-// alignersDNA.println { "$it DNA" }
-// alignersRNA.println { "$it RNA" }
-alignersDNA.join(alignersRNA , remainder: true)//.println { it }
-  .map { [tool: it[0], dna: it[1]!=null, rna: it[2]!=null] }
-  .set { aligners }
 
-// aligners.combine(referencesForAlignersDNA).println { it }
 
 // // // referencesForAlignersDNA.println { it }
 // // // aligners.println { it }
@@ -249,7 +274,6 @@ process prepareDatasetsRNA {
     """
   }
 }
-
 
 process addAdaptersRNA {
   tag("${meta.dataset}")
@@ -469,22 +493,24 @@ process fromSRAtoFastaRealRNA {
 process alignReadsRealRNA {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") }
-  tag("${idxmeta} << ${readsmeta}")
+  tag("${idxmeta} << ${readsmeta} @ ${paramsmeta.subMap(['paramslabel'])}" )
 
   input:
     // set file(r1), file(r2) from sraFASTA
     // val(readsmeta) from sraFASTA
     // set val(readsmeta), file(r1), file(r2) from sraFASTA
-    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2) from indices4realRNA.combine(sraFASTA)
+    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), val(paramsmeta) from indices4realRNA.combine(sraFASTA).combine(alignersParams4realRNA)
 
   output:
     set val(meta), file('*sam'), file('.command.trace') into alignedRealRNA
 
   when:
-    idxmeta.seqtype == 'RNA'
+    idxmeta.seqtype == 'RNA' && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'RNA'
 
   script:
-    meta = idxmeta.clone() + readsmeta.clone()
+    meta = idxmeta.clone() + readsmeta.clone() + paramsmeta.clone()
+    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
+    // ALIGN_PARAMS = alignersParamsRNA.(idxmeta.tool).default
     template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
@@ -492,7 +518,7 @@ process samStatsRealRNA {
   echo true
   executor 'local'
   label 'samtools'
-  tag("${inmeta}")
+  tag("${inmeta.subMap(['tool','target','paramslabel'])}")
 
   input:
     set val(inmeta), file(sam) from alignedRealRNA.map { inmeta, sam, trace ->
@@ -516,14 +542,15 @@ process samStatsRealRNA {
   //   | sed 's/^/${meta.tool}/g'
   // """
   meta = inmeta.clone()
-  keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
+  //keyValue = meta.toMapString().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE')
+  keyValue = meta.inspect().replaceAll("[\\[\\],]","").replaceAll(':true',':TRUE').replaceAll(':false',':FALSE').replaceAll('\'','\"')
   shell:
     '''
     echo "aligned,paired" > csv
     samtools view -hF 2304 !{sam} | samtools flagstat - \
       | sed -n '5p;9p'  | cut -f1 -d' ' | paste - - | tr '\t' ',' >> csv
     for KV in !{keyValue}; do
-      sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,${KV#*:}/" csv
+      sed -i -e "1s/$/,${KV%:*}/" -e "2,\$ s/$/,\\"${KV#*:}\\"/" csv
     done
     '''
 }
@@ -643,22 +670,21 @@ process rnfSimReadsDNA {
 process alignSimulatedReadsDNA {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  tag("${idxmeta} << ${simmeta}")
+  tag("${idxmeta} << ${simmeta} @ ${paramsmeta.subMap(['paramslabel'])}")
 
   input:
-    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*') from readsForAlignersDNA.combine(indices4simulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices4simulatedDNA).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
 
   output:
     set val(alignmeta), file('out.?am') into alignedSimulatedDNA
 
-  when:
-    idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version
+  when: //only align DNA reads to the corresponding genome, using the corresponding params set
+    idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'DNA'
 
-  // when: //only align reads to the corresponding genome - TODO UPDATE idxmeta to hold this info!
-  //   simmeta.species == dbmeta.species && simmeta.version == dbmeta.version
   script:
-    alignmeta = idxmeta.clone() + simmeta.clone()
+    alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
     // if(simmeta.mode == 'PE') {
+    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
       template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
     // } else {
     //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
@@ -754,16 +780,20 @@ process collateSummariesSimulatedDNA {
     val collected from summariesSimulatedDNA.collect()
 
   output:
-    set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
+    // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
+    set file('summaries.json'), file('categories.json') into collatedSummariesSimulatedDNA
 
   exec:
   def outfileJSON = task.workDir.resolve('summaries.json')
-  def outfileCSV = task.workDir.resolve('summaries.csv')
+  def categoriesJSON = task.workDir.resolve('categories.json')
+  // def outfileCSV = task.workDir.resolve('summaries.csv')
   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
+  categoriesJSON << prettyPrint(toJson(categories))
   entry = null
   entries = []
+  // entries << [categories: categories]
   i=0;
   TreeSet headersMeta = []
   TreeSet headersResults = []
@@ -781,30 +811,33 @@ process collateSummariesSimulatedDNA {
       entry.results = [:]
       it.eachLine { line ->
         (k, v) = line.split()
-        //entry.results << [(k) : v ]
-        entry.results << [(categories[(k)]) : v ]
-        // headersResults << (k)
-        headersResults << (categories[(k)])
+        entry.results << [(k) : v ]
+        //entry.results << [(categories[(k)]) : v ]
+        headersResults << (k)
+        //headersResults << (categories[(k)])
       }
     }
   }
   entries << entry
   outfileJSON << prettyPrint(toJson(entries))
 
-  //GENERATE CSV OUTPUT
-  SEP=","
-  outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
-  entries.each { entry ->
-    line = ""
-    headersMeta.each { k ->
-      line += line == "" ? (entry.meta[k]) : (SEP+entry.meta[k])
-    }
-    headersResults.each { k ->
-      value = entry.results[k]
-      line += value == null ? SEP+0 : SEP+value //NOT QUITE RIGHT, ok for 'w' not for 'u'
-    }
-    outfileCSV << line+"\n"
-  }
+  // //GENERATE CSV OUTPUT
+  // SEP=","
+  // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+  // entries.each { entry ->
+  //   line = ""
+  //   headersMeta.each { k ->
+  //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
+  //     line += line == "" ? val : (SEP+val)
+  //   }
+  //   headersResults.each { k ->
+  //     value = entry.results[k]
+  //     line += SEP
+  //     // println(k + ' -> ' + value)
+  //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
+  //   }
+  //   outfileCSV << line+"\n"
+  // }
 
 }
 
@@ -832,14 +865,15 @@ process plotSummarySimulatedDNA {
   label 'figures'
 
   input:
-    set file(csv), file(json) from collatedSummariesSimulatedDNA
+    // set file(csv), file(json) from collatedSummariesSimulatedDNA
+    set file(json), file(categories) from collatedSummariesSimulatedDNA
 
   output:
     file '*' into collatedSummariesPlotsSimulatedDNA
 
   shell:
   '''
-  < !{csv} plot_simulatedDNA.R
+  < !{json} plot_simulatedDNA.R
   '''
 }
 

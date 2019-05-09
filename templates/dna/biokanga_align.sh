@@ -6,11 +6,8 @@
 
 biokanga align \
   --sfx ${idxmeta.target}.sfx \
-  --mode 0 \
-  --format 5 \
-  --pemode 3 \
   --in 1.fq.gz \
   --pair 2.fq.gz  \
   --out out.bam \
   --threads ${task.cpus} \
-  --substitutions 5
+  ${ALIGN_PARAMS}

@@ -6,6 +6,6 @@ bowtie2 \
   -1 1.fq.gz \
   -2 2.fq.gz \
   --threads  ${task.cpus} \
-  --local \
+  ${ALIGN_PARAMS} \
   > out.sam
 

@@ -5,12 +5,7 @@
 hisat2 -x ${idxmeta.target} \
   -1 ${r1} \
   -2 ${r2} \
-  --no-mixed \
-  --no-discordant \
-  --mp 1,0 \
-  --pen-noncansplice 12 \
-  --max-intronlen 100000 \
-  --sp 3,0 \
   --threads ${task.cpus} \
   -f \
+  ${ALIGN_PARAMS} \
   > sam
