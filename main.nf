@@ -773,7 +773,6 @@ process collateDetailsSimulatedDNA {
 }
 
 process collateSummariesSimulatedDNA {
-  echo true
   label 'stats'
   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
@@ -781,7 +780,8 @@ process collateSummariesSimulatedDNA {
     val collected from summariesSimulatedDNA.collect()
 
   output:
-    set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
+    // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
+    file('summaries.json') into collatedSummariesSimulatedDNA
 
   exec:
   def outfileJSON = task.workDir.resolve('summaries.json')
@@ -791,6 +791,7 @@ process collateSummariesSimulatedDNA {
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
   entry = null
   entries = []
+  entries << [categories: categories]
   i=0;
   TreeSet headersMeta = []
   TreeSet headersResults = []
@@ -808,33 +809,33 @@ process collateSummariesSimulatedDNA {
       entry.results = [:]
       it.eachLine { line ->
         (k, v) = line.split()
-        //entry.results << [(k) : v ]
-        entry.results << [(categories[(k)]) : v ]
-        // headersResults << (k)
-        headersResults << (categories[(k)])
+        entry.results << [(k) : v ]
+        //entry.results << [(categories[(k)]) : v ]
+        headersResults << (k)
+        //headersResults << (categories[(k)])
       }
     }
   }
   entries << entry
   outfileJSON << prettyPrint(toJson(entries))
 
-  //GENERATE CSV OUTPUT
-  SEP=","
-  outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
-  entries.each { entry ->
-    line = ""
-    headersMeta.each { k ->
-      val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
-      line += line == "" ? val : (SEP+val)
-    }
-    headersResults.each { k ->
-      value = entry.results[k]
-      line += SEP
-      // println(k + ' -> ' + value)
-      line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
-    }
-    outfileCSV << line+"\n"
-  }
+  // //GENERATE CSV OUTPUT
+  // SEP=","
+  // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+  // entries.each { entry ->
+  //   line = ""
+  //   headersMeta.each { k ->
+  //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
+  //     line += line == "" ? val : (SEP+val)
+  //   }
+  //   headersResults.each { k ->
+  //     value = entry.results[k]
+  //     line += SEP
+  //     // println(k + ' -> ' + value)
+  //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
+  //   }
+  //   outfileCSV << line+"\n"
+  // }
 
 }
 
