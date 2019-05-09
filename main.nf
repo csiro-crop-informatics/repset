@@ -781,17 +781,19 @@ process collateSummariesSimulatedDNA {
 
   output:
     // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
-    file('summaries.json') into collatedSummariesSimulatedDNA
+    set file('summaries.json'), file('categories.json') into collatedSummariesSimulatedDNA
 
   exec:
   def outfileJSON = task.workDir.resolve('summaries.json')
-  def outfileCSV = task.workDir.resolve('summaries.csv')
+  def categoriesJSON = task.workDir.resolve('categories.json')
+  // def outfileCSV = task.workDir.resolve('summaries.csv')
   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
+  categoriesJSON << prettyPrint(toJson(categories))
   entry = null
   entries = []
-  entries << [categories: categories]
+  // entries << [categories: categories]
   i=0;
   TreeSet headersMeta = []
   TreeSet headersResults = []
@@ -863,14 +865,15 @@ process plotSummarySimulatedDNA {
   label 'figures'
 
   input:
-    set file(csv), file(json) from collatedSummariesSimulatedDNA
+    // set file(csv), file(json) from collatedSummariesSimulatedDNA
+    set file(json), file(categories) from collatedSummariesSimulatedDNA
 
   output:
     file '*' into collatedSummariesPlotsSimulatedDNA
 
   shell:
   '''
-  < !{csv} plot_simulatedDNA.R
+  < !{json} plot_simulatedDNA.R
   '''
 }
 
