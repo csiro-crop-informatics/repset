@@ -7,8 +7,9 @@
 - [Dependencies](#dependencies)
 - [Experiments](#experiments)
   - [Quick start](#quick-start)
-  - [Simulated RNA-Seq](#simulated-rna-seq)
+  - [Simulated RNA-Seq (BEERS-based)](#simulated-rna-seq-beers-based)
     - [Quick test run](#quick-test-run)
+    - [BEERS-based pipeline overview](#beers-based-pipeline-overview)
   - [Real RNA-Seq](#real-rna-seq)
   - [Simulated DNA-Seq](#simulated-dna-seq)
   - [Real DNA-Seq](#real-dna-seq)
@@ -80,13 +81,15 @@ This may need to be adapted for your system in [nextflow.config](https://github.
 
 
 
-## Simulated RNA-Seq
+## Simulated RNA-Seq (BEERS-based)
 On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.5) consumed 56 CPU-days.
 See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
 and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
 This run included each of the input datasets in three replicates. Given the experimental context,
 replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`,
 thus reducing the CPU-time to under 8 days (based on a run of [version 0.6](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.6)).
+
+The executable for the BEERS-based RNA-Seq evaluation pipeline is `beers.nf`
 
 ### Quick test run
 
@@ -97,7 +100,9 @@ To only specify a single aligner you can e.g. use `--aligners biokanga` or for s
 
 Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including datasets with retained adapters.
 
+### BEERS-based pipeline overview
 
+![figures/dag.png](figures/dag-beers.png)
 
 ## Real RNA-Seq
 
