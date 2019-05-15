@@ -9,7 +9,7 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna}/*_{index,ali
     [tool: it[0], rna: true]
   }
   .view()
-  .set { alignersRNA }
+  .set { aligners }
 
 /*
  * Add to or overwrite map content recursively
@@ -149,7 +149,7 @@ process indexGenerator {
   tag("${alignermeta.tool} << ${refmeta}")
 
   input:
-    set val(alignermeta), val(refmeta), file(ref) from alignersRNA.combine(refsRNA)
+    set val(alignermeta), val(refmeta), file(ref) from aligners.combine(refsRNA)
 
   output:
     set val(meta), file("*") into indices4simulatedRNA, indices4realRNA
@@ -226,17 +226,18 @@ process alignSimulatedReadsRNA {
   //afterScript 'hostname > .command.cpu; fgrep -m1 "model name" /proc/cpuinfo | sed "s/.*: //"  >> .command.cpu'
 
   input:
-    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig) from indices4simulatedRNA.combine(datasetsWithAdapters.mix(preparedDatasets))
+    set val(idxmeta), file("*"), val(readsmeta), file(r1), file(r2), file(cig), val(paramsmeta)  from indices4simulatedRNA.combine(datasetsWithAdapters.mix(preparedDatasets)).combine(alignersParams4SimulatedRNA)
 
   output:
     set val(meta), file("*sam"), file(cig), file('.command.trace') into alignedDatasets
 
   when:
-    idxmeta.seqtype == 'RNA'
+    idxmeta.seqtype == 'RNA' && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'DNA'
 
   script:
-    meta = idxmeta.clone() + readsmeta.clone()
+    meta = idxmeta.clone() + readsmeta.clone() + paramsmeta.clone()
     meta.remove('seqtype') //not needed downstream, would have to modiify tidy-ing to keep
+    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
     template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
