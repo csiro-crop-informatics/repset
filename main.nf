@@ -670,7 +670,7 @@ process rnfSimReadsDNA {
 process alignSimulatedReadsDNA {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  tag("${idxmeta} << ${simmeta} @ ${paramsmeta.subMap(['paramslabel'])}")
+  tag("${idxmeta.subMap(['tool','species'])} << ${simmeta.subMap(['simulator','nreads'])} @ ${paramsmeta.subMap(['paramslabel'])}")
 
   input:
     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices4simulatedDNA).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
@@ -693,7 +693,7 @@ process alignSimulatedReadsDNA {
 
 process rnfEvaluateSimulatedDNA {
   label 'rnftools'
-  tag{alignmeta}
+  tag{alignmeta.subMap(['tool','simulator','target','paramslabel'])}
 
 
   input:
