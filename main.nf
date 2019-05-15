@@ -87,7 +87,7 @@ if (params.help){
 */
 referencesDNA = Channel.from(params.referencesDNA).map { (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)] }
 
-process fetchReferenceForDNAAlignment {
+process fetchReference {
   tag{meta.subMap(['species','version'])}
   //as above, storeDir not mounted accessible storeDir { (fasta.name).matches("REMOTE") ? (executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded") : null }
 
@@ -136,7 +136,7 @@ process indexGenerator {
     set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAlignersDNA)
 
   output:
-    set val(meta), file("*") into indices4simulatedDNA
+    set val(meta), file("*") into indices
 
   when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
     (refmeta.seqtype == 'DNA' && alignermeta.dna) || (refmeta.seqtype == 'RNA' && alignermeta.rna)
@@ -148,37 +148,24 @@ process indexGenerator {
     template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
 
+// process indexReferences4rnfSimReads {
+//   tag{meta}
+//   label 'samtools'
 
+//   input:
+//     set val(meta), file(ref) from references4rnfSimReads
 
+//   output:
+//     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
 
+//   when:
+//     'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
 
-
-// // ----- =======                   ======= -----
-// //                 DNA alignment
-// // ----- =======                   ======= -----
-
-
-
-
-
-process indexReferences4rnfSimReadsDNA {
-  tag{meta}
-  label 'samtools'
-
-  input:
-    set val(meta), file(ref) from references4rnfSimReads
-
-  output:
-    set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
-
-  when:
-    'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
-
-  script:
-  """
-  samtools faidx ${ref}
-  """
-}
+//   script:
+//   """
+//   samtools faidx ${ref}
+//   """
+// }
 
 // process optionalExtarctTranscriptome {
 //   scratch false
@@ -207,7 +194,8 @@ process rnfSimReadsDNA {
   label 'rnftools'
 
   input:
-    set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
+    // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
+    set val(meta), file(ref) from references4rnfSimReads
     each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
     each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
     each simulator from params.simreadsDNA.simulator
@@ -273,7 +261,7 @@ process alignSimulatedReads {
   tag("${idxmeta.subMap(['tool','species'])} << ${simmeta.subMap(['simulator','nreads'])} @ ${paramsmeta.subMap(['paramslabel'])}")
 
   input:
-    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices4simulatedDNA).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
 
   output:
     set val(alignmeta), file('out.?am') into alignedSimulatedDNA
@@ -482,16 +470,16 @@ process plotSummarySimulatedDNA {
 writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
 process render {
-  tag {'report'}
+  tag {"Render ${Rmd}"}
   label 'rrender'
   label 'report'
   stageInMode 'copy'
   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
   input:
-    file('*') from plots.flatten().toList()
-    file('*') from plotsRealRNA.flatten().toList()
-    file('*') from writing.collect()
+    // file('*') from plots.flatten().toList()
+    // file('*') from plotsRealRNA.flatten().toList()
+    file(Rmd) from writing
     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
 
@@ -506,7 +494,7 @@ process render {
   library(rticles)
   library(bookdown)
 
-  rmarkdown::render(Sys.glob("*.Rmd"))
+  rmarkdown::render("${Rmd}")
   """
 }
 

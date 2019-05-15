@@ -495,3 +495,33 @@ process ggplotRealRNA {
   < !{csv} plot_realRNA.R
   '''
 }
+
+//WRAP-UP
+writing = Channel.fromPath("$baseDir/report/BEERS.Rmd")
+
+process render {
+  tag {"Render ${Rmd}"}
+  label 'rrender'
+  label 'report'
+  stageInMode 'copy'
+  //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+
+  input:
+    file('*') from plots.flatten().toList()
+    file('*') from plotsRealRNA.flatten().toList()
+    file(Rmd) from writing
+
+  output:
+    file '*'
+
+  script:
+  """
+  #!/usr/bin/env Rscript
+
+  library(rmarkdown)
+  library(rticles)
+  library(bookdown)
+
+  rmarkdown::render("${Rmd}")
+  """
+}
