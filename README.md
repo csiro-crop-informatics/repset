@@ -198,7 +198,8 @@ The last of this calls will trigger minting of a DOI for that release if Zenodo 
 
 ## Experimental pipeline overview
 
-![figures/dag.png](figures/dag.png)
+<!-- ![figures/dag.png](figures/dag.png) -->
+<img src="figures/dag.png" alt="drawing" width="400"/>
 
 <!-- For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools. This earlier workflow also excludes evaluation based on real RNA-Seq data. -->
 
