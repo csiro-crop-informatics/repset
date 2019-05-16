@@ -99,9 +99,9 @@ if (params.help){
 Channel.from(params.referencesDNA).map {
   new Tuple(
     it,
-    (it.containsKey('fasta') ? (it.fasta.isURL() ? file(workDir+'/REMOTE') : file(it.fasta)) : file(workDir+'/NULL1')),
+    it.fasta.isURL() ? file(workDir+'/REMOTE') : file(it.fasta),
     (it.containsKey('gff') ? (it.gff.isURL() ? file(workDir+'/REMOTE') : file(it.gff)) : file(workDir+'/NULL1')),
-    (it.containsKey('bed') ? (it.bed.isURL() ? file(workDir+'/REMOTE') : file(it.bed)) : file(workDir+'/NULL3'))
+    (it.containsKey('bed') ? (it.bed.isURL() ? file(workDir+'/REMOTE') : file(it.bed)) : file(workDir+'/NULL2'))
   )
 }.set { referencesDNA }
 
@@ -113,8 +113,8 @@ process fetchReference {
   input:
     set val(meta), file(fasta), file(gff), file(bed) from referencesDNA
 
-  // output:
-  //   set val(meta), file("${basename}.fasta") into references4rnfSimReads, referencesForAlignersDNA, referencesForTranscriptomeExtraction
+  output:
+    set val(meta), file("${basename}.fasta"), file("${basename}.bed"), file("${basename}.gff") into references4rnfSimReads, referencesForAlignersDNA, referencesForTranscriptomeExtraction
 
   when:
     'simulatedDNA'.matches(params.mode)
@@ -125,32 +125,23 @@ process fetchReference {
     meta.species = (meta.species =~ /^./)[0]+(meta.species =~ /_.*$/)[0]
     meta.seqtype = 'DNA' // NEED TO HANDLE DIFFERENTLY
     basename=getTagFromMeta(meta)
-    CMD = 'ls -la'
+    CMD = 'echo'
     [fasta: fasta, gff: gff, bed:bed].each { k, v ->
-      meta.(key) = "${basename}.${k}"
-      if((v.name).matches("^NULL[0-9]\$")) { //OPTIONAl FILE NOT SPECIFIED
-        //SKIP
-        meta.key = null
-      } else
-      if((v.name).matches("REMOTE")) { //REMOTE FILE
+      meta."${k}" = "${basename}.${k}"
+      if((v.name).matches("^NULL[0-9]+\$")) { //OPTIONAl FILE NOT SPECIFIED
+        meta."${k}" = null
+        CMD += " && touch ${basename}.${k}" //DUMMY FILE
+      } else if((v.name).matches("REMOTE")) { //REMOTE FILE
         decompress = (meta.(k)).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
         CMD += " && curl ${meta.(${k})} ${decompress} > ${basename}.${k}"
-        // """
-        // curl ${meta.(${k})} ${decompress} > ${basename}.${k}
-        // """
       } else if((v.name).matches("^.*\\.gz\$")){ //LOCAL GZIPPED
         CMD += " && gunzip --stdout  ${v}  > ${basename}.${k} "
-        // """
-        // gunzip --stdout  ${v}  > ${basename}.${k}
-        // """
       } else { //LOCAL FLAT
         CMD += " && cp -s  ${v} ${basename}.${k}"
-        // """
-        // cp -s  ${v} ${basename}.${k}
-        // """
       }
   }
-  println "$CMD"
+  // println "$CMD"
+  // println meta
   """
   ${CMD}
   """
@@ -161,31 +152,32 @@ process fetchReference {
 // System.exit 0
 
 
-// process extarctTranscriptome {
-//   echo true
-//   scratch false
-//   container null
-//   module 'bedtools/2.28.0:samtools/1.9.0'
-//   input:
-//     set val(alignermeta), val(refmeta), file(ref) from referencesForTranscriptomeExtraction
+process extarctTranscriptome {
+  echo true
+  scratch false
+  container null
+  module 'bedtools/2.28.0:samtools/1.9.0'
+  input:
+    set val(meta), file(ref), file(bed), file(gff) from referencesForTranscriptomeExtraction
 
-//   // output:
-//   //   set val(meta), file('trans.fa'), file('trans.fa.fai') into referencesWithIndex4rnfSimReads2
+  // output:
+  //   set val(meta), file('trans.fa'), file('trans.fa.fai') into referencesWithIndex4rnfSimReads2
 
-//   script:
-//   """
-//   ls -la
-//   """
-//   // """
-//   // bedtools getfasta \
-//   //   -fi ${ref} \
-//   //   -bed <(awk '\$8 ~ /mRNA/ ' ${bed}) \
-//   //   -name \
-//   //   | head -20 \
-//   //   > trans.fa \
-//   // && samtools faidx trans.fa
-//   // """
-// }
+  script:
+  println(prettyPrint(toJson(meta)))
+  """
+  ls -la
+  """
+  // """
+  // bedtools getfasta \
+  //   -fi ${ref} \
+  //   -bed <(awk '\$8 ~ /mRNA/ ' ${bed}) \
+  //   -name \
+  //   | head -20 \
+  //   > trans.fa \
+  // && samtools faidx trans.fa
+  // """
+}
 
 // // // // referencesForAlignersDNA.println { it }
 // // // // aligners.println { it }
