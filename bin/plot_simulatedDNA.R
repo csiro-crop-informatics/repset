@@ -20,7 +20,8 @@ res2 <- melt(res, na.rm = TRUE, id.vars = c("meta.tool",
                               "meta.seqtype",
                               "meta.target"))
 
-ggplot(res2, aes(x=meta.tool, y=value, fill=variable)) +
+ggplot(na.omit(res2), aes(x=meta.tool, y=as.numeric(value), fill=variable)) +
+  scale_y_continuous()+
   geom_bar(stat="identity",position = position_stack(reverse = TRUE)) +
   coord_flip() +
   theme(legend.position = "top") +
