@@ -97,41 +97,65 @@ if (params.help){
 //   (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)]
 // }
 Channel.from(params.referencesDNA).map {
+  if(it.containsKey('gff')){
+    it.features = it.gff
+    it.featfmt = 'gff'
+    it.remove('gff')
+  } else if(it.containsKey('bed')){
+    it.features = it.bed
+    it.featfmt = 'bed'
+    it.remove('bed')
+  } else {
+    it.featfmt = null
+  }
   new Tuple(
     it,
     it.fasta.isURL() ? file(workDir+'/REMOTE') : file(it.fasta),
-    (it.containsKey('gff') ? (it.gff.isURL() ? file(workDir+'/REMOTE') : file(it.gff)) : file(workDir+'/NULL1')),
-    (it.containsKey('bed') ? (it.bed.isURL() ? file(workDir+'/REMOTE') : file(it.bed)) : file(workDir+'/NULL2'))
+    it.containsKey('features') ? (it.features.isURL() ? file(workDir+'/REMOTE') : file(it.features)) : file(workDir+'/NULL1')
+    // (it.containsKey('features') ? (it.features.isURL() ? file(workDir+'/REMOTE') : file(it.features)) : file(workDir+'/NULL1'))
+    // (it.containsKey('gff') ? (it.gff.isURL() ? file(workDir+'/REMOTE') : file(it.gff)) : file(workDir+'/NULL1')),
+    // (it.containsKey('bed') ? (it.bed.isURL() ? file(workDir+'/REMOTE') : file(it.bed)) : file(workDir+'/NULL2'))
   )
 }.set { referencesDNA }
 
-process fetchReference {
-  echo true
+process fetchReferenceAndFeatureFiles {
+  // echo true
   tag{meta.subMap(['species','version'])}
   //as above, storeDir not mounted accessible storeDir { (fasta.name).matches("REMOTE") ? (executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded") : null }
 
   input:
-    set val(meta), file(fasta), file(gff), file(bed) from referencesDNA
+    set val(meta), file(fasta), file(features) from referencesDNA
 
   output:
-    set val(meta), file("${basename}.fasta"), file("${basename}.bed"), file("${basename}.gff") into references4rnfSimReads, referencesForAlignersDNA, referencesForTranscriptomeExtraction
+    set val(outmeta), file("${basename}.fasta") into referencesForAlignersDNA, references4rnfSimReads
+    set val(outmeta4transcripts), file("${basename}.fasta"), file("${basename}.${meta.featfmt}") into  referencesForTranscriptomeExtraction
 
-  when:
-    'simulatedDNA'.matches(params.mode)
+    // set val(meta), file("${basename}.fasta"), file("${basename}.bed"), file("${basename}.gff") into references4rnfSimReads, referencesForAlignersDNA, referencesForTranscriptomeExtraction
+
+  // when:
+  //   'simulatedDNA'.matches(params.mode)
 
   script:
   // exec:
     //Abbreviate Genus_species name to G_species
     meta.species = (meta.species =~ /^./)[0]+(meta.species =~ /_.*$/)[0]
-    meta.seqtype = 'DNA' // NEED TO HANDLE DIFFERENTLY
+    // meta.seqtype = 'DNA'
+    // outmeta = meta.subMap(['species','version','seqtype'])
+    outmeta = meta.subMap(['species','version'])
+    outmeta4transcripts = outmeta + meta.subMap(['featfmt'])
     basename=getTagFromMeta(meta)
     CMD = 'echo'
-    [fasta: fasta, gff: gff, bed:bed].each { k, v ->
-      meta."${k}" = "${basename}.${k}"
-      if((v.name).matches("^NULL[0-9]+\$")) { //OPTIONAl FILE NOT SPECIFIED
-        meta."${k}" = null
-        CMD += " && touch ${basename}.${k}" //DUMMY FILE
-      } else if((v.name).matches("REMOTE")) { //REMOTE FILE
+    filesToStage = [fasta: fasta] //FASTA required, features optional
+    if(meta.featfmt == null) {
+    // if((features.name).matches("^NULL[0-9]+\$")) { //OPTIONAl FILE NOT SPECIFIED
+      CMD += " && touch ${basename}.${meta.featfmt}" //CREATE AN EMPTY DUMMY FILE
+    } else {
+      filesToStage << [(meta.featfmt): features]
+      meta.(meta.featfmt) = meta.features //some redundancy here to be able to loop frough map rather than duplicate code below
+    }
+    filesToStage.each { k, v ->
+      outmeta4transcripts."${k}" = "${basename}.${k}"
+      if((v.name).matches("REMOTE")) { //REMOTE FILE
         decompress = (meta.(k)).matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
         CMD += " && curl ${meta.(${k})} ${decompress} > ${basename}.${k}"
       } else if((v.name).matches("^.*\\.gz\$")){ //LOCAL GZIPPED
@@ -139,48 +163,53 @@ process fetchReference {
       } else { //LOCAL FLAT
         CMD += " && cp -s  ${v} ${basename}.${k}"
       }
-  }
-  // println "$CMD"
-  // println meta
+    }
+  // println(prettyPrint(toJson(meta)))
+  // println(filesToStage)
+  // println(prettyPrint(toJson(outmeta)))
   """
   ${CMD}
   """
 }
 
-
-
-// System.exit 0
-
-
-process extarctTranscriptome {
-  echo true
+process extarctTranscripts {
+  tag{meta.subMap(['species','version'])}
   scratch false
   container null
-  module 'bedtools/2.28.0:samtools/1.9.0'
-  input:
-    set val(meta), file(ref), file(bed), file(gff) from referencesForTranscriptomeExtraction
+  module 'bedtools/2.28.0:samtools/1.9.0:gffread/0.9.12'
 
-  // output:
-  //   set val(meta), file('trans.fa'), file('trans.fa.fai') into referencesWithIndex4rnfSimReads2
+  input:
+    set val(meta), file(ref), file(features) from referencesForTranscriptomeExtraction
+
+  output:
+    set val(outmeta), file("${basename}.transcripts.fa") into transcripts4indexing, transcripts4rnfSimReads
+
+  when:
+    meta.featfmt != null
 
   script:
-  println(prettyPrint(toJson(meta)))
-  """
-  ls -la
-  """
-  // """
-  // bedtools getfasta \
-  //   -fi ${ref} \
-  //   -bed <(awk '\$8 ~ /mRNA/ ' ${bed}) \
-  //   -name \
-  //   | head -20 \
-  //   > trans.fa \
-  // && samtools faidx trans.fa
-  // """
+    // println(prettyPrint(toJson(meta)))
+    basename=getTagFromMeta(meta)
+    outmeta = meta.subMap(['species','version']) //meta.clone()
+    outmeta.seqtype = 'mRNA'
+    // println(prettyPrint(toJson(outmeta)))
+    // FEATURE_FIELD = meta.featfmt == 'bed' ? 8 : 3 //BED OR GFF3
+    """
+    gffread -W -w ${basename}.transcripts.fa -g ${ref} ${features}
+    """
+    // bedtools getfasta \
+    //   -fi ${ref} \
+    //   -bed ${features} \
+    //   -name+ \
+    //   -split \
+    //   > ${basename}.transcripts.fa
+    // """
+    //EXAMPLE transcript:AT1G01010.1::1:3630-5899
+    //MAY NEED: && samtools faidx ${basename}_transcripts.fa
 }
 
-// // // // referencesForAlignersDNA.println { it }
-// // // // aligners.println { it }
+// // referencesForAlignersDNA.println { it }
+// // aligners.println { it }
 // process indexGenerator {
 //   label 'index'
 //   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
@@ -188,70 +217,75 @@ process extarctTranscriptome {
 //   tag("${alignermeta.tool} << ${refmeta}")
 
 //   input:
-//     set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAlignersDNA)
+//     set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAlignersDNA) //.mix(transcripts4indexing))
 
-//   output:
-//     set val(meta), file("*") into indices
+//   // output:
+//   //   set val(meta), file("*") into indices
 
 //   when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
-//     (refmeta.seqtype == 'DNA' && alignermeta.dna) || (refmeta.seqtype == 'RNA' && alignermeta.rna)
+//      (alignermeta.dna && 'simulatedDNA'.matches(params.mode)) || (alignermeta.rna && 'simulatedRNA'.matches(params.mode))
+//     //  (refmeta.seqtype == 'DNA' && alignermeta.dna && 'simulatedDNA'.matches(params.mode)) || (refmeta.seqtype == 'RNA' && alignermeta.rna && 'simulatedRNA'.matches(params.mode))
+
 //   // exec: //dev
 //   // meta =  alignermeta+refmeta//[target: "${ref}"]
-//   // println(meta)
+//   // println(prettyPrint(toJson(meta)))
 //   script:
 //     meta = [tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
 //     template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 // }
 
-// // process indexReferences4rnfSimReads {
-// //   tag{meta}
-// //   label 'samtools'
+// // // process indexReferences4rnfSimReads {
+// // //   tag{meta}
+// // //   label 'samtools'
 
-// //   input:
-// //     set val(meta), file(ref) from references4rnfSimReads
+// // //   input:
+// // //     set val(meta), file(ref) from references4rnfSimReads
 
-// //   output:
-// //     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
+// // //   output:
+// // //     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
 
-// //   when:
-// //     'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
+// // //   when:
+// // //     'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
 
-// //   script:
-// //   """
-// //   samtools faidx ${ref}
-// //   """
-// // }
+// // //   script:
+// // //   """
+// // //   samtools faidx ${ref}
+// // //   """
+// // // }
 
-// // process optionalExtarctTranscriptome {
-// //   scratch false
-// //   container null
-// //   module 'bedtools/2.28.0:samtools/1.9.0'
-// //   input:
-// //     set val(meta), file(ref), file(fai), file(bed) from referencesWithIndex4rnfSimReads.combine(Channel.fromPath(params.referencesDNA[0].bed))
+// // // process optionalExtarctTranscriptome {
+// // //   scratch false
+// // //   container null
+// // //   module 'bedtools/2.28.0:samtools/1.9.0'
+// // //   input:
+// // //     set val(meta), file(ref), file(fai), file(bed) from referencesWithIndex4rnfSimReads.combine(Channel.fromPath(params.referencesDNA[0].bed))
 
-// //   output:
-// //     set val(meta), file('trans.fa'), file('trans.fa.fai') into referencesWithIndex4rnfSimReads2
+// // //   output:
+// // //     set val(meta), file('trans.fa'), file('trans.fa.fai') into referencesWithIndex4rnfSimReads2
 
-// //   script:
-// //   """
-// //   bedtools getfasta \
-// //     -fi ${ref} \
-// //     -bed <(awk '\$8 ~ /mRNA/ ' ${bed}) \
-// //     -name \
-// //     | head -20 \
-// //     > trans.fa \
-// //   && samtools faidx trans.fa
-// //   """
-// // }
+// // //   script:
+// // //   """
+// // //   bedtools getfasta \
+// // //     -fi ${ref} \
+// // //     -bed <(awk '\$8 ~ /mRNA/ ' ${bed}) \
+// // //     -name \
+// // //     | head -20 \
+// // //     > trans.fa \
+// // //   && samtools faidx trans.fa
+// // //   """
+// // // }
 
 // process rnfSimReadsDNA {
+//   echo true
 //   tag{simmeta}
 //   label 'rnftools'
 
 //   input:
 //     // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
-//     set val(meta), file(ref) from references4rnfSimReads
-//     each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
+//     // set val(meta), file(ref) from references4rnfSimReads.mix(transcripts4rnfSimReads)
+//     set val(meta), file(ref) from transcripts4rnfSimReads
+//     // each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
+//     each coverage from params.simreadsDNA.coverage
 //     each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
 //     each simulator from params.simreadsDNA.simulator
 //     each mode from params.simreadsDNA.mode //PE, SE
@@ -265,8 +299,8 @@ process extarctTranscriptome {
 //     !(mode == "PE" && simulator == "CuReSim")
 
 //   script:
-//     tag=meta.species+"_"+meta.version+"_"+simulator
-//     simmeta = meta.subMap(['species','version'])+["simulator": simulator, "nreads":nsimreads, "mode": mode, "length": length]
+//     basename=meta.species+"_"+meta.version+"_"+simulator
+//     simmeta = meta.subMap(['species','version'])+["simulator": simulator, "coverage":coverage, "mode": mode, "length": length]
 //     len1 = length
 //     if(mode == "PE") {
 //       //FOR rnftools
@@ -285,10 +319,10 @@ process extarctTranscriptome {
 //     }
 //     """
 //     echo "import rnftools
-//     rnftools.mishmash.sample(\\"${tag}_reads\\",reads_in_tuple=${tuple})
+//     rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
 //     rnftools.mishmash.${simulator}(
 //             fasta=\\"${ref}\\",
-//             number_of_read_tuples=${nsimreads},
+//             coverage=${coverage},
 //             ${dist}
 //             ${distDev}
 //             read_length_1=${len1},
