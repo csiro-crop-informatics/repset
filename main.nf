@@ -139,7 +139,7 @@ process fetchReferenceAndFeatureFiles {
   // exec:
     //Abbreviate Genus_species name to G_species
     meta.species = (meta.species =~ /^./)[0]+(meta.species =~ /_.*$/)[0]
-    // meta.seqtype = 'DNA'
+    meta.seqtype = 'DNA'
     // outmeta = meta.subMap(['species','version','seqtype'])
     outmeta = meta.subMap(['species','version'])
     outmeta4transcripts = outmeta + meta.subMap(['featfmt'])
@@ -210,29 +210,29 @@ process extarctTranscripts {
 
 // // referencesForAlignersDNA.println { it }
 // // aligners.println { it }
-// process indexGenerator {
-//   label 'index'
-//   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-//   container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") }
-//   tag("${alignermeta.tool} << ${refmeta}")
+process indexGenerator {
+  label 'index'
+  //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") }
+  tag("${alignermeta.tool} << ${refmeta}")
 
-//   input:
-//     set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAlignersDNA) //.mix(transcripts4indexing))
+  input:
+    set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAlignersDNA) //.mix(transcripts4indexing))
 
-//   // output:
-//   //   set val(meta), file("*") into indices
+  output:
+    set val(meta), file("*") into indices
 
-//   when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
-//      (alignermeta.dna && 'simulatedDNA'.matches(params.mode)) || (alignermeta.rna && 'simulatedRNA'.matches(params.mode))
-//     //  (refmeta.seqtype == 'DNA' && alignermeta.dna && 'simulatedDNA'.matches(params.mode)) || (refmeta.seqtype == 'RNA' && alignermeta.rna && 'simulatedRNA'.matches(params.mode))
+  when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
+     (alignermeta.dna && 'simulatedDNA'.matches(params.mode)) || (alignermeta.rna && 'simulatedRNA'.matches(params.mode))
+    //  (refmeta.seqtype == 'DNA' && alignermeta.dna && 'simulatedDNA'.matches(params.mode)) || (refmeta.seqtype == 'RNA' && alignermeta.rna && 'simulatedRNA'.matches(params.mode))
 
-//   // exec: //dev
-//   // meta =  alignermeta+refmeta//[target: "${ref}"]
-//   // println(prettyPrint(toJson(meta)))
-//   script:
-//     meta = [tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
-//     template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
-// }
+  // exec: //dev
+  // meta =  alignermeta+refmeta//[target: "${ref}"]
+  // println(prettyPrint(toJson(meta)))
+  script:
+    meta = [tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
+    template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
+}
 
 // // // process indexReferences4rnfSimReads {
 // // //   tag{meta}
@@ -275,140 +275,318 @@ process extarctTranscripts {
 // // //   """
 // // // }
 
-// process rnfSimReadsDNA {
-//   echo true
-//   tag{simmeta}
-//   label 'rnftools'
+process rnfSimReadsDNA {
+  // echo true
+  tag{simmeta}
+  label 'rnftools'
 
-//   input:
-//     // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
-//     // set val(meta), file(ref) from references4rnfSimReads.mix(transcripts4rnfSimReads)
-//     set val(meta), file(ref) from transcripts4rnfSimReads
-//     // each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
-//     each coverage from params.simreadsDNA.coverage
-//     each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
-//     each simulator from params.simreadsDNA.simulator
-//     each mode from params.simreadsDNA.mode //PE, SE
-//     each distance from params.simreadsDNA.distance //PE only
-//     each distanceDev from params.simreadsDNA.distanceDev //PE only
+  input:
+    // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
+    // set val(meta), file(ref) from references4rnfSimReads.mix(transcripts4rnfSimReads)
+    set val(meta), file(ref) from transcripts4rnfSimReads
+    // each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
+    each coverage from params.simreadsDNA.coverage
+    each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
+    each simulator from params.simreadsDNA.simulator
+    each mode from params.simreadsDNA.mode //PE, SE
+    each distance from params.simreadsDNA.distance //PE only
+    each distanceDev from params.simreadsDNA.distanceDev //PE only
 
-//   output:
-//     set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
+  output:
+    // set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
+    set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
 
-//   when:
-//     !(mode == "PE" && simulator == "CuReSim")
+  when:
+    !(mode == "PE" && simulator == "CuReSim")
 
-//   script:
-//     basename=meta.species+"_"+meta.version+"_"+simulator
-//     simmeta = meta.subMap(['species','version'])+["simulator": simulator, "coverage":coverage, "mode": mode, "length": length]
-//     len1 = length
-//     if(mode == "PE") {
-//       //FOR rnftools
-//       len2 = length
-//       tuple = 2
-//       dist="distance="+distance+","
-//       distDev= "distance_deviation="+distanceDev+","
-//       //FOR meta
-//       simmeta.dist = distance
-//       simmeta.distanceDev = distanceDev
-//     } else {
-//       len2 = 0
-//       tuple = 1
-//       dist=""
-//       distDev=""
-//     }
-//     """
-//     echo "import rnftools
-//     rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
-//     rnftools.mishmash.${simulator}(
-//             fasta=\\"${ref}\\",
-//             coverage=${coverage},
-//             ${dist}
-//             ${distDev}
-//             read_length_1=${len1},
-//             read_length_2=${len2}
-//     )
-//     include: rnftools.include()
-//     rule: input: rnftools.input()
-//     " > Snakefile
-//     snakemake -p \
-//     && for f in *.fq; do \
-//       paste - - - - < \${f} \
-//       | awk 'BEGIN{FS=OFS="\\t"};{gsub("[^ACGTUacgtu]","N",\$2); print}' \
-//       | tr '\\t' '\\n' \
-//       | gzip --stdout  --fast \
-//       > \${f}.gz \
-//       && rm \${f};
-//     done \
-//     && find . -type d -mindepth 2 | xargs rm -r
-//     """
-// }
+  script:
+    basename=meta.species+"_"+meta.version+"_"+simulator
+    simmeta = meta.subMap(['species','version','seqtype'])+["simulator": simulator, "coverage":coverage, "mode": mode, "length": length]
+    len1 = length
+    if(mode == "PE") {
+      //FOR rnftools
+      len2 = length
+      tuple = 2
+      dist="distance="+distance+","
+      distDev= "distance_deviation="+distanceDev+","
+      //FOR meta
+      simmeta.dist = distance
+      simmeta.distanceDev = distanceDev
+    } else {
+      len2 = 0
+      tuple = 1
+      dist=""
+      distDev=""
+    }
+    """
+    echo "import rnftools
+    rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
+    rnftools.mishmash.${simulator}(
+            fasta=\\"${ref}\\",
+            coverage=${coverage},
+            ${dist}
+            ${distDev}
+            read_length_1=${len1},
+            read_length_2=${len2}
+    )
+    include: rnftools.include()
+    rule: input: rnftools.input()
+    " > Snakefile
+    snakemake -p \
+    && for f in *.fq; do \
+      paste - - - - < \${f} \
+      | awk 'BEGIN{FS=OFS="\\t"};{gsub("[^ACGTUacgtu]","N",\$2); print}' \
+      | tr '\\t' '\\n' \
+      | gzip --stdout  --fast \
+      > \${f}.gz \
+      && rm \${f};
+    done \
+    && find . -type d -mindepth 2 | xargs rm -r
+    """
+}
 
-// process alignSimulatedReads {
-//   label 'align'
-//   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-//   tag("${idxmeta.subMap(['tool','species'])} << ${simmeta.subMap(['simulator','nreads'])} @ ${paramsmeta.subMap(['paramslabel'])}")
-
-//   input:
-//     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-
-//   output:
-//     set val(alignmeta), file('out.?am') into alignedSimulatedDNA
-
-//   when: //only align DNA reads to the corresponding genome, using the corresponding params set
-//     idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'DNA'
-
-//   script:
-//     alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
-//     // if(simmeta.mode == 'PE') {
-//     ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
-//       template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-//     // } else {
-//     //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-//     // }
-// }
-
-// process rnfEvaluateSimulated {
-//   label 'rnftools'
-//   tag{alignmeta.subMap(['tool','simulator','target','paramslabel'])}
+process convertReadCoordinates {
+  // label 'groovy'
+  echo true
+  tag{simmeta.subMap(['species','version'])}
+  scratch false
+  container null
+  module 'groovy/2.4.7'
 
 
-//   input:
-//     set val(alignmeta), file(samOrBam) from alignedSimulatedDNA
+  input:
+    set val(simmeta), file(ref), file(reads) from readsForCoordinateConversion
 
-//   output:
-//      set val(alignmeta), file(summary) into summariesSimulatedDNA
-//      set val(alignmeta), file(detail) into detailsSimulatedDNA
+  output:
+    set val(simmeta), file('*R?.fq.gz') into convertedCoordinatesReads
+  // exec:
+  // println reads
+  // """
+  // ls -la
+  // """
+  script:
+  out1 = reads[0].name.replace('.1.fq.gz','.R1.fq.gz')
+  out2 = reads[1].name.replace('.2.fq.gz','.R2.fq.gz')
+  """
+  #!/usr/bin/env groovy
 
-//   script:
-//   // println prettyPrint(toJson(alignmeta))
-//   """
-//   paste \
-//     <( rnftools sam2es -i ${samOrBam} -o - | awk '\$1 !~ /^#/' \
-//       | tee ES \
-//       | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
-//     ) \
-//     <( samtools view ${samOrBam} ) \
-//   | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
-//   """
+  import static groovy.json.JsonOutput.*
+  import java.util.zip.GZIPInputStream
+  import java.util.zip.GZIPOutputStream
 
-// // rnftools sam2es OUTPUT header
-// // # RN:   read name
-// // # Q:    is mapped with quality
-// // # Chr:  chr id
-// // # D:    direction
-// // # L:    leftmost nucleotide
-// // # R:    rightmost nucleotide
-// // # Cat:  category of alignment assigned by LAVEnder
-// // #         M_i    i-th segment is correctly mapped
-// // #         m      segment should be unmapped but it is mapped
-// // #         w      segment is mapped to a wrong location
-// // #         U      segment is unmapped and should be unmapped
-// // #         u      segment is unmapped and should be mapped
-// // # Segs: number of segments
-// // #
-// // # RN    Q       Chr     D       L       R       Cat     Segs
-// }
+
+final int PAD4BASES = 9
+final int PAD4CHROMOSOMES = 5
+final int BUFFER_SIZE = 8192
+final String NEWLINE = System.lineSeparator();
+
+File refFile = new File('${ref}')
+File fastqFile1 = new File('${reads[0]}')
+File fastqFile2 = new File('${reads[1]}')
+File outFile1 = new File('${out1}');
+File outFile2 = new File('${out2}');
+append = false
+writer1 = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(outFile1, append)), "UTF-8"), BUFFER_SIZE);
+writer2 = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(outFile2, append)), "UTF-8"), BUFFER_SIZE);
+
+refs = []
+refFile.withReader { source ->
+  String line
+  while( line = source.readLine()) {
+    if(line =~ /^>/) {
+      toks = line.split(' ')
+      record = [:]
+      toks.each { tok ->
+        subtoks = tok.split(':|=')
+        record.(subtoks[0]) = subtoks[0] == 'loc' ? subtoks[1].split('\\\\|') : subtoks[1].split(',|\\\\|')*.split('-')
+        if(subtoks[0] =~ /(exons)|(segs)/ ) {
+          record.(subtoks[0]) = record.(subtoks[0]).collect{ it*.toInteger() }
+        }
+      }
+      refs << record
+    }
+  }
+}
+
+
+
+try {
+  gzipStream1 = new GZIPInputStream(new FileInputStream(fastqFile1), BUFFER_SIZE);
+  content1 = new BufferedReader(new InputStreamReader(gzipStream1, "UTF-8"), BUFFER_SIZE);
+  gzipStream2 = new GZIPInputStream(new FileInputStream(fastqFile2), 8192);
+  content2 = new BufferedReader(new InputStreamReader(gzipStream2, "UTF-8"), 8192);
+  i = 4
+  while ((line1 = content1.readLine()) != null && !line1.isEmpty() && (line2 = content2.readLine()) != null && !line2.isEmpty() ) {
+    if(i++ % 4 != 0 ) {
+      //JUST OUTPUT/STORE LINE AS IS
+      writer1.write(line1);
+      writer1.write(NEWLINE);
+      writer2.write(line2);
+      writer2.write(NEWLINE);
+      continue;
+    }
+
+    split1 = line1.split('__')
+
+    coords = split1[2].replaceAll('\\\\(','').replaceAll('\\\\)','')
+    coordsSplit = coords.split(',')
+
+
+    //FILEDS TO BE USED AND MODIFIED
+    ref = coordsSplit[1].toInteger()
+    start = coordsSplit[3].toInteger()
+    end = coordsSplit[4].toInteger()
+    startMate = coordsSplit[8].toInteger()
+    endMate = coordsSplit[9].toInteger()
+
+    //CURRENT REF RECORD
+    refRecord = refs[ref-1]
+
+    //CONVERT REF ID
+    coordsSplit[1] = coordsSplit[6] = refRecord.loc[0].padLeft(PAD4CHROMOSOMES,'0')
+
+    //CONVERT COORDINATES
+    translatedStart = translateAndPad(start, refRecord, PAD4BASES)
+    translatedEnd = translateAndPad(end, refRecord, PAD4BASES)
+    translatedStartMate = translateAndPad(startMate, refRecord, PAD4BASES)
+    translatedEndMate = translateAndPad(endMate, refRecord, PAD4BASES)
+    coordsSplit[3] = translatedStart < translatedEnd ? translatedStart : translatedEnd
+    coordsSplit[4] = translatedStart >= translatedEnd ? translatedStart : translatedEnd
+    coordsSplit[8] = translatedStartMate < translatedEndMate ? translatedStartMate : translatedEndMate
+    coordsSplit[9] = translatedStartMate >= translatedEndMate ? translatedStartMate : translatedEndMate
+
+    //RE-CONSTITUTE READ HEADER
+    StringBuilder sb = new StringBuilder()
+    sb.append('(')
+    sb.append(coordsSplit[0..4].join(',') )
+    sb.append('),(')
+    sb.append(coordsSplit[5..9].join(',') )
+    sb.append(')')
+    split1[2] = sb.toString()
+    outline = split1.join('__')
+
+    writer1.write(outline);
+    writer1.write(NEWLINE);
+    writer2.write(outline[0..-2]+'2');
+    writer2.write(NEWLINE);
+  }
+} catch (FileNotFoundException ex) {
+  ex.printStackTrace();
+} catch (InterruptedException ex) {
+  ex.printStackTrace();
+} catch (IOException ex) {
+  ex.printStackTrace();
+} finally {
+  try {
+    if (writer1 != null) {
+      writer1.close();
+    }
+    if (writer2 != null) {
+      writer2.close();
+    }
+  } catch (IOException ex) {
+    ex.printStackTrace();
+  }
+}
+
+
+String translateAndPad(int position, Map record, int padding) {
+  return translate(position, record).toString().padLeft(padding,'0')
+}
+
+
+int translate (int position, Map record) {
+  boolean forward = record.loc[2].equals('+')
+  int numrecords = record.segs.size()
+  for(int i=0; i<numrecords; i++) {
+    seg = record.segs[i]
+    if(position >= seg[0] && position <= seg[1]) {
+      if(forward) {
+        return record.exons[i][0]+position-seg[0]
+      } else {
+        return record.exons[numrecords-i-1][0]+(seg[1]-position)
+      }
+    }
+  }
+  return Integer.MIN_VALUE;
+}
+  """
+}
+
+//convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA).view()
+
+process alignSimulatedReads {
+  label 'align'
+  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  tag("${idxmeta.subMap(['tool','species'])} << ${simmeta.subMap(['simulator','nreads'])} @ ${paramsmeta.subMap(['paramslabel'])}")
+
+  input:
+    // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+
+  output:
+    set val(alignmeta), file('out.?am') into alignedSimulatedDNA
+
+  when: //only align DNA reads to the corresponding genome, using the corresponding params set
+    // idxmeta.tool == paramsmeta.tool
+  // //   idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool
+  //   //idxmeta.seqtype == 'DNA' //&&
+    idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'RNA'
+
+  // exec:
+  //   println(prettyPrint(toJson(idxmeta)))
+  //   println(prettyPrint(toJson(simmeta)))
+  //   println(prettyPrint(toJson(paramsmeta)))
+  script:
+    alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
+    // if(simmeta.mode == 'PE') {
+    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
+      template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    // } else {
+    //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    // }
+}
+
+process rnfEvaluateSimulated {
+  label 'rnftools'
+  tag{alignmeta.subMap(['tool','simulator','target','paramslabel'])}
+
+
+  input:
+    set val(alignmeta), file(samOrBam) from alignedSimulatedDNA
+
+  output:
+     set val(alignmeta), file(summary) into summariesSimulatedDNA
+     set val(alignmeta), file(detail) into detailsSimulatedDNA
+
+  script:
+  // println prettyPrint(toJson(alignmeta))
+  """
+  paste \
+    <( rnftools sam2es --allowed-delta 100 -i ${samOrBam} -o - | tee ES  | awk '\$1 !~ /^#/' \
+      | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
+    ) \
+    <( samtools view ${samOrBam} ) \
+  | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
+  """
+
+// rnftools sam2es OUTPUT header
+// # RN:   read name
+// # Q:    is mapped with quality
+// # Chr:  chr id
+// # D:    direction
+// # L:    leftmost nucleotide
+// # R:    rightmost nucleotide
+// # Cat:  category of alignment assigned by LAVEnder
+// #         M_i    i-th segment is correctly mapped
+// #         m      segment should be unmapped but it is mapped
+// #         w      segment is mapped to a wrong location
+// #         U      segment is unmapped and should be unmapped
+// #         u      segment is unmapped and should be mapped
+// # Segs: number of segments
+// #
+// # RN    Q       Chr     D       L       R       Cat     Segs
+}
 
 // process collateDetailsSimulatedDNA {
 //   label 'stats'
@@ -450,74 +628,74 @@ process extarctTranscripts {
 //   }
 // }
 
-// process collateSummariesSimulatedDNA {
-//   label 'stats'
-//   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+process collateSummariesSimulatedDNA {
+  label 'stats'
+  executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
-//   input:
-//     val collected from summariesSimulatedDNA.collect()
+  input:
+    val collected from summariesSimulatedDNA.collect()
 
-//   output:
-//     // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
-//     set file('summaries.json'), file('categories.json') into collatedSummariesSimulatedDNA
+  output:
+    // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
+    set file('summaries.json'), file('categories.json') into collatedSummariesSimulatedDNA
 
-//   exec:
-//   def outfileJSON = task.workDir.resolve('summaries.json')
-//   def categoriesJSON = task.workDir.resolve('categories.json')
-//   // def outfileCSV = task.workDir.resolve('summaries.csv')
-//   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
-//   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
-//   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
-//   categoriesJSON << prettyPrint(toJson(categories))
-//   entry = null
-//   entries = []
-//   // entries << [categories: categories]
-//   i=0;
-//   TreeSet headersMeta = []
-//   TreeSet headersResults = []
-//   collected.each {
-//     if(i++ %2 == 0) {
-//       if(entry != null) {
-//         entries << entry
-//         entry.meta.each {k,v ->
-//           headersMeta << k
-//         }
-//       }
-//       entry = [:]
-//       entry.meta = it.clone()
-//     } else {
-//       entry.results = [:]
-//       it.eachLine { line ->
-//         (k, v) = line.split()
-//         entry.results << [(k) : v ]
-//         //entry.results << [(categories[(k)]) : v ]
-//         headersResults << (k)
-//         //headersResults << (categories[(k)])
-//       }
-//     }
-//   }
-//   entries << entry
-//   outfileJSON << prettyPrint(toJson(entries))
+  exec:
+  def outfileJSON = task.workDir.resolve('summaries.json')
+  def categoriesJSON = task.workDir.resolve('categories.json')
+  // def outfileCSV = task.workDir.resolve('summaries.csv')
+  categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
+  "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
+  "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
+  categoriesJSON << prettyPrint(toJson(categories))
+  entry = null
+  entries = []
+  // entries << [categories: categories]
+  i=0;
+  TreeSet headersMeta = []
+  TreeSet headersResults = []
+  collected.each {
+    if(i++ %2 == 0) {
+      if(entry != null) {
+        entries << entry
+        entry.meta.each {k,v ->
+          headersMeta << k
+        }
+      }
+      entry = [:]
+      entry.meta = it.clone()
+    } else {
+      entry.results = [:]
+      it.eachLine { line ->
+        (k, v) = line.split()
+        entry.results << [(k) : v ]
+        //entry.results << [(categories[(k)]) : v ]
+        headersResults << (k)
+        //headersResults << (categories[(k)])
+      }
+    }
+  }
+  entries << entry
+  outfileJSON << prettyPrint(toJson(entries))
 
-//   // //GENERATE CSV OUTPUT
-//   // SEP=","
-//   // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
-//   // entries.each { entry ->
-//   //   line = ""
-//   //   headersMeta.each { k ->
-//   //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
-//   //     line += line == "" ? val : (SEP+val)
-//   //   }
-//   //   headersResults.each { k ->
-//   //     value = entry.results[k]
-//   //     line += SEP
-//   //     // println(k + ' -> ' + value)
-//   //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
-//   //   }
-//   //   outfileCSV << line+"\n"
-//   // }
+  // //GENERATE CSV OUTPUT
+  // SEP=","
+  // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+  // entries.each { entry ->
+  //   line = ""
+  //   headersMeta.each { k ->
+  //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
+  //     line += line == "" ? val : (SEP+val)
+  //   }
+  //   headersResults.each { k ->
+  //     value = entry.results[k]
+  //     line += SEP
+  //     // println(k + ' -> ' + value)
+  //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
+  //   }
+  //   outfileCSV << line+"\n"
+  // }
 
-// }
+}
 
 // process plotDetailSimulatedDNA {
 //   label 'rscript'
