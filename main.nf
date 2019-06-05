@@ -242,8 +242,8 @@ process extarctTranscripts {
     // set val(meta), file(ref), file(features) from referencesForTranscriptomeExtraction
     set val(meta), file(ref), file(features) from referencesForTranscriptomeExtraction.map { [it[0], it[1][0], it[1][1]] }
 
-  // output:
-  //   set val(outmeta), file("${basename}.transcripts.fa") into transcripts4indexing, transcripts4rnfSimReads
+  output:
+    set val(outmeta), file(outfile) into transcripts4indexing, transcripts4rnfSimReads
 
 
   script:
@@ -251,10 +251,11 @@ process extarctTranscripts {
     basename=getTagFromMeta(meta)
     outmeta = meta.subMap(['species','version']) //meta.clone()
     outmeta.seqtype = 'mRNA'
+    outfile = "${basename}.transcripts.fa"
     // println(prettyPrint(toJson(outmeta)))
     // FEATURE_FIELD = meta.featfmt == 'bed' ? 8 : 3 //BED OR GFF3
     """
-    gffread -W -w ${basename}.transcripts.fa -g ${ref} ${features}
+    gffread -W -w ${outfile} -g ${ref} ${features}
     """
     // bedtools getfasta \
     //   -fi ${ref} \
@@ -334,247 +335,101 @@ process extarctTranscripts {
 // // // //   """
 // // // // }
 
-// process rnfSimReads {
-//   echo true
-//   tag{simmeta}
-//   label 'rnftools'
+process rnfSimReads {
+  echo true
+  tag{simmeta}
+  label 'rnftools'
 
-//   input:
-//     // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
-//     // set val(meta), file(ref) from references4rnfSimReads.mix(transcripts4rnfSimReads)
-//     set val(meta), file(ref) from transcripts4rnfSimReads
-//     // each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
-//     each coverage from params.simreadsDNA.coverage
-//     each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
-//     each simulator from params.simreadsDNA.simulator
-//     each mode from params.simreadsDNA.mode //PE, SE
-//     each distance from params.simreadsDNA.distance //PE only
-//     each distanceDev from params.simreadsDNA.distanceDev //PE only
+  input:
+    // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
+    // set val(meta), file(ref) from references4rnfSimReads.mix(transcripts4rnfSimReads)
+    set val(meta), file(ref) from transcripts4rnfSimReads
+    // each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
+    each coverage from params.simreadsDNA.coverage
+    each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
+    each simulator from params.simreadsDNA.simulator
+    each mode from params.simreadsDNA.mode //PE, SE
+    each distance from params.simreadsDNA.distance //PE only
+    each distanceDev from params.simreadsDNA.distanceDev //PE only
 
-//   output:
-//     // set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
-//     set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
+  output:
+    // set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
+    set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
 
-//   when:
-//     !(mode == "PE" && simulator == "CuReSim")
+  when:
+    !(mode == "PE" && simulator == "CuReSim")
 
-//   script:
-//     basename=meta.species+"_"+meta.version+"_"+simulator
-//     simmeta = meta.subMap(['species','version','seqtype'])+["simulator": simulator, "coverage":coverage, "mode": mode, "length": length]
-//     len1 = length
-//     if(mode == "PE") {
-//       //FOR rnftools
-//       len2 = length
-//       tuple = 2
-//       dist="distance="+distance+","
-//       distDev= "distance_deviation="+distanceDev+","
-//       //FOR meta
-//       simmeta.dist = distance
-//       simmeta.distanceDev = distanceDev
-//     } else {
-//       len2 = 0
-//       tuple = 1
-//       dist=""
-//       distDev=""
-//     }
-//     """
-//     echo "import rnftools
-//     rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
-//     rnftools.mishmash.${simulator}(
-//             fasta=\\"${ref}\\",
-//             coverage=${coverage},
-//             ${dist}
-//             ${distDev}
-//             read_length_1=${len1},
-//             read_length_2=${len2}
-//     )
-//     include: rnftools.include()
-//     rule: input: rnftools.input()
-//     " > Snakefile
-//     snakemake -p \
-//     && sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
-//     && gzip --fast --keep *.fq \
-//     && ls -la \
-//     #&& for f in *.fq; do
-//     #  sed -i '2~4 s/[^ACGTUacgtu]/N/g' \${f} \
-//     #  && gzip --fast \${f}
-//     #done \
-//     && find . -type d -mindepth 2 | xargs rm -r
-//     """
-// }
+  script:
+    basename=meta.species+"_"+meta.version+"_"+simulator
+    simmeta = meta.subMap(['species','version','seqtype'])+["simulator": simulator, "coverage":coverage, "mode": mode, "length": length]
+    len1 = length
+    if(mode == "PE") {
+      //FOR rnftools
+      len2 = length
+      tuple = 2
+      dist="distance="+distance+","
+      distDev= "distance_deviation="+distanceDev+","
+      //FOR meta
+      simmeta.dist = distance
+      simmeta.distanceDev = distanceDev
+    } else {
+      len2 = 0
+      tuple = 1
+      dist=""
+      distDev=""
+    }
+    """
+    echo "import rnftools
+    rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
+    rnftools.mishmash.${simulator}(
+            fasta=\\"${ref}\\",
+            coverage=${coverage},
+            ${dist}
+            ${distDev}
+            read_length_1=${len1},
+            read_length_2=${len2}
+    )
+    include: rnftools.include()
+    rule: input: rnftools.input()
+    " > Snakefile
+    snakemake -p \
+    && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
+    && time gzip --fast *.fq \
+    && ls -lah \
+    && find . -type d -mindepth 2 | xargs rm -r
+    """
+}
 
-// // process convertReadCoordinates {
-// //   // label 'groovy'
-// //   echo true
-// //   tag{simmeta.subMap(['species','version'])}
-// //   scratch false
-// //   container null
-// //   module 'groovy/2.4.7'
+process convertReadCoordinates {
+  // label 'groovy'
+  echo true
+  tag{simmeta.subMap(['species','version'])}
+  label 'groovy'
+  container null
+  // module 'groovy/2.4.7'
 
 
-// //   input:
-// //     set val(simmeta), file(ref), file(reads) from readsForCoordinateConversion
+  input:
+    set val(simmeta), file(ref), file(reads) from readsForCoordinateConversion
 
-// //   output:
-// //     set val(simmeta), file('*R?.fq.gz') into convertedCoordinatesReads
-// //   // exec:
-// //   // println reads
-// //   // """
-// //   // ls -la
-// //   // """
-// //   script:
-// //   out1 = reads[0].name.replace('.1.fq.gz','.R1.fq.gz')
-// //   out2 = reads[1].name.replace('.2.fq.gz','.R2.fq.gz')
-// //   """
-// //   tct_rnf.groovy --transcriptome ${ref} \
-// //     --in-forward ${reads[0]} --in-reverse ${reads[1]} \
-// //     --out-forward ${reads[0]} --out-reverse ${reads[1]}
-// //   """
-// // //   """
-// // //   #!/usr/bin/env groovy
-
-// // //   import static groovy.json.JsonOutput.*
-// // //   import java.util.zip.GZIPInputStream
-// // //   import java.util.zip.GZIPOutputStream
+  output:
+    set val(simmeta), file('*R?.fq.gz') into convertedCoordinatesReads
+  // exec:
+  // println reads
+  // """
+  // ls -la
+  // """
+  script:
+  out1 = reads[0].name.replace('.1.fq.gz','.R1.fq.gz')
+  out2 = reads[1].name.replace('.2.fq.gz','.R2.fq.gz')
+  """
+  tct_rnf.groovy --transcriptome ${ref} \
+    --in-forward ${reads[0]} --in-reverse ${reads[1]} \
+    --out-forward ${reads[0]} --out-reverse ${reads[1]}
+  """
+}
 
 
-// // // final int PAD4BASES = 9
-// // // final int PAD4CHROMOSOMES = 5
-// // // final int BUFFER_SIZE = 8192
-// // // final String NEWLINE = System.lineSeparator();
-
-// // // File refFile = new File('${ref}')
-// // // File fastqFile1 = new File('${reads[0]}')
-// // // File fastqFile2 = new File('${reads[1]}')
-// // // File outFile1 = new File('${out1}');
-// // // File outFile2 = new File('${out2}');
-// // // append = false
-// // // writer1 = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(outFile1, append)), "UTF-8"), BUFFER_SIZE);
-// // // writer2 = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(outFile2, append)), "UTF-8"), BUFFER_SIZE);
-
-// // // refs = []
-// // // refFile.withReader { source ->
-// // //   String line
-// // //   while( line = source.readLine()) {
-// // //     if(line =~ /^>/) {
-// // //       toks = line.split(' ')
-// // //       record = [:]
-// // //       toks.each { tok ->
-// // //         subtoks = tok.split(':|=')
-// // //         record.(subtoks[0]) = subtoks[0] == 'loc' ? subtoks[1].split('\\\\|') : subtoks[1].split(',|\\\\|')*.split('-')
-// // //         if(subtoks[0] =~ /(exons)|(segs)/ ) {
-// // //           record.(subtoks[0]) = record.(subtoks[0]).collect{ it*.toInteger() }
-// // //         }
-// // //       }
-// // //       refs << record
-// // //     }
-// // //   }
-// // // }
-
-
-
-// // // try {
-// // //   gzipStream1 = new GZIPInputStream(new FileInputStream(fastqFile1), BUFFER_SIZE);
-// // //   content1 = new BufferedReader(new InputStreamReader(gzipStream1, "UTF-8"), BUFFER_SIZE);
-// // //   gzipStream2 = new GZIPInputStream(new FileInputStream(fastqFile2), 8192);
-// // //   content2 = new BufferedReader(new InputStreamReader(gzipStream2, "UTF-8"), 8192);
-// // //   i = 4
-// // //   while ((line1 = content1.readLine()) != null && !line1.isEmpty() && (line2 = content2.readLine()) != null && !line2.isEmpty() ) {
-// // //     if(i++ % 4 != 0 ) {
-// // //       //JUST OUTPUT/STORE LINE AS IS
-// // //       writer1.write(line1);
-// // //       writer1.write(NEWLINE);
-// // //       writer2.write(line2);
-// // //       writer2.write(NEWLINE);
-// // //       continue;
-// // //     }
-
-// // //     split1 = line1.split('__')
-
-// // //     coords = split1[2].replaceAll('\\\\(','').replaceAll('\\\\)','')
-// // //     coordsSplit = coords.split(',')
-
-
-// // //     //FILEDS TO BE USED AND MODIFIED
-// // //     ref = coordsSplit[1].toInteger()
-// // //     start = coordsSplit[3].toInteger()
-// // //     end = coordsSplit[4].toInteger()
-// // //     startMate = coordsSplit[8].toInteger()
-// // //     endMate = coordsSplit[9].toInteger()
-
-// // //     //CURRENT REF RECORD
-// // //     refRecord = refs[ref-1]
-
-// // //     //CONVERT REF ID
-// // //     coordsSplit[1] = coordsSplit[6] = refRecord.loc[0].padLeft(PAD4CHROMOSOMES,'0')
-
-// // //     //CONVERT COORDINATES
-// // //     translatedStart = translateAndPad(start, refRecord, PAD4BASES)
-// // //     translatedEnd = translateAndPad(end, refRecord, PAD4BASES)
-// // //     translatedStartMate = translateAndPad(startMate, refRecord, PAD4BASES)
-// // //     translatedEndMate = translateAndPad(endMate, refRecord, PAD4BASES)
-// // //     coordsSplit[3] = translatedStart < translatedEnd ? translatedStart : translatedEnd
-// // //     coordsSplit[4] = translatedStart >= translatedEnd ? translatedStart : translatedEnd
-// // //     coordsSplit[8] = translatedStartMate < translatedEndMate ? translatedStartMate : translatedEndMate
-// // //     coordsSplit[9] = translatedStartMate >= translatedEndMate ? translatedStartMate : translatedEndMate
-
-// // //     //RE-CONSTITUTE READ HEADER
-// // //     StringBuilder sb = new StringBuilder()
-// // //     sb.append('(')
-// // //     sb.append(coordsSplit[0..4].join(',') )
-// // //     sb.append('),(')
-// // //     sb.append(coordsSplit[5..9].join(',') )
-// // //     sb.append(')')
-// // //     split1[2] = sb.toString()
-// // //     outline = split1.join('__')
-
-// // //     writer1.write(outline);
-// // //     writer1.write(NEWLINE);
-// // //     writer2.write(outline[0..-2]+'2');
-// // //     writer2.write(NEWLINE);
-// // //   }
-// // // } catch (FileNotFoundException ex) {
-// // //   ex.printStackTrace();
-// // // } catch (InterruptedException ex) {
-// // //   ex.printStackTrace();
-// // // } catch (IOException ex) {
-// // //   ex.printStackTrace();
-// // // } finally {
-// // //   try {
-// // //     if (writer1 != null) {
-// // //       writer1.close();
-// // //     }
-// // //     if (writer2 != null) {
-// // //       writer2.close();
-// // //     }
-// // //   } catch (IOException ex) {
-// // //     ex.printStackTrace();
-// // //   }
-// // // }
-
-
-// // // String translateAndPad(int position, Map record, int padding) {
-// // //   return translate(position, record).toString().padLeft(padding,'0')
-// // // }
-
-
-// // // int translate (int position, Map record) {
-// // //   boolean forward = record.loc[2].equals('+')
-// // //   int numrecords = record.segs.size()
-// // //   for(int i=0; i<numrecords; i++) {
-// // //     seg = record.segs[i]
-// // //     if(position >= seg[0] && position <= seg[1]) {
-// // //       if(forward) {
-// // //         return record.exons[i][0]+position-seg[0]
-// // //       } else {
-// // //         return record.exons[numrecords-i-1][0]+(seg[1]-position)
-// // //       }
-// // //     }
-// // //   }
-// // //   return Integer.MIN_VALUE;
-// // // }
-// // //   """
-// // }
 
 // // //convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA).view()
 
