@@ -336,7 +336,7 @@ process extarctTranscripts {
 // // // // }
 
 process rnfSimReads {
-  echo true
+  // echo true
   tag{simmeta}
   label 'rnftools'
 
@@ -395,25 +395,21 @@ process rnfSimReads {
     snakemake -p \
     && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
     && time gzip --fast *.fq \
-    && ls -lah \
     && find . -type d -mindepth 2 | xargs rm -r
     """
 }
 
 process convertReadCoordinates {
-  // label 'groovy'
+  label 'groovy'
   echo true
   tag{simmeta.subMap(['species','version'])}
-  label 'groovy'
-  container null
-  // module 'groovy/2.4.7'
 
 
   input:
     set val(simmeta), file(ref), file(reads) from readsForCoordinateConversion
 
-  output:
-    set val(simmeta), file('*R?.fq.gz') into convertedCoordinatesReads
+  // output:
+  //   set val(simmeta), file('*R?.fq.gz') into convertedCoordinatesReads
   // exec:
   // println reads
   // """
@@ -424,8 +420,9 @@ process convertReadCoordinates {
   out2 = reads[1].name.replace('.2.fq.gz','.R2.fq.gz')
   """
   tct_rnf.groovy --transcriptome ${ref} \
-    --in-forward ${reads[0]} --in-reverse ${reads[1]} \
-    --out-forward ${reads[0]} --out-reverse ${reads[1]}
+    --in-forward ${reads[0]} --in-reverse ${reads[0]} \
+    --out-forward ${out1} --out-reverse ${out2}
+  pwd
   """
 }
 
