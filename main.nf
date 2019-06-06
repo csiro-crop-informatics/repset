@@ -169,12 +169,8 @@ process stageInputFile {
     }
 }
 
-
-
-
-
-referencesOnly = Channel.create()
-referencesForTranscriptomeExtraction = Channel.create()
+// referencesOnly = Channel.create()
+// referencesForTranscriptomeExtraction = Channel.create()
 stagedFiles
   // .view()
   .groupTuple() //match back fasta with it's gffif available
@@ -186,7 +182,6 @@ stagedFiles
   }
   // .view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
   // .choice(  referencesOnly, referencesForTranscriptomeExtraction ) { it[1].size() == 1 ? 0 : 1 }
-
   .into { referencesOnly; referencesForTranscriptomeExtraction } //{ it[1].size() == 1 ? 0 : 1 }
 
 
@@ -390,44 +385,44 @@ process convertReadCoordinates {
   """
 }
 
-
+// convertedCoordinatesReads.view()
 
 // convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams).view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
 
-// process alignSimulatedReads {
-//   label 'align'
-//   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-//   tag("${idxmeta.subMap(['tool','species'])} << ${simmeta.subMap(['simulator','nreads'])} @ ${paramsmeta.subMap(['paramslabel'])}")
+process alignSimulatedReads {
+  label 'align'
+  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  tag("${idxmeta.subMap(['tool','species','version'])} << ${simmeta.subMap(['simulator','nreads'])} @ ${paramsmeta.subMap(['paramslabel'])}")
 
-//   input:
-//     // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-//    // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-//    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams)
+  input:
+    // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+   // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+   set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads
+                                                                                   .mix(readsForAlignment.filter { simmeta, files -> simmeta.seqtype == 'DNA' })
+                                                                                   .combine(indices)
+                                                                                   .combine(alignersParams)
 
-//   // output:
-//   //   set val(alignmeta), file('out.?am') into alignedSimulatedDNA
+  // output:
+  //   set val(alignmeta), file('out.?am') into alignedSimulatedDNA
 
-//   when: //only align DNA reads to the corresponding genome, using the corresponding params set
-//     // idxmeta.tool == paramsmeta.tool
-//   // //   idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool
-//   //   //idxmeta.seqtype == 'DNA' //&&
-//     // idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool //&& paramsmeta.seqtype == 'RNA'
-//     idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && \
-//     (paramsmeta.alignMode.startsWith(simmeta.seqtype) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
+  when: //only align DNA reads to the corresponding genome, using the corresponding params set
+    // idxmeta.tool == paramsmeta.tool
+  // //   idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool
+  //   //idxmeta.seqtype == 'DNA' //&&
+    // idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool //&& paramsmeta.seqtype == 'RNA'
+    idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && \
+    (paramsmeta.alignMode.startsWith(simmeta.seqtype) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
 
-//   exec:
-//     println(prettyPrint(toJson(idxmeta)))
-//     println(prettyPrint(toJson(simmeta)))
-//     println(prettyPrint(toJson(paramsmeta)))
-//   // script:
-//   //   alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
-//   //   // if(simmeta.mode == 'PE') {
-//   //   ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
-//   //     template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-//   //   // } else {
-//   //   //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-//   //   // }
-// }
+  exec:
+    println(prettyPrint(toJson(idxmeta)))
+    println(prettyPrint(toJson(simmeta)))
+    println(prettyPrint(toJson(paramsmeta)))
+  // script:
+  //   alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
+  //   // if(simmeta.mode == 'PE') {
+  //   ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
+  //   template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/..
+}
 
 // // // // process rnfEvaluateSimulated {
 // // // //   label 'rnftools'
