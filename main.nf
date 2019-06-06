@@ -2,6 +2,10 @@
 
 //For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
+jsonGenerator = new groovy.json.JsonGenerator.Options()
+                .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
+                .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
+                .build()
 
 //RETURNS DNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
@@ -59,7 +63,8 @@ params.defaults.alignersParams.addNested(params.alignersParams).each { alignMode
     }
   }
 }
-Channel.from(alignersParamsList).into {alignersParams4realDNA; alignersParams4SimulatedDNA}
+Channel.from(alignersParamsList).set {alignersParams}
+// Channel.from(alignersParamsList).into {alignersParams4realDNA; alignersParams4SimulatedDNA}
 
 
 /*
@@ -116,7 +121,8 @@ Channel.from(params.referencesDNA).separate (fastaChn, gffChn) { it ->
   onlyFasta.remove('gff')
   onlyGff = it.clone()
   onlyGff.remove('fasta')
-  onlyGff.seqtype = 'mRNA'
+  // onlyGff.remove('seqtype')
+  // onlyGff.seqtype = 'RNA'
   if(it.containsKey('gff')) {
     [
       [onlyFasta, it.fasta.isURL() ? file(workDir+'/REMOTE') : file(it.fasta)],
@@ -140,7 +146,8 @@ process stageInputFile {
     set val(meta), file(infile) from fastaChn.mix(gffChn)
 
   output:
-    set val(outmeta), file(outfile), val(meta.seqtype)  into stagedFiles
+    set val(outmeta), file(outfile)  into stagedFiles
+    // set val(outmeta), file(outfile), val(meta.seqtype)  into stagedFiles
 
   when:
     !infile.name.matches('NULL')
@@ -150,7 +157,7 @@ process stageInputFile {
     // println(prettyPrint(toJson(meta)))
     fileType = meta.containsKey('fasta') ? 'fasta' : 'gff'
     outfile =  "${basename}.${fileType}"
-    outmeta = meta.subMap(['species', 'version'])
+    outmeta = meta.subMap(['species', 'version','seqtype'])
     if(infile.name.matches("REMOTE.*")) { //REMOTE FILE
       remoteFileName = meta."${fileType}"
       decompress = remoteFileName.matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
@@ -162,22 +169,37 @@ process stageInputFile {
     }
 }
 
-    // jsonGenerator = new groovy.json.JsonGenerator.Options()
-    //             .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
-    //             .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
-    //             .build()
+
 
 
 
 referencesOnly = Channel.create()
 referencesForTranscriptomeExtraction = Channel.create()
 stagedFiles
+  // .view()
   .groupTuple() //match back fasta with it's gffif available
   // .view { meta, files, seqtype -> "meta: ${meta}\nfiles: ${files}\nseqtype: ${seqtype}"}
-  .map { meta, files, seqtype -> meta.seqtype = seqtype; [meta, files]}
+  // .map { meta, files, seqtype -> meta.seqtype = seqtype; [meta, files]}
+  .map { meta, files ->
+    files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta based on extension
+    [meta, files]
+  }
   // .view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
-  .choice(  referencesOnly, referencesForTranscriptomeExtraction ) { it[1].size() == 1 ? 0 : 1 }
+  // .choice(  referencesOnly, referencesForTranscriptomeExtraction ) { it[1].size() == 1 ? 0 : 1 }
 
+  .into { referencesOnly; referencesForTranscriptomeExtraction } //{ it[1].size() == 1 ? 0 : 1 }
+
+
+referencesOnly
+  // .map { [it[0], it[1][0]]} //meta, fasta_file
+  // .view()
+  .map { meta, files ->
+    // meta.seqtype = meta.seqtype[0] //un-list
+    // files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta based on extension
+    [meta, files[0]] //meta, fasta_file
+  }
+  // .view()
+  .into {referencesForAligners; references4rnfSimReads}
 
 process extarctTranscripts {
   echo true
@@ -188,8 +210,9 @@ process extarctTranscripts {
   input:
     // set val(meta), file(ref), file(features) from referencesForTranscriptomeExtraction
     set val(meta), file(ref), file(features) from referencesForTranscriptomeExtraction
+                    .filter { it[1].size() == 2 } //2 files needed aka skip if fasta-only
                     .map { meta, files ->
-                      files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta
+                      // files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta
                       [meta, files[0], files[1]] }
   output:
     set val(outmeta), file(outfile) into transcripts4indexing, transcripts4rnfSimReads
@@ -200,8 +223,8 @@ process extarctTranscripts {
   script:
     // println(prettyPrint(toJson(meta)))
     basename=getTagFromMeta(meta)
-    outmeta = meta.subMap(['species','version']) //meta.clone()
-    outmeta.seqtype = 'mRNA'
+    outmeta = meta.clone().subMap(['species','version']) //meta.clone()
+    outmeta.seqtype = 'RNA'
     outfile = "${basename}.transcripts.fa"
     // println(prettyPrint(toJson(outmeta)))
     // FEATURE_FIELD = meta.featfmt == 'bed' ? 8 : 3 //BED OR GFF3
@@ -210,14 +233,7 @@ process extarctTranscripts {
     """
 }
 
-referencesOnly
-  // .map { [it[0], it[1][0]]} //meta, fasta_file
-  .map { meta, files ->
-    meta.seqtype = meta.seqtype[0] //un-list
-    [meta, files[0]] //meta, fasta_file
-  }
-  // .view()
-  .into {referencesForAligners; references4rnfSimReads}
+
 
 // referencesForTranscriptomeExtraction.map { [it[0], it[1][0], it[1][1]] }.view()
 // referencesForTranscriptomeExtraction.map { meta, files -> [meta, files[0], files[1]] }.view()
@@ -225,9 +241,13 @@ referencesOnly
 //   files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1)} //ensure gff goes after fasta
 //   [meta, files[0], files[1]] }.view()
 
+//referencesForAligners.mix(transcripts4indexing).view()
+// aligners.combine(referencesForAligners.mix(transcripts4indexing)).view()
+// aligners.combine(referencesForAligners).view()
+// referencesForAligners.view()
 
-// // // // referencesForAlignersDNA.println { it }
-// // // // aligners.println { it }
+// // // // // referencesForAlignersDNA.println { it }
+// // // // // aligners.println { it }
 process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
@@ -241,7 +261,7 @@ process indexGenerator {
     set val(meta), file("*") into indices
 
   when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
-    (refmeta.seqtype == 'mRNA' && alignermeta.rna2rna && 'rna2rna'.matches(params.mode) ) || \
+    (refmeta.seqtype == 'RNA' && alignermeta.rna2rna && 'rna2rna'.matches(params.mode) ) || \
     (refmeta.seqtype == 'DNA' && (alignermeta.rna2dna || alignermeta.dna2dna) && ('rna2dna'.matches(params.mode) || 'dna2dna'.matches(params.mode)) )
 
   //  exec: //dev
@@ -295,7 +315,7 @@ process rnfSimReads {
 
   when:
     !(mode == "PE" && simulator == "CuReSim") && \
-    (meta.seqtype == 'mRNA' || (meta.seqtype == 'DNA' && 'dna2dna'.matches(params.mode) ))
+    (meta.seqtype == 'RNA' || (meta.seqtype == 'DNA' && 'dna2dna'.matches(params.mode) ))
     // ((meta.seqtype == 'mRNA' && 'rna2rna'.matches(params.mode)) || (meta.seqtype == 'DNA' && 'rna2rna'.matches(params.mode))
 
 
@@ -355,7 +375,7 @@ process convertReadCoordinates {
     set val(simmeta), file('*.fq.gz') into convertedCoordinatesReads
 
   when:
-    simmeta.seqtype == 'mRNA' && 'rna2dna'.matches(params.mode)
+    simmeta.seqtype == 'RNA' && 'rna2dna'.matches(params.mode)
 
   // exec:
   //   println(prettyPrint(toJson(simmeta)))
@@ -371,7 +391,8 @@ process convertReadCoordinates {
 }
 
 
-// convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA).view()
+
+// convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams).view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
 
 // process alignSimulatedReads {
 //   label 'align'
@@ -380,29 +401,32 @@ process convertReadCoordinates {
 
 //   input:
 //     // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-//     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+//    // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+//    set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams)
 
-//   output:
-//     set val(alignmeta), file('out.?am') into alignedSimulatedDNA
+//   // output:
+//   //   set val(alignmeta), file('out.?am') into alignedSimulatedDNA
 
 //   when: //only align DNA reads to the corresponding genome, using the corresponding params set
 //     // idxmeta.tool == paramsmeta.tool
 //   // //   idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool
 //   //   //idxmeta.seqtype == 'DNA' //&&
-//     idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'RNA'
+//     // idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool //&& paramsmeta.seqtype == 'RNA'
+//     idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && \
+//     (paramsmeta.alignMode.startsWith(simmeta.seqtype) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
 
-//   // exec:
-//   //   println(prettyPrint(toJson(idxmeta)))
-//   //   println(prettyPrint(toJson(simmeta)))
-//   //   println(prettyPrint(toJson(paramsmeta)))
-//   script:
-//     alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
-//     // if(simmeta.mode == 'PE') {
-//     ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
-//       template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-//     // } else {
-//     //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-//     // }
+//   exec:
+//     println(prettyPrint(toJson(idxmeta)))
+//     println(prettyPrint(toJson(simmeta)))
+//     println(prettyPrint(toJson(paramsmeta)))
+//   // script:
+//   //   alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
+//   //   // if(simmeta.mode == 'PE') {
+//   //   ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
+//   //     template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+//   //   // } else {
+//   //   //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+//   //   // }
 // }
 
 // // // // process rnfEvaluateSimulated {
