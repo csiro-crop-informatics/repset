@@ -2,7 +2,7 @@
 
 //RETURNS RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,beers}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  .filter{ params.alignersRNA == 'all' || it[0].matches(params.alignersRNA) }
+  .filter{ params.alignersRNA2DNA == 'all' || it[0].matches(params.alignersRNA2DNA) }
   .map {
     params.defaults.alignersParams.RNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
     params.defaults.alignersParams.RNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
