@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 //RETURNS RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
-Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+Channel.fromFilePairs("${workflow.projectDir}/templates/{index,beers}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
   .filter{ params.alignersRNA == 'all' || it[0].matches(params.alignersRNA) }
   .map {
     params.defaults.alignersParams.RNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
@@ -238,7 +238,7 @@ process alignSimulatedReadsRNA {
     meta = idxmeta.clone() + readsmeta.clone() + paramsmeta.clone()
     meta.remove('seqtype') //not needed downstream, would have to modiify tidy-ing to keep
     ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
-    template "rna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+    template "beers/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
 }
 
 process nameSortSamSimulatedRNA {

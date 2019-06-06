@@ -2,9 +2,8 @@
 
 biokanga align \
   --sfx ${idxmeta.target}.sfx \
-  --format 5 \
-  --in ${r1} \
-  --pair ${r2}  \
-  --out sam \
+  --in 1.fq.gz \
+  --pair 2.fq.gz  \
+  --out out.bam \
   --threads ${task.cpus} \
   ${ALIGN_PARAMS}
