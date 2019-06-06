@@ -59,7 +59,7 @@ params.defaults.alignersParams.addNested(params.alignersParams).each { alignMode
     }
   }
 }
-Channel.from(alignersParamsList).view().into {alignersParams4realDNA; alignersParams4SimulatedDNA}
+Channel.from(alignersParamsList).into {alignersParams4realDNA; alignersParams4SimulatedDNA}
 
 
 /*
@@ -194,6 +194,8 @@ process extarctTranscripts {
   output:
     set val(outmeta), file(outfile) into transcripts4indexing, transcripts4rnfSimReads
 
+  when:
+    'rna2rna'.matches(params.mode) || 'rna2dna'.matches(params.mode)
 
   script:
     // println(prettyPrint(toJson(meta)))
@@ -235,22 +237,19 @@ process indexGenerator {
   input:
     set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAligners.mix(transcripts4indexing))
 
-  // output:
-  //   set val(meta), file("*") into indices
+  output:
+    set val(meta), file("*") into indices
 
   when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
-    (refmeta.seqtype == 'mRNA' && alignermeta.rna2rna) || \
-    (refmeta.seqtype == 'DNA' && (alignermeta.rna2dna || alignermeta.dna2dna))
-    //  (alignermeta.dna && 'simulatedDNA'.matches(params.mode)) \
-    //  || (alignermeta.rna && 'simulatedRNA'.matches(params.mode))
-    //  (refmeta.seqtype == 'DNA' && alignermeta.dna && 'simulatedDNA'.matches(params.mode)) || (refmeta.seqtype == 'RNA' && alignermeta.rna && 'simulatedRNA'.matches(params.mode))
+    (refmeta.seqtype == 'mRNA' && alignermeta.rna2rna && 'rna2rna'.matches(params.mode) ) || \
+    (refmeta.seqtype == 'DNA' && (alignermeta.rna2dna || alignermeta.dna2dna) && ('rna2dna'.matches(params.mode) || 'dna2dna'.matches(params.mode)) )
 
-   exec: //dev
-   meta =  alignermeta+refmeta//[target: "${ref}"]
-   println(prettyPrint(toJson(meta)))
-  // script:
-  //   meta = [tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
-  //   template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
+  //  exec: //dev
+  //  meta =  alignermeta+refmeta//[target: "${ref}"]
+  //  println(prettyPrint(toJson(meta)))
+  script:
+    meta = [tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
+    template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
 
 // // // process indexReferences4rnfSimReads {
@@ -264,7 +263,7 @@ process indexGenerator {
 // // //     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
 
 // // //   when:
-// // //     'simulatedDNA'.matches(params.mode) //only needed referencesLocal is a separate channel,
+// // //     'simulatedDNA'.matches(params.reads) //only needed referencesLocal is a separate channel,
 
 // // //   script:
 // // //   """
@@ -273,132 +272,138 @@ process indexGenerator {
 // // // }
 
 
+process rnfSimReads {
+  // echo true
+  tag{simmeta}
+  label 'rnftools'
+
+  input:
+    // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
+    set val(meta), file(ref) from references4rnfSimReads.mix(transcripts4rnfSimReads)
+    // set val(meta), file(ref) from transcripts4rnfSimReads
+    // each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
+    each coverage from params.simreadsDNA.coverage
+    each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
+    each simulator from params.simreadsDNA.simulator
+    each mode from params.simreadsDNA.mode //PE, SE
+    each distance from params.simreadsDNA.distance //PE only
+    each distanceDev from params.simreadsDNA.distanceDev //PE only
+
+  output:
+    set val(simmeta), file("*.fq.gz") into readsForAlignment
+    set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
+
+  when:
+    !(mode == "PE" && simulator == "CuReSim") && \
+    (meta.seqtype == 'mRNA' || (meta.seqtype == 'DNA' && 'dna2dna'.matches(params.mode) ))
+    // ((meta.seqtype == 'mRNA' && 'rna2rna'.matches(params.mode)) || (meta.seqtype == 'DNA' && 'rna2rna'.matches(params.mode))
 
 
-// process rnfSimReads {
-//   // echo true
-//   tag{simmeta}
-//   label 'rnftools'
+  // exec:
+  //   println(prettyPrint(toJson(meta)))
+
+  script:
+    basename=meta.species+"_"+meta.version+"_"+simulator
+    simmeta = meta.subMap(['species','version','seqtype'])+["simulator": simulator, "coverage":coverage, "mode": mode, "length": length]
+    len1 = length
+    if(mode == "PE") {
+      //FOR rnftools
+      len2 = length
+      tuple = 2
+      dist="distance="+distance+","
+      distDev= "distance_deviation="+distanceDev+","
+      //FOR meta
+      simmeta.dist = distance
+      simmeta.distanceDev = distanceDev
+    } else {
+      len2 = 0
+      tuple = 1
+      dist=""
+      distDev=""
+    }
+    """
+    echo "import rnftools
+    rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
+    rnftools.mishmash.${simulator}(
+            fasta=\\"${ref}\\",
+            coverage=${coverage},
+            ${dist}
+            ${distDev}
+            read_length_1=${len1},
+            read_length_2=${len2}
+    )
+    include: rnftools.include()
+    rule: input: rnftools.input()
+    " > Snakefile
+    snakemake -p \
+    && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
+    && time gzip --fast *.fq \
+    && find . -type d -mindepth 2 | xargs rm -r
+    """
+}
+
+process convertReadCoordinates {
+  label 'groovy'
+  echo true
+  tag{simmeta.subMap(['species','version'])}
+
+
+  input:
+    set val(simmeta), file(ref), file(reads) from readsForCoordinateConversion
+
+  output:
+    set val(simmeta), file('*.fq.gz') into convertedCoordinatesReads
+
+  when:
+    simmeta.seqtype == 'mRNA' && 'rna2dna'.matches(params.mode)
+
+  // exec:
+  //   println(prettyPrint(toJson(simmeta)))
+
+  script:
+  out1 = reads[0].name.replace('.1.fq.gz','.R1.fq.gz')
+  out2 = reads[1].name.replace('.2.fq.gz','.R2.fq.gz')
+  """
+  tct_rnf.groovy --transcriptome ${ref} \
+    --in-forward ${reads[0]} --in-reverse ${reads[0]} \
+    --out-forward ${out1} --out-reverse ${out2}
+  """
+}
+
+
+// convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA).view()
+
+// process alignSimulatedReads {
+//   label 'align'
+//   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+//   tag("${idxmeta.subMap(['tool','species'])} << ${simmeta.subMap(['simulator','nreads'])} @ ${paramsmeta.subMap(['paramslabel'])}")
 
 //   input:
-//     // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
-//     set val(meta), file(ref) from references4rnfSimReads.mix(transcripts4rnfSimReads)
-//     // set val(meta), file(ref) from transcripts4rnfSimReads
-//     // each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
-//     each coverage from params.simreadsDNA.coverage
-//     each length from params.simreadsDNA.length.toString().tokenize(",")*.toInteger()
-//     each simulator from params.simreadsDNA.simulator
-//     each mode from params.simreadsDNA.mode //PE, SE
-//     each distance from params.simreadsDNA.distance //PE only
-//     each distanceDev from params.simreadsDNA.distanceDev //PE only
+//     // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
+//     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
 
 //   output:
-//     set val(simmeta), file("*.fq.gz") into readsForAlignersDNA
-//     set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
+//     set val(alignmeta), file('out.?am') into alignedSimulatedDNA
 
-//   when:
-//     !(mode == "PE" && simulator == "CuReSim")
+//   when: //only align DNA reads to the corresponding genome, using the corresponding params set
+//     // idxmeta.tool == paramsmeta.tool
+//   // //   idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool
+//   //   //idxmeta.seqtype == 'DNA' //&&
+//     idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'RNA'
 
+//   // exec:
+//   //   println(prettyPrint(toJson(idxmeta)))
+//   //   println(prettyPrint(toJson(simmeta)))
+//   //   println(prettyPrint(toJson(paramsmeta)))
 //   script:
-//     basename=meta.species+"_"+meta.version+"_"+simulator
-//     simmeta = meta.subMap(['species','version','seqtype'])+["simulator": simulator, "coverage":coverage, "mode": mode, "length": length]
-//     len1 = length
-//     if(mode == "PE") {
-//       //FOR rnftools
-//       len2 = length
-//       tuple = 2
-//       dist="distance="+distance+","
-//       distDev= "distance_deviation="+distanceDev+","
-//       //FOR meta
-//       simmeta.dist = distance
-//       simmeta.distanceDev = distanceDev
-//     } else {
-//       len2 = 0
-//       tuple = 1
-//       dist=""
-//       distDev=""
-//     }
-//     """
-//     echo "import rnftools
-//     rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
-//     rnftools.mishmash.${simulator}(
-//             fasta=\\"${ref}\\",
-//             coverage=${coverage},
-//             ${dist}
-//             ${distDev}
-//             read_length_1=${len1},
-//             read_length_2=${len2}
-//     )
-//     include: rnftools.include()
-//     rule: input: rnftools.input()
-//     " > Snakefile
-//     snakemake -p \
-//     && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
-//     && time gzip --fast *.fq \
-//     && find . -type d -mindepth 2 | xargs rm -r
-//     """
+//     alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
+//     // if(simmeta.mode == 'PE') {
+//     ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
+//       template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+//     // } else {
+//     //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
+//     // }
 // }
-
-// process convertReadCoordinates {
-//   label 'groovy'
-//   echo true
-//   tag{simmeta.subMap(['species','version'])}
-
-
-//   input:
-//     set val(simmeta), file(ref), file(reads) from readsForCoordinateConversion
-
-//   output:
-//     set val(simmeta), file('*.fq.gz') into convertedCoordinatesReads
-
-//   when:
-//     simmeta.seqtype == 'mRNA'
-
-//   script:
-//   out1 = reads[0].name.replace('.1.fq.gz','.R1.fq.gz')
-//   out2 = reads[1].name.replace('.2.fq.gz','.R2.fq.gz')
-//   """
-//   tct_rnf.groovy --transcriptome ${ref} \
-//     --in-forward ${reads[0]} --in-reverse ${reads[0]} \
-//     --out-forward ${out1} --out-reverse ${out2}
-//   """
-// }
-
-
-
-// // // // //convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA).view()
-
-// // process alignSimulatedReads {
-// //   label 'align'
-// //   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-// //   tag("${idxmeta.subMap(['tool','species'])} << ${simmeta.subMap(['simulator','nreads'])} @ ${paramsmeta.subMap(['paramslabel'])}")
-
-// //   input:
-// //     // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-// //     set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-
-// //   output:
-// //     set val(alignmeta), file('out.?am') into alignedSimulatedDNA
-
-// //   when: //only align DNA reads to the corresponding genome, using the corresponding params set
-// //     // idxmeta.tool == paramsmeta.tool
-// //   // //   idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool
-// //   //   //idxmeta.seqtype == 'DNA' //&&
-// //     idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && paramsmeta.seqtype == 'RNA'
-
-// //   // exec:
-// //   //   println(prettyPrint(toJson(idxmeta)))
-// //   //   println(prettyPrint(toJson(simmeta)))
-// //   //   println(prettyPrint(toJson(paramsmeta)))
-// //   script:
-// //     alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
-// //     // if(simmeta.mode == 'PE') {
-// //     ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
-// //       template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-// //     // } else {
-// //     //   template "dna/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/
-// //     // }
-// // }
 
 // // // // process rnfEvaluateSimulated {
 // // // //   label 'rnftools'
