@@ -218,7 +218,7 @@ process extarctTranscripts {
   script:
     // println(prettyPrint(toJson(meta)))
     basename=getTagFromMeta(meta)
-    outmeta = meta.clone().subMap(['species','version']) //meta.clone()
+    outmeta = meta.subMap(['species','version']) //meta.clone()
     outmeta.seqtype = 'RNA'
     outfile = "${basename}.transcripts.fa"
     // println(prettyPrint(toJson(outmeta)))
@@ -389,10 +389,10 @@ process convertReadCoordinates {
 
 // convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams).view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
 
-process alignSimulatedReads {
+process mapSimulatedReads {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  tag("${idxmeta.subMap(['tool','species','version'])} << ${simmeta.subMap(['simulator','nreads'])} @ ${paramsmeta.subMap(['paramslabel'])}")
+  tag("${idxmeta.subMap(['tool','species','version','seqtype'])} << ${simmeta.subMap(['simulator','seqtype'])} @ ${paramsmeta.subMap(['paramslabel','alignMode'])}")
 
   input:
     // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
@@ -402,242 +402,237 @@ process alignSimulatedReads {
                                                                                    .combine(indices)
                                                                                    .combine(alignersParams)
 
-  // output:
-  //   set val(alignmeta), file('out.?am') into alignedSimulatedDNA
+  output:
+    set val(alignmeta), file('out.?am') into alignedSimulated
 
-  when: //only align DNA reads to the corresponding genome, using the corresponding params set
-    // idxmeta.tool == paramsmeta.tool
-  // //   idxmeta.seqtype == 'DNA' && idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool
-  //   //idxmeta.seqtype == 'DNA' //&&
-    // idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool //&& paramsmeta.seqtype == 'RNA'
+  when: //only align simulated reads to the corresponding genome, using the corresponding params set, in the correct mode: DNA2DNA, RNA2DNA, RNA2RNA
     idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && \
     (paramsmeta.alignMode.startsWith(simmeta.seqtype) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
 
-  exec:
-    println(prettyPrint(toJson(idxmeta)))
-    println(prettyPrint(toJson(simmeta)))
-    println(prettyPrint(toJson(paramsmeta)))
-  // script:
-  //   alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
-  //   // if(simmeta.mode == 'PE') {
-  //   ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
-  //   template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/..
+  // exec:
+  //   println(prettyPrint(toJson(idxmeta)))
+  //   println(prettyPrint(toJson(simmeta)))
+  //   println(prettyPrint(toJson(paramsmeta)))
+  script:
+    alignmeta = idxmeta.clone() + simmeta.clone() + paramsmeta.clone()
+    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
+    template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/.. could have separate templates for PE and SE // if(simmeta.mode == 'PE')
 }
 
-// // // // process rnfEvaluateSimulated {
-// // // //   label 'rnftools'
-// // // //   tag{alignmeta.subMap(['tool','simulator','target','paramslabel'])}
+process rnfEvaluateSimulated {
+  label 'rnftools'
+  tag{alignmeta.subMap(['tool','simulator','target','paramslabel'])}
 
+  input:
+    set val(alignmeta), file(samOrBam) from alignedSimulated
 
-// // // //   input:
-// // // //     set val(alignmeta), file(samOrBam) from alignedSimulatedDNA
+  output:
+     set val(alignmeta), file(summary) into summariesSimulated
+     set val(alignmeta), file(detail) into detailsSimulated
 
-// // // //   output:
-// // // //      set val(alignmeta), file(summary) into summariesSimulatedDNA
-// // // //      set val(alignmeta), file(detail) into detailsSimulatedDNA
+  // exec:
+  script:
+  println prettyPrint(toJson(alignmeta))
+  """
+  paste \
+    <( rnftools sam2es --allowed-delta 100 -i ${samOrBam} -o - | tee ES  | awk '\$1 !~ /^#/' \
+      | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
+    ) \
+    <( samtools view ${samOrBam} ) \
+  | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
+  """
 
-// // // //   script:
-// // // //   // println prettyPrint(toJson(alignmeta))
-// // // //   """
-// // // //   paste \
-// // // //     <( rnftools sam2es --allowed-delta 100 -i ${samOrBam} -o - | tee ES  | awk '\$1 !~ /^#/' \
-// // // //       | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
-// // // //     ) \
-// // // //     <( samtools view ${samOrBam} ) \
-// // // //   | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
-// // // //   """
+// rnftools sam2es OUTPUT header
+// # RN:   read name
+// # Q:    is mapped with quality
+// # Chr:  chr id
+// # D:    direction
+// # L:    leftmost nucleotide
+// # R:    rightmost nucleotide
+// # Cat:  category of alignment assigned by LAVEnder
+// #         M_i    i-th segment is correctly mapped
+// #         m      segment should be unmapped but it is mapped
+// #         w      segment is mapped to a wrong location
+// #         U      segment is unmapped and should be unmapped
+// #         u      segment is unmapped and should be mapped
+// # Segs: number of segments
+// #
+// # RN    Q       Chr     D       L       R       Cat     Segs
+}
 
-// // // // // rnftools sam2es OUTPUT header
-// // // // // # RN:   read name
-// // // // // # Q:    is mapped with quality
-// // // // // # Chr:  chr id
-// // // // // # D:    direction
-// // // // // # L:    leftmost nucleotide
-// // // // // # R:    rightmost nucleotide
-// // // // // # Cat:  category of alignment assigned by LAVEnder
-// // // // // #         M_i    i-th segment is correctly mapped
-// // // // // #         m      segment should be unmapped but it is mapped
-// // // // // #         w      segment is mapped to a wrong location
-// // // // // #         U      segment is unmapped and should be unmapped
-// // // // // #         u      segment is unmapped and should be mapped
-// // // // // # Segs: number of segments
-// // // // // #
-// // // // // # RN    Q       Chr     D       L       R       Cat     Segs
-// // // // }
+// process collateDetailsSimulatedDNA {
+//   label 'stats'
+//   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
-// // // // // process collateDetailsSimulatedDNA {
-// // // // //   label 'stats'
-// // // // //   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+//   input:
+//     val collected from detailsSimulatedDNA.collect()
 
-// // // // //   input:
-// // // // //     val collected from detailsSimulatedDNA.collect()
+//   output:
+//     file 'details.tsv' into collatedDetailsSimulatedDNA
 
-// // // // //   output:
-// // // // //     file 'details.tsv' into collatedDetailsSimulatedDNA
+//   exec:
+//   def outfileTSV = task.workDir.resolve('details.tsv')
+//   i = 0;
+//   sep = "\t"
+//   header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
+//   // outfileTSV << header
+//   outfileTSV.withWriter { target ->
+//     target << header
+//     collected.each {
+//       if(i++ %2 == 0) {
+//         meta = it
+//       } else {
+//         common = meta.simulator+sep+meta.tool+sep+meta.mode+"\n"
+//         it.withReader { source ->
+//           String line
+//           while( line=source.readLine() ) {
+//             StringBuilder sb = new StringBuilder()
+//             sb.append(meta.species).append(sep).append(line).append(sep).append(common)
+//             target << sb
+//             // target << meta.species+sep+line+sep+common
+//           }
+//         }
+//       }
+//       // it.eachLine { line ->
+//       //   outfileTSV << meta.species+sep+line+sep+common
+//       // }
+//     }
+//   }
+// }
 
-// // // // //   exec:
-// // // // //   def outfileTSV = task.workDir.resolve('details.tsv')
-// // // // //   i = 0;
-// // // // //   sep = "\t"
-// // // // //   header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
-// // // // //   // outfileTSV << header
-// // // // //   outfileTSV.withWriter { target ->
-// // // // //     target << header
-// // // // //     collected.each {
-// // // // //       if(i++ %2 == 0) {
-// // // // //         meta = it
-// // // // //       } else {
-// // // // //         common = meta.simulator+sep+meta.tool+sep+meta.mode+"\n"
-// // // // //         it.withReader { source ->
-// // // // //           String line
-// // // // //           while( line=source.readLine() ) {
-// // // // //             StringBuilder sb = new StringBuilder()
-// // // // //             sb.append(meta.species).append(sep).append(line).append(sep).append(common)
-// // // // //             target << sb
-// // // // //             // target << meta.species+sep+line+sep+common
-// // // // //           }
-// // // // //         }
-// // // // //       }
-// // // // //       // it.eachLine { line ->
-// // // // //       //   outfileTSV << meta.species+sep+line+sep+common
-// // // // //       // }
-// // // // //     }
-// // // // //   }
-// // // // // }
+process collateSummariesSimulated {
+  label 'stats'
+  executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
-// // // // process collateSummariesSimulatedDNA {
-// // // //   label 'stats'
-// // // //   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+  input:
+    val collected from summariesSimulated.collect()
 
-// // // //   input:
-// // // //     val collected from summariesSimulatedDNA.collect()
+  output:
+    // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
+    set file('summaries.json'), file('categories.json') into collatedSummariesSimulated
 
-// // // //   output:
-// // // //     // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
-// // // //     set file('summaries.json'), file('categories.json') into collatedSummariesSimulatedDNA
+  exec:
+  def outfileJSON = task.workDir.resolve('summaries.json')
+  def categoriesJSON = task.workDir.resolve('categories.json')
+  // def outfileCSV = task.workDir.resolve('summaries.csv')
+  categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
+  "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
+  "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
+  categoriesJSON << prettyPrint(toJson(categories))
+  entry = null
+  entries = []
+  // entries << [categories: categories]
+  i=0;
+  TreeSet headersMeta = []
+  TreeSet headersResults = []
+  collected.each {
+    if(i++ %2 == 0) {
+      if(entry != null) {
+        entries << entry
+        entry.meta.each {k,v ->
+          headersMeta << k
+        }
+      }
+      entry = [:]
+      entry.meta = it.clone()
+    } else {
+      entry.results = [:]
+      it.eachLine { line ->
+        (k, v) = line.split()
+        entry.results << [(k) : v ]
+        //entry.results << [(categories[(k)]) : v ]
+        headersResults << (k)
+        //headersResults << (categories[(k)])
+      }
+    }
+  }
+  entries << entry
+  outfileJSON << prettyPrint(toJson(entries))
 
-// // // //   exec:
-// // // //   def outfileJSON = task.workDir.resolve('summaries.json')
-// // // //   def categoriesJSON = task.workDir.resolve('categories.json')
-// // // //   // def outfileCSV = task.workDir.resolve('summaries.csv')
-// // // //   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
-// // // //   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
-// // // //   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
-// // // //   categoriesJSON << prettyPrint(toJson(categories))
-// // // //   entry = null
-// // // //   entries = []
-// // // //   // entries << [categories: categories]
-// // // //   i=0;
-// // // //   TreeSet headersMeta = []
-// // // //   TreeSet headersResults = []
-// // // //   collected.each {
-// // // //     if(i++ %2 == 0) {
-// // // //       if(entry != null) {
-// // // //         entries << entry
-// // // //         entry.meta.each {k,v ->
-// // // //           headersMeta << k
-// // // //         }
-// // // //       }
-// // // //       entry = [:]
-// // // //       entry.meta = it.clone()
-// // // //     } else {
-// // // //       entry.results = [:]
-// // // //       it.eachLine { line ->
-// // // //         (k, v) = line.split()
-// // // //         entry.results << [(k) : v ]
-// // // //         //entry.results << [(categories[(k)]) : v ]
-// // // //         headersResults << (k)
-// // // //         //headersResults << (categories[(k)])
-// // // //       }
-// // // //     }
-// // // //   }
-// // // //   entries << entry
-// // // //   outfileJSON << prettyPrint(toJson(entries))
+  // //GENERATE CSV OUTPUT
+  // SEP=","
+  // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+  // entries.each { entry ->
+  //   line = ""
+  //   headersMeta.each { k ->
+  //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
+  //     line += line == "" ? val : (SEP+val)
+  //   }
+  //   headersResults.each { k ->
+  //     value = entry.results[k]
+  //     line += SEP
+  //     // println(k + ' -> ' + value)
+  //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
+  //   }
+  //   outfileCSV << line+"\n"
+  // }
 
-// // // //   // //GENERATE CSV OUTPUT
-// // // //   // SEP=","
-// // // //   // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
-// // // //   // entries.each { entry ->
-// // // //   //   line = ""
-// // // //   //   headersMeta.each { k ->
-// // // //   //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
-// // // //   //     line += line == "" ? val : (SEP+val)
-// // // //   //   }
-// // // //   //   headersResults.each { k ->
-// // // //   //     value = entry.results[k]
-// // // //   //     line += SEP
-// // // //   //     // println(k + ' -> ' + value)
-// // // //   //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
-// // // //   //   }
-// // // //   //   outfileCSV << line+"\n"
-// // // //   // }
+}
 
-// // // // }
+// process plotDetailSimulated {
+//   label 'rscript'
+//   label 'figures'
 
-// // // // // process plotDetailSimulatedDNA {
-// // // // //   label 'rscript'
-// // // // //   label 'figures'
+//   input:
+//     file '*' from collatedDetailsSimulated
 
-// // // // //   input:
-// // // // //     file '*' from collatedDetailsSimulatedDNA
+//   output:
+//     file '*' into collatedDetailsPlotsSimulated
 
-// // // // //   output:
-// // // // //     file '*' into collatedDetailsPlotsSimulatedDNA
+//   script:        //============================ TODO : move under bin/
+//   binWidth='1E5'
+//   """
+//   touch plotPlaceholderD
+//   #< !{csv} plot_details_simulatedDNA.R
+//   """
 
-// // // // //   script:        //============================ TODO : move under bin/
-// // // // //   binWidth='1E5'
-// // // // //   """
-// // // // //   touch plotPlaceholderD
-// // // // //   #< !{csv} plot_details_simulatedDNA.R
-// // // // //   """
+// }
 
-// // // // // }
+// process plotSummarySimulated {
+//   label 'rscript'
+//   label 'figures'
 
-// // // // // process plotSummarySimulatedDNA {
-// // // // //   label 'rscript'
-// // // // //   label 'figures'
+//   input:
+//     // set file(csv), file(json) from collatedSummariesSimulatedDNA
+//     set file(json), file(categories) from collatedSummariesSimulatedDNA
 
-// // // // //   input:
-// // // // //     // set file(csv), file(json) from collatedSummariesSimulatedDNA
-// // // // //     set file(json), file(categories) from collatedSummariesSimulatedDNA
+//   output:
+//     file '*' into collatedSummariesPlotsSimulated
 
-// // // // //   output:
-// // // // //     file '*' into collatedSummariesPlotsSimulatedDNA
+//   shell:
+//   '''
+//   < !{json} plot_simulatedDNA.R
+//   '''
+// }
 
-// // // // //   shell:
-// // // // //   '''
-// // // // //   < !{json} plot_simulatedDNA.R
-// // // // //   '''
-// // // // // }
+// //WRAP-UP
+// writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-// // // // // //WRAP-UP
-// // // // // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+// process render {
+//   tag {"Render ${Rmd}"}
+//   label 'rrender'
+//   label 'report'
+//   stageInMode 'copy'
+//   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
-// // // // // process render {
-// // // // //   tag {"Render ${Rmd}"}
-// // // // //   label 'rrender'
-// // // // //   label 'report'
-// // // // //   stageInMode 'copy'
-// // // // //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+//   input:
+//     // file('*') from plots.flatten().toList()
+//     // file('*') from plotsRealRNA.flatten().toList()
+//     file(Rmd) from writing
+//     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
+//     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
 
-// // // // //   input:
-// // // // //     // file('*') from plots.flatten().toList()
-// // // // //     // file('*') from plotsRealRNA.flatten().toList()
-// // // // //     file(Rmd) from writing
-// // // // //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
-// // // // //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
+//   output:
+//     file '*'
 
-// // // // //   output:
-// // // // //     file '*'
+//   script:
+//   """
+//   #!/usr/bin/env Rscript
 
-// // // // //   script:
-// // // // //   """
-// // // // //   #!/usr/bin/env Rscript
+//   library(rmarkdown)
+//   library(rticles)
+//   library(bookdown)
 
-// // // // //   library(rmarkdown)
-// // // // //   library(rticles)
-// // // // //   library(bookdown)
-
-// // // // //   rmarkdown::render("${Rmd}")
-// // // // //   """
-// // // // // }
+//   rmarkdown::render("${Rmd}")
+//   """
+// }
