@@ -7,9 +7,10 @@ jsonGenerator = new groovy.json.JsonGenerator.Options()
                 .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
                 .build()
 
+
 //RETURNS DNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  .filter { params.mode.matches('dna2dna') }
+  .filter { 'dna2dna'.matches(params.alnmode) }
   .filter{ params.alignersDNA2DNA == 'all' || it[0].matches(params.alignersDNA2DNA) }
   .map {
     params.defaults.alignersParams.DNA2DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
@@ -20,7 +21,7 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna2dna}/*_{index
 
 //RETURNS RNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  .filter { params.mode.matches('rna2dna') }
+  .filter { 'rna2dna'.matches(params.alnmode) }
   .filter{ params.alignersRNA2DNA == 'all' || it[0].matches(params.alignersRNA2DNA) }
   .map {
     params.defaults.alignersParams.RNA2DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
@@ -31,7 +32,7 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2dna}/*_{index
 
 //RETURNS RNA2RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2rna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  .filter { params.mode.matches('rna2rna') }
+  .filter { 'rna2rna'.matches(params.alnmode) }
   .filter{ params.alignersRNA2RNA == 'all' || it[0].matches(params.alignersRNA2RNA) }
   .map {
     params.defaults.alignersParams.RNA2RNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
@@ -40,12 +41,15 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2rna}/*_{index
   }
   .set { alignersRNA2RNA }
 
-
-
 //DNA and RNA aligners in one channel as single indexing process defined
-alignersDNA2DNA.join(alignersRNA2DNA , remainder: true).join(alignersRNA2RNA , remainder: true)
-  .map { tool, d2d, r2d, r2r -> [tool: tool, dna2dna: d2d!=null, rna2dna: r2d!=null, rna2rna: r2r!=null] }
-  .set { aligners }
+alignersDNA2DNA.mix(alignersRNA2DNA).mix(alignersRNA2RNA)
+// alignersDNA2DNA.join(alignersRNA2DNA, remainder: true).join(alignersRNA2RNA , remainder: true)
+.groupTuple(size:3, remainder: true, sort:true)
+ .map { tool, alnModes ->
+   [tool: tool, dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA') ]
+ }
+//  .view()
+ .set { aligners }
 
 /*
  * Add to or overwrite map content recursively
@@ -211,7 +215,7 @@ process extarctTranscripts {
     set val(outmeta), file(outfile) into transcripts4indexing, transcripts4rnfSimReads
 
   when:
-    'rna2rna'.matches(params.mode) || 'rna2dna'.matches(params.mode)
+    'rna2rna'.matches(params.alnmode) || 'rna2dna'.matches(params.alnmode)
 
   shell:
     // println(prettyPrint(toJson(meta)))
@@ -245,6 +249,24 @@ process extarctTranscripts {
 
 // // // // // referencesForAlignersDNA.println { it }
 // // // // // aligners.println { it }
+
+process faidxFASTA {
+  tag("${refmeta}")
+  label 'samtools'
+
+  input:
+    set val(refmeta), file(ref) from referencesForAligners.mix(transcripts4indexing)
+
+  output:
+    set val(refmeta), file(ref), file("${ref}.fai") into refsForIndexing
+
+  script:
+  """
+  samtools faidx ${ref}
+  """
+
+}
+
 process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
@@ -252,14 +274,16 @@ process indexGenerator {
   tag("${alignermeta.tool} << ${refmeta}")
 
   input:
-    set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAligners.mix(transcripts4indexing))
+    // set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAligners.mix(transcripts4indexing))
+    set val(alignermeta), val(refmeta), file(ref), file(fai) from aligners.combine(refsForIndexing)
 
   output:
-    set val(meta), file("*") into indices
+    set val(meta), file(ref), file(fai), file("*") into indices
+    // set val(meta), file(ref) into refsForEval
 
   when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
-    (refmeta.seqtype == 'RNA' && alignermeta.rna2rna && 'rna2rna'.matches(params.mode) ) || \
-    (refmeta.seqtype == 'DNA' && (alignermeta.rna2dna || alignermeta.dna2dna) && ('rna2dna'.matches(params.mode) || 'dna2dna'.matches(params.mode)) )
+    (refmeta.seqtype == 'RNA' && alignermeta.rna2rna && 'rna2rna'.matches(params.alnmode) ) || \
+    (refmeta.seqtype == 'DNA' && (alignermeta.rna2dna || alignermeta.dna2dna) && ('rna2dna'.matches(params.alnmode) || 'dna2dna'.matches(params.alnmode)) )
 
   //  exec: //dev
   //  meta =  alignermeta+refmeta//[target: "${ref}"]
@@ -268,26 +292,6 @@ process indexGenerator {
     meta = [tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
     template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
-
-// // // process indexReferences4rnfSimReads {
-// // //   tag{meta}
-// // //   label 'samtools'
-
-// // //   input:
-// // //     set val(meta), file(ref) from references4rnfSimReads
-
-// // //   output:
-// // //     set val(meta), file(ref), file('*.fai') into referencesWithIndex4rnfSimReads
-
-// // //   when:
-// // //     'simulatedDNA'.matches(params.reads) //only needed referencesLocal is a separate channel,
-
-// // //   script:
-// // //   """
-// // //   samtools faidx ${ref}
-// // //   """
-// // // }
-
 
 process rnfSimReads {
   // echo true
@@ -312,8 +316,8 @@ process rnfSimReads {
 
   when:
     !(mode == "PE" && simulator == "CuReSim") && \
-    (meta.seqtype == 'RNA' || (meta.seqtype == 'DNA' && 'dna2dna'.matches(params.mode) ))
-    // ((meta.seqtype == 'mRNA' && 'rna2rna'.matches(params.mode)) || (meta.seqtype == 'DNA' && 'rna2rna'.matches(params.mode))
+    (meta.seqtype == 'RNA' || (meta.seqtype == 'DNA' && 'dna2dna'.matches(params.alnmode) ))
+    // ((meta.seqtype == 'mRNA' && 'rna2rna'.matches(params.alnmode)) || (meta.seqtype == 'DNA' && 'rna2rna'.matches(params.alnmode))
 
 
   // exec:
@@ -372,7 +376,7 @@ process convertReadCoordinates {
     set val(outmeta), file('*.fq.gz') into convertedCoordinatesReads
 
   when:
-    simmeta.seqtype == 'RNA' && 'rna2dna'.matches(params.mode)
+    simmeta.seqtype == 'RNA' && 'rna2dna'.matches(params.alnmode)
 
   // exec:
   //   println(prettyPrint(toJson(simmeta)))
@@ -403,29 +407,55 @@ process mapSimulatedReads {
   input:
     // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
    // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-   set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams)
+   set val(simmeta), file("?.fq.gz"), val(idxmeta), file(ref), file(fai), file('*'), val(paramsmeta) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams)
 
   output:
-    set val(alignmeta), file('out.?am') into alignedSimulated
+    set val(alignmeta), file(ref), file(fai), file('out.?am') into alignedSimulated
 
   when: //only align simulated reads to the corresponding genome, using the corresponding params set, in the correct mode: DNA2DNA, RNA2DNA, RNA2RNA
     idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && \
     (paramsmeta.alignMode.startsWith(simmeta.seqtype) && paramsmeta.alignMode.endsWith(simmeta.coordinates) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
 
-  exec:
-    println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
+  // exec:
+  //   println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
   script:
     alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
     ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
     template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/.. could have separate templates for PE and SE // if(simmeta.mode == 'PE')
 }
 
+// alignedSimulated.view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
+
+
+// process evaluateSimulated {
+//   echo true
+//   label 'samtools'
+//   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
+
+//   input:
+//     set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated
+
+//   // output:
+//   //    set val(alignmeta), file(summary) into summariesSimulated
+//     //  set val(alignmeta), file(detail) into detailsSimulated
+
+//   // exec:
+//   script:
+//   println prettyPrint(toJson(alignmeta))
+//   //Sorting of the header required as order of ref seqs not guaranteed and and ref ids are encoded in read names in order of the reference from which they have been generated
+//   //  #samtools view -H ${samOrBam} | reheader.awk | sort -k1,2 > header
+//   //# -i <(cat header <(samtools view ${samOrBam}))
+//   """
+//   ls -lah
+//   """
+// }
+
 process rnfEvaluateSimulated {
   label 'rnftools'
   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
 
   input:
-    set val(alignmeta), file(samOrBam) from alignedSimulated
+    set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated
 
   output:
      set val(alignmeta), file(summary) into summariesSimulated
