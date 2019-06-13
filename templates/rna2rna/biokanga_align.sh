@@ -8,7 +8,7 @@ biokanga align \
   --sfx ${idxmeta.target}.sfx \
   --in 1.fq.gz \
   --pair 2.fq.gz  \
-  --out out.sam \
+  --out out.bam \
   --threads ${task.cpus} \
   --rptsamseqsthres 100000000 \
   ${ALIGN_PARAMS}
