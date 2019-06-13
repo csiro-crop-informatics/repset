@@ -2,11 +2,10 @@
 
 //For pretty-printing nested maps etc
 import static groovy.json.JsonOutput.*
+//Otherwise JSON generation triggers stackoverflow when encountering Path objects
 jsonGenerator = new groovy.json.JsonGenerator.Options()
                 .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
-                .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
                 .build()
-
 
 //RETURNS DNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
@@ -43,12 +42,10 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2rna}/*_{index
 
 //DNA and RNA aligners in one channel as single indexing process defined
 alignersDNA2DNA.mix(alignersRNA2DNA).mix(alignersRNA2RNA)
-// alignersDNA2DNA.join(alignersRNA2DNA, remainder: true).join(alignersRNA2RNA , remainder: true)
-.groupTuple(size:3, remainder: true, sort:true)
- .map { tool, alnModes ->
-   [tool: tool, dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA') ]
- }
-//  .view()
+  .groupTuple(size:3, remainder: true, sort:true)
+  .map { tool, alnModes ->
+    [tool: tool, dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA') ]
+  }
  .set { aligners }
 
 /*
@@ -108,8 +105,6 @@ if (params.help){
     helpMessage()
     exit 0
 }
-
-
 
 /*
  1. Input pointers to FASTA converted to files, NF would fetch remote as well and create tmp files,
@@ -175,26 +170,46 @@ stagedFiles
   // .view()
   .groupTuple() //match back fasta with it's gffif available
   // .view { meta, files, seqtype -> "meta: ${meta}\nfiles: ${files}\nseqtype: ${seqtype}"}
-  // .map { meta, files, seqtype -> meta.seqtype = seqtype; [meta, files]}
-  .map { meta, files ->
-    files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta based on extension
-    [meta, files]
-  }
+  // .map { meta, files ->
+  //   files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta based on extension
+  //   [meta, files]
+  // }
   // .view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
-  // .choice(  referencesOnly, referencesForTranscriptomeExtraction ) { it[1].size() == 1 ? 0 : 1 }
-  .into { referencesOnly; referencesForTranscriptomeExtraction } //{ it[1].size() == 1 ? 0 : 1 }
+  .set { stagedReferences }
 
 
-referencesOnly
-  // .map { [it[0], it[1][0]]} //meta, fasta_file
-  // .view()
-  .map { meta, files ->
-    // meta.seqtype = meta.seqtype[0] //un-list
-    // files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta based on extension
-    [meta, files[0]] //meta, fasta_file
-  }
-  // .view()
-  .into {referencesForAligners; references4rnfSimReads}
+process faidxGenomeFASTA {
+  tag("${refmeta}")
+  label 'samtools'
+
+  input:
+    set val(refmeta), file(infiles) from stagedReferences
+
+  output:
+    set val(refmeta), file(ref), file("${ref}.fai") into genomesForIndexing, genomesForRnfSimReads
+    set val(refmeta), file(ref), file("${ref}.fai"), file("${gff}") optional true into referencesForTranscriptomeExtraction //refsForIndexing
+
+  script:
+  ref = infiles[infiles.findIndexOf { fname -> fname =~ /\.fasta$/ }]
+  gffIdx = infiles.findIndexOf { fname -> fname =~ /\.gff$/ }
+  gff = gffIdx >= 0 ? infiles[gffIdx] : 'NO_GFF_HERE'
+  """
+  samtools faidx ${ref}
+  """
+}
+
+// referencesOnly.view {println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
+
+// referencesOnly
+//   // .map { [it[0], it[1][0]]} //meta, fasta_file
+//   // .view()
+//   .map { meta, files ->
+//     // meta.seqtype = meta.seqtype[0] //un-list
+//     // files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta based on extension
+//     [meta, files[0]] //meta, fasta_file
+//   }
+//   // .view()
+//   .into {referencesForAligners; references4rnfSimReads}
 
 process extarctTranscripts {
   echo true
@@ -206,13 +221,13 @@ process extarctTranscripts {
 
   input:
     // set val(meta), file(ref), file(features) from referencesForTranscriptomeExtraction
-    set val(meta), file(ref), file(features) from referencesForTranscriptomeExtraction
-                    .filter { it[1].size() == 2 } //2 files needed aka skip if fasta-only
-                    .map { meta, files ->
-                      // files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta
-                      [meta, files[0], files[1]] }
+    set val(meta), file(ref), file(fai), file(features) from referencesForTranscriptomeExtraction
+                    // .filter { it[1].size() == 2 } //2 files needed aka skip if fasta-only
+                    // .map { meta, files ->
+                    //   // files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1) } //ensure gff goes after fasta
+                    //   [meta, files[0], files[1]] }
   output:
-    set val(outmeta), file(outfile) into transcripts4indexing, transcripts4rnfSimReads
+    set val(outmeta), file(outfile) into extractedTranscriptomes //transcripts4indexing, transcripts4rnfSimReads
 
   when:
     'rna2rna'.matches(params.alnmode) || 'rna2dna'.matches(params.alnmode)
@@ -227,45 +242,47 @@ process extarctTranscripts {
     // FEATURE_FIELD = meta.featfmt == 'bed' ? 8 : 3 //BED OR GFF3
     '''
     gffread -W -w !{outfile} -g !{ref} !{features}
-    #-w- AND | awk '/^>/ { if(NR>1) print "";  printf("%s\\t",$0); next; } { printf("%s",$0);} END {printf("\\n");}' \
-    #| sort -k1,1V | tr '\\t' '\\n' > !{outfile}
     '''
+    // #-w- AND | awk '/^>/ { if(NR>1) print "";  printf("%s\\t",$0); next; } { printf("%s",$0);} END {printf("\\n");}' \
+    // #| sort -k1,1V | tr '\\t' '\\n' > !{outfile}
+    // '''
     //     #awk '/^>/ { if(NR>1) print "";  printf("%s\\n",$0); next; } { printf("%s",$0);} END {printf("\\n");}' tmp \
     // #| paste - - | sort -k1,1V | tr '\\t' '\\n' > !{outfile}
 }
 
-
-
-// referencesForTranscriptomeExtraction.map { [it[0], it[1][0], it[1][1]] }.view()
-// referencesForTranscriptomeExtraction.map { meta, files -> [meta, files[0], files[1]] }.view()
-// referencesForTranscriptomeExtraction.map { meta, files ->
-//   files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1)} //ensure gff goes after fasta
-//   [meta, files[0], files[1]] }.view()
-
-//referencesForAligners.mix(transcripts4indexing).view()
-// aligners.combine(referencesForAligners.mix(transcripts4indexing)).view()
-// aligners.combine(referencesForAligners).view()
-// referencesForAligners.view()
-
-// // // // // referencesForAlignersDNA.println { it }
-// // // // // aligners.println { it }
-
-process faidxFASTA {
+process faidxTranscriptomeFASTA {
   tag("${refmeta}")
   label 'samtools'
 
   input:
-    set val(refmeta), file(ref) from referencesForAligners.mix(transcripts4indexing)
+    set val(refmeta), file(fa) from extractedTranscriptomes
 
   output:
-    set val(refmeta), file(ref), file("${ref}.fai") into refsForIndexing
+    set val(refmeta), file(fa), file("${fa}.fai") into transcriptomesForIndexing, transcriptomesForRnfSimReads
 
   script:
   """
-  samtools faidx ${ref}
+  samtools faidx ${fa}
   """
-
 }
+
+
+// referencesOnly.mix(transcripts4indexing).view()
+
+// // referencesForTranscriptomeExtraction.map { [it[0], it[1][0], it[1][1]] }.view()
+// // referencesForTranscriptomeExtraction.map { meta, files -> [meta, files[0], files[1]] }.view()
+// // referencesForTranscriptomeExtraction.map { meta, files ->
+// //   files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1)} //ensure gff goes after fasta
+// //   [meta, files[0], files[1]] }.view()
+
+// //referencesForAligners.mix(transcripts4indexing).view()
+// // aligners.combine(referencesForAligners.mix(transcripts4indexing)).view()
+// // aligners.combine(referencesForAligners).view()
+// // referencesForAligners.view()
+
+// // // // // // referencesForAlignersDNA.println { it }
+// // // // // // aligners.println { it }
+
 
 process indexGenerator {
   label 'index'
@@ -275,7 +292,8 @@ process indexGenerator {
 
   input:
     // set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAligners.mix(transcripts4indexing))
-    set val(alignermeta), val(refmeta), file(ref), file(fai) from aligners.combine(refsForIndexing)
+    // set val(alignermeta), val(refmeta), file(ref), file(fai) from aligners.combine(refsForIndexing)
+    set val(alignermeta), val(refmeta), file(ref), file(fai) from aligners.combine(genomesForIndexing.mix(transcriptomesForIndexing))
 
   output:
     set val(meta), file(ref), file(fai), file("*") into indices
@@ -300,7 +318,7 @@ process rnfSimReads {
 
   input:
     // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
-    set val(meta), file(ref) from references4rnfSimReads.mix(transcripts4rnfSimReads)
+    set val(meta), file(ref), file(fai) from genomesForRnfSimReads.mix(transcriptomesForRnfSimReads)
     // set val(meta), file(ref) from transcripts4rnfSimReads
     // each nsimreads from params.simreadsDNA.nreads.toString().tokenize(",")*.toInteger()
     each coverage from params.simreadsDNA.coverage
@@ -395,9 +413,9 @@ process convertReadCoordinates {
   """
 }
 
-// convertedCoordinatesReads.view()
+// // convertedCoordinatesReads.view()
 
-// convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams).view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
+// // convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams).view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
 
 process mapSimulatedReads {
   label 'align'
@@ -407,7 +425,7 @@ process mapSimulatedReads {
   input:
     // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
    // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-   set val(simmeta), file("?.fq.gz"), val(idxmeta), file(ref), file(fai), file('*'), val(paramsmeta) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams)
+   set val(simmeta), file(reads), val(idxmeta), file(ref), file(fai), file('*'), val(paramsmeta) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams)
 
   output:
     set val(alignmeta), file(ref), file(fai), file('out.?am') into alignedSimulated
@@ -421,34 +439,34 @@ process mapSimulatedReads {
   script:
     alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
     ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
-    template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh in templates/.. could have separate templates for PE and SE // if(simmeta.mode == 'PE')
+    template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh under e.g. templates/rna2dna, could have separate templates for PE and SE // if(simmeta.mode == 'PE')
 }
 
-// alignedSimulated.view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
+// // alignedSimulated.view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
 
 
-// process evaluateSimulated {
-//   echo true
-//   label 'samtools'
-//   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
+// // process evaluateSimulated {
+// //   echo true
+// //   label 'samtools'
+// //   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
 
-//   input:
-//     set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated
+// //   input:
+// //     set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated
 
-//   // output:
-//   //    set val(alignmeta), file(summary) into summariesSimulated
-//     //  set val(alignmeta), file(detail) into detailsSimulated
+// //   // output:
+// //   //    set val(alignmeta), file(summary) into summariesSimulated
+// //     //  set val(alignmeta), file(detail) into detailsSimulated
 
-//   // exec:
-//   script:
-//   println prettyPrint(toJson(alignmeta))
-//   //Sorting of the header required as order of ref seqs not guaranteed and and ref ids are encoded in read names in order of the reference from which they have been generated
-//   //  #samtools view -H ${samOrBam} | reheader.awk | sort -k1,2 > header
-//   //# -i <(cat header <(samtools view ${samOrBam}))
-//   """
-//   ls -lah
-//   """
-// }
+// //   // exec:
+// //   script:
+// //   println prettyPrint(toJson(alignmeta))
+// //   //Sorting of the header required as order of ref seqs not guaranteed and and ref ids are encoded in read names in order of the reference from which they have been generated
+// //   //  #samtools view -H ${samOrBam} | reheader.awk | sort -k1,2 > header
+// //   //# -i <(cat header <(samtools view ${samOrBam}))
+// //   """
+// //   ls -lah
+// //   """
+// // }
 
 process rnfEvaluateSimulated {
   label 'rnftools'
@@ -497,45 +515,45 @@ process rnfEvaluateSimulated {
 // # RN    Q       Chr     D       L       R       Cat     Segs
 }
 
-// // process collateDetailsSimulatedDNA {
-// //   label 'stats'
-// //   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+// // // process collateDetailsSimulatedDNA {
+// // //   label 'stats'
+// // //   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
-// //   input:
-// //     val collected from detailsSimulatedDNA.collect()
+// // //   input:
+// // //     val collected from detailsSimulatedDNA.collect()
 
-// //   output:
-// //     file 'details.tsv' into collatedDetailsSimulatedDNA
+// // //   output:
+// // //     file 'details.tsv' into collatedDetailsSimulatedDNA
 
-// //   exec:
-// //   def outfileTSV = task.workDir.resolve('details.tsv')
-// //   i = 0;
-// //   sep = "\t"
-// //   header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
-// //   // outfileTSV << header
-// //   outfileTSV.withWriter { target ->
-// //     target << header
-// //     collected.each {
-// //       if(i++ %2 == 0) {
-// //         meta = it
-// //       } else {
-// //         common = meta.simulator+sep+meta.tool+sep+meta.mode+"\n"
-// //         it.withReader { source ->
-// //           String line
-// //           while( line=source.readLine() ) {
-// //             StringBuilder sb = new StringBuilder()
-// //             sb.append(meta.species).append(sep).append(line).append(sep).append(common)
-// //             target << sb
-// //             // target << meta.species+sep+line+sep+common
-// //           }
-// //         }
-// //       }
-// //       // it.eachLine { line ->
-// //       //   outfileTSV << meta.species+sep+line+sep+common
-// //       // }
-// //     }
-// //   }
-// // }
+// // //   exec:
+// // //   def outfileTSV = task.workDir.resolve('details.tsv')
+// // //   i = 0;
+// // //   sep = "\t"
+// // //   header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
+// // //   // outfileTSV << header
+// // //   outfileTSV.withWriter { target ->
+// // //     target << header
+// // //     collected.each {
+// // //       if(i++ %2 == 0) {
+// // //         meta = it
+// // //       } else {
+// // //         common = meta.simulator+sep+meta.tool+sep+meta.mode+"\n"
+// // //         it.withReader { source ->
+// // //           String line
+// // //           while( line=source.readLine() ) {
+// // //             StringBuilder sb = new StringBuilder()
+// // //             sb.append(meta.species).append(sep).append(line).append(sep).append(common)
+// // //             target << sb
+// // //             // target << meta.species+sep+line+sep+common
+// // //           }
+// // //         }
+// // //       }
+// // //       // it.eachLine { line ->
+// // //       //   outfileTSV << meta.species+sep+line+sep+common
+// // //       // }
+// // //     }
+// // //   }
+// // // }
 
 process collateSummariesSimulated {
   label 'stats'
@@ -720,172 +738,172 @@ process collateSummariesSimulated {
 // //   }
 // // }
 
-// process collateSummariesSimulated {
-//   label 'stats'
-//   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
-
-//   input:
-//     val collected from summariesSimulated.collect()
-
-//   output:
-//     // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
-//     set file('summaries.json'), file('categories.json') into collatedSummariesSimulated
-
-//   exec:
-//   def outfileJSON = task.workDir.resolve('summaries.json')
-//   def categoriesJSON = task.workDir.resolve('categories.json')
-//   // def outfileCSV = task.workDir.resolve('summaries.csv')
-//   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
-//   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
-//   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
-//   categoriesJSON << prettyPrint(toJson(categories))
-//   entry = null
-//   entries = []
-//   // entries << [categories: categories]
-//   i=0;
-//   TreeSet headersMeta = []
-//   TreeSet headersResults = []
-//   collected.each {
-//     if(i++ %2 == 0) {
-//       if(entry != null) {
-//         entries << entry
-//         entry.meta.each {k,v ->
-//           headersMeta << k
-//         }
-//       }
-//       entry = [:]
-//       entry.meta = it.clone()
-//     } else {
-//       entry.results = [:]
-//       it.eachLine { line ->
-//         (k, v) = line.split()
-//         entry.results << [(k) : v ]
-//         //entry.results << [(categories[(k)]) : v ]
-//         headersResults << (k)
-//         //headersResults << (categories[(k)])
-//       }
-//     }
-//   }
-//   entries << entry
-//   outfileJSON << prettyPrint(toJson(entries))
-
-//   // //GENERATE CSV OUTPUT
-//   // SEP=","
-//   // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
-//   // entries.each { entry ->
-//   //   line = ""
-//   //   headersMeta.each { k ->
-//   //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
-//   //     line += line == "" ? val : (SEP+val)
-//   //   }
-//   //   headersResults.each { k ->
-//   //     value = entry.results[k]
-//   //     line += SEP
-//   //     // println(k + ' -> ' + value)
-//   //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
-//   //   }
-//   //   outfileCSV << line+"\n"
-//   // }
-
-// }
-
-// // process plotDetailSimulated {
-// //   label 'rscript'
-// //   label 'figures'
+// // process collateSummariesSimulated {
+// //   label 'stats'
+// //   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
 
 // //   input:
-// //     file '*' from collatedDetailsSimulated
+// //     val collected from summariesSimulated.collect()
 
 // //   output:
-// //     file '*' into collatedDetailsPlotsSimulated
+// //     // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
+// //     set file('summaries.json'), file('categories.json') into collatedSummariesSimulated
 
-// //   script:        //============================ TODO : move under bin/
-// //   binWidth='1E5'
-// //   """
-// //   touch plotPlaceholderD
-// //   #< !{csv} plot_details_simulatedDNA.R
-// //   """
+// //   exec:
+// //   def outfileJSON = task.workDir.resolve('summaries.json')
+// //   def categoriesJSON = task.workDir.resolve('categories.json')
+// //   // def outfileCSV = task.workDir.resolve('summaries.csv')
+// //   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
+// //   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
+// //   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
+// //   categoriesJSON << prettyPrint(toJson(categories))
+// //   entry = null
+// //   entries = []
+// //   // entries << [categories: categories]
+// //   i=0;
+// //   TreeSet headersMeta = []
+// //   TreeSet headersResults = []
+// //   collected.each {
+// //     if(i++ %2 == 0) {
+// //       if(entry != null) {
+// //         entries << entry
+// //         entry.meta.each {k,v ->
+// //           headersMeta << k
+// //         }
+// //       }
+// //       entry = [:]
+// //       entry.meta = it.clone()
+// //     } else {
+// //       entry.results = [:]
+// //       it.eachLine { line ->
+// //         (k, v) = line.split()
+// //         entry.results << [(k) : v ]
+// //         //entry.results << [(categories[(k)]) : v ]
+// //         headersResults << (k)
+// //         //headersResults << (categories[(k)])
+// //       }
+// //     }
+// //   }
+// //   entries << entry
+// //   outfileJSON << prettyPrint(toJson(entries))
+
+// //   // //GENERATE CSV OUTPUT
+// //   // SEP=","
+// //   // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
+// //   // entries.each { entry ->
+// //   //   line = ""
+// //   //   headersMeta.each { k ->
+// //   //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
+// //   //     line += line == "" ? val : (SEP+val)
+// //   //   }
+// //   //   headersResults.each { k ->
+// //   //     value = entry.results[k]
+// //   //     line += SEP
+// //   //     // println(k + ' -> ' + value)
+// //   //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
+// //   //   }
+// //   //   outfileCSV << line+"\n"
+// //   // }
 
 // // }
 
-// // process plotSummarySimulated {
-// //   label 'rscript'
-// //   label 'figures'
+// // // process plotDetailSimulated {
+// // //   label 'rscript'
+// // //   label 'figures'
 
-// //   input:
-// //     // set file(csv), file(json) from collatedSummariesSimulatedDNA
-// //     set file(json), file(categories) from collatedSummariesSimulatedDNA
+// // //   input:
+// // //     file '*' from collatedDetailsSimulated
 
-// //   output:
-// //     file '*' into collatedSummariesPlotsSimulated
+// // //   output:
+// // //     file '*' into collatedDetailsPlotsSimulated
 
-// //   shell:
-// //   '''
-// //   < !{json} plot_simulatedDNA.R
-// //   '''
-// // }
+// // //   script:        //============================ TODO : move under bin/
+// // //   binWidth='1E5'
+// // //   """
+// // //   touch plotPlaceholderD
+// // //   #< !{csv} plot_details_simulatedDNA.R
+// // //   """
 
-// // //WRAP-UP
-// // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+// // // }
 
-// // process render {
-// //   tag {"Render ${Rmd}"}
-// //   label 'rrender'
-// //   label 'report'
-// //   stageInMode 'copy'
-// //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+// // // process plotSummarySimulated {
+// // //   label 'rscript'
+// // //   label 'figures'
 
-// //   input:
-// //     // file('*') from plots.flatten().toList()
-// //     // file('*') from plotsRealRNA.flatten().toList()
-// //     file(Rmd) from writing
-// //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
-// //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
+// // //   input:
+// // //     // set file(csv), file(json) from collatedSummariesSimulatedDNA
+// // //     set file(json), file(categories) from collatedSummariesSimulatedDNA
 
-// //   output:
-// //     file '*'
+// // //   output:
+// // //     file '*' into collatedSummariesPlotsSimulated
 
-// //   script:
-// //   """
-// //   #!/usr/bin/env Rscript
+// // //   shell:
+// // //   '''
+// // //   < !{json} plot_simulatedDNA.R
+// // //   '''
+// // // }
 
-// //   library(rmarkdown)
-// //   library(rticles)
-// //   library(bookdown)
+// // // //WRAP-UP
+// // // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-// //   rmarkdown::render("${Rmd}")
-// //   """
-// // }
-// // }
+// // // process render {
+// // //   tag {"Render ${Rmd}"}
+// // //   label 'rrender'
+// // //   label 'report'
+// // //   stageInMode 'copy'
+// // //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
-// // //WRAP-UP
-// // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+// // //   input:
+// // //     // file('*') from plots.flatten().toList()
+// // //     // file('*') from plotsRealRNA.flatten().toList()
+// // //     file(Rmd) from writing
+// // //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
+// // //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
 
-// // process render {
-// //   tag {"Render ${Rmd}"}
-// //   label 'rrender'
-// //   label 'report'
-// //   stageInMode 'copy'
-// //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+// // //   output:
+// // //     file '*'
 
-// //   input:
-// //     // file('*') from plots.flatten().toList()
-// //     // file('*') from plotsRealRNA.flatten().toList()
-// //     file(Rmd) from writing
-// //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
-// //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
+// // //   script:
+// // //   """
+// // //   #!/usr/bin/env Rscript
 
-// //   output:
-// //     file '*'
+// // //   library(rmarkdown)
+// // //   library(rticles)
+// // //   library(bookdown)
 
-// //   script:
-// //   """
-// //   #!/usr/bin/env Rscript
+// // //   rmarkdown::render("${Rmd}")
+// // //   """
+// // // }
+// // // }
 
-// //   library(rmarkdown)
-// //   library(rticles)
-// //   library(bookdown)
+// // // //WRAP-UP
+// // // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-// //   rmarkdown::render("${Rmd}")
-// //   """
-// // }
+// // // process render {
+// // //   tag {"Render ${Rmd}"}
+// // //   label 'rrender'
+// // //   label 'report'
+// // //   stageInMode 'copy'
+// // //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+
+// // //   input:
+// // //     // file('*') from plots.flatten().toList()
+// // //     // file('*') from plotsRealRNA.flatten().toList()
+// // //     file(Rmd) from writing
+// // //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
+// // //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
+
+// // //   output:
+// // //     file '*'
+
+// // //   script:
+// // //   """
+// // //   #!/usr/bin/env Rscript
+
+// // //   library(rmarkdown)
+// // //   library(rticles)
+// // //   library(bookdown)
+
+// // //   rmarkdown::render("${Rmd}")
+// // //   """
+// // // }
