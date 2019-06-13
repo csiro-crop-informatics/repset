@@ -118,13 +118,11 @@ if (params.help){
 fastaChn = Channel.create()
 gffChn = Channel.create()
 
-Channel.from(params.referencesDNA).separate (fastaChn, gffChn) { it ->
+Channel.from(params.references).separate (fastaChn, gffChn) { it ->
   onlyFasta = it.clone()
   onlyFasta.remove('gff')
   onlyGff = it.clone()
   onlyGff.remove('fasta')
-  // onlyGff.remove('seqtype')
-  // onlyGff.seqtype = 'RNA'
   fasta = [onlyFasta, it.fasta.isURL() ? file(workDir+'/REMOTE1') : file(it.fasta)]
   it.containsKey('gff') ? [fasta, [onlyGff, it.gff.isURL() ? file(workDir+'/REMOTE2') : file(it.gff)]] : [fasta, [onlyGff, file(workDir+'/NULL')]]
 }
@@ -408,7 +406,7 @@ process convertReadCoordinates {
   outmeta.coordinates = 'DNA'
   """
   tct_rnf.groovy --transcriptome ${ref} \
-    --in-forward ${reads[0]} --in-reverse ${reads[0]} \
+    --in-forward ${reads[0]} --in-reverse ${reads[1]} \
     --out-forward ${out1} --out-reverse ${out2}
   """
 }
@@ -428,7 +426,7 @@ process mapSimulatedReads {
    set val(simmeta), file(reads), val(idxmeta), file(ref), file(fai), file('*'), val(paramsmeta) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams)
 
   output:
-    set val(alignmeta), file(ref), file(fai), file('out.?am') into alignedSimulated
+    set val(alignmeta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated
 
   when: //only align simulated reads to the corresponding genome, using the corresponding params set, in the correct mode: DNA2DNA, RNA2DNA, RNA2RNA
     idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && \
@@ -473,29 +471,43 @@ process rnfEvaluateSimulated {
   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
 
   input:
-    set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated
+    set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated.map { meta, ref, fai, samOrBam, trace ->
+        trace.splitEachLine("=", { record ->
+          if(record.size() > 1 && record[0]=='realtime') { //to grab all, remove second condition and { meta."${record[0]}" = record[1] }
+            meta.'aligntime'  = record[1]
+          }
+        })
+        new Tuple(meta, ref, fai, samOrBam)
+      }
 
   output:
      set val(alignmeta), file(summary) into summariesSimulated
-     set val(alignmeta), file(detail) into detailsSimulated
+    //  set val(alignmeta), file(detail) into detailsSimulated
 
   // exec:
   script:
-  println prettyPrint(toJson(alignmeta))
+  // println prettyPrint(toJson(alignmeta))
   //Sorting of the header required as order of ref seqs not guaranteed and and ref ids are encoded in read names in order of the reference from which they have been generated
   //  #samtools view -H ${samOrBam} | reheader.awk | sort -k1,2 > header
   //# -i <(cat header <(samtools view ${samOrBam}))
   """
-  paste \
-    <( rnftools sam2es \
-         --allowed-delta 100 \
-         -i ${samOrBam} \
-         -o - | tee ES  | awk '\$1 !~ /^#/' \
-      | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
-    ) \
-    <( samtools view ${samOrBam} ) \
-  | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
+  rnftools sam2es \
+    --allowed-delta 100 \
+    -i ${samOrBam} \
+    -o - | awk '\$1 !~ /^#/' \
+  | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary
   """
+  // """
+  // paste \
+  //   <( rnftools sam2es \
+  //        --allowed-delta 100 \
+  //        -i ${samOrBam} \
+  //        -o - | tee ES  | awk '\$1 !~ /^#/' \
+  //     | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
+  //   ) \
+  //   <( samtools view ${samOrBam} ) \
+  // | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
+  // """
 
 // rnftools sam2es OUTPUT header
 // # RN:   read name
@@ -643,21 +655,24 @@ process collateSummariesSimulated {
 
 // // }
 
-// // process plotSummarySimulated {
-// //   label 'rscript'
-// //   label 'figures'
+// process plotSummarySimulated {
+//   label 'rscript'
+//   label 'figures'
 
-// //   input:
-// //     // set file(csv), file(json) from collatedSummariesSimulatedDNA
-// //     set file(json), file(categories) from collatedSummariesSimulatedDNA
+//   input:
+//     // set file(csv), file(json) from collatedSummariesSimulatedDNA
+//     set file(json), file(categories) from collatedSummariesSimulated
 
-// //   output:
-// //     file '*' into collatedSummariesPlotsSimulated
+//   output:
+//     file '*' into collatedSummariesPlotsSimulated
 
-// //   shell:
-// //   '''
-// //   < !{json} plot_simulatedDNA.R
-// //   '''eSimulated {
+//   shell:
+//   '''
+//   < !{json} plot_simulatedDNA.R
+//   '''
+// }
+
+//Simulated {
 //   label 'rnftools'
 //   tag{alignmeta.subMap(['tool','simulator','target','paramslabel'])}
 
