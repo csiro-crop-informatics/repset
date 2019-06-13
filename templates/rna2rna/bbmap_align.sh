@@ -6,6 +6,7 @@ bbmap.sh \
   threads=${task.cpus} \
   keepnames=t \
   sam=1.3 \
-  out=sam \
+  out=out.sam \
   usejni=t \
+  Xmx=${task.memory.toMega()}M \
   ${ALIGN_PARAMS}
