@@ -1,15 +1,1 @@
-FROM java:openjdk-8u111-jre
-
-LABEL maintainer="Rad Suchecki <rad.suchecki@csiro.au>"
-#SHELL ["/bin/bash", "-c"]
-
-RUN apt-get update
-
-#overwrite at build time with e.g. --build-arg VERSION=38.26
-ARG VERSION=38.44
-
-#Install dart
-WORKDIR /
-RUN wget https://sourceforge.net/projects/bbmap/files/BBMap_${VERSION}.tar.gz \
-  && tar xzvf BBMap_${VERSION}.tar.gz && rm BBMap_${VERSION}.tar.gz
-ENV PATH "${PATH}:/bbmap"
+FROM quay.io/biocontainers/bbmap:38.49--h14c3975_0@sha256:c628dd5b1cfa5cc6482fe062a6d55f0c9993586badb593c919252cbbbcf4119e
