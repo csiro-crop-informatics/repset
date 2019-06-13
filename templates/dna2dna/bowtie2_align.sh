@@ -3,8 +3,8 @@
 bowtie2 \
   -p ${task.cpus} \
   -x ${idxmeta.target} \
-  -1 1.fq.gz \
-  -2 2.fq.gz \
+  -1 ${reads[0]} \
+  -2 ${reads[1]} \
   --threads  ${task.cpus} \
   ${ALIGN_PARAMS} \
   > out.sam
