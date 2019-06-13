@@ -4,7 +4,7 @@
       "ArtIllumina",
       "MasonIllumina"
     ],
-    "nreads": 100000,
+    "coverage" : 0.2,
     "length": 100,
     "mode": [
       "SE",
@@ -17,26 +17,34 @@
       50
     ]
   },
-  "referencesDNA" : [
+  "references" : [
     {
       "species" : "Arabidopsis_thaliana",
       "version" : "TAIR10",
-      "fasta" : "input/A_thaliana_TAIR10.fasta"
+      "fasta" : "ftp://ftp.ensemblgenomes.org/pub/plants/release-43/fasta/arabidopsis_thaliana/dna/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz",
+      "gff" : "ftp://ftp.ensemblgenomes.org/pub/plants/release-43/gff3/arabidopsis_thaliana/Arabidopsis_thaliana.TAIR10.43.gff3.gz",
+      "seqtype" : "DNA"
     },
     {
       "species" : "Hordeum_vulgare",
-      "version" : "IBSC_PGSB_v2",
-      "fasta" : "input/Hordeum_vulgare.Hv_IBSC_PGSB_v2.dna.toplevel.fa"
+      "version" : "IBSC_v2",
+      "fasta" : "ftp://ftp.ensemblgenomes.org/pub/plants/release-43/fasta/hordeum_vulgare/dna/Hordeum_vulgare.IBSC_v2.dna.toplevel.fa.gz",
+      "gff" : "ftp://ftp.ensemblgenomes.org/pub/plants/release-43/gff3/hordeum_vulgare/Hordeum_vulgare.IBSC_v2.43.gff3.gz",
+      "seqtype" : "DNA"
     },
     {
       "species" : "Triticum_dicoccoides",
-      "version" : "WEWseq_PGSB_20160501",
-      "fasta" : "input/151210_zavitan_v2_pseudomolecules.fasta"
+      "version" : "WEWSeq_v1.0",
+      "fasta" : "ftp://ftp.ensemblgenomes.org/pub/plants/release-43/fasta/triticum_dicoccoides/dna/Triticum_dicoccoides.WEWSeq_v.1.0.dna.toplevel.fa.gz",
+      "gff" : "ftp://ftp.ensemblgenomes.org/pub/plants/release-43/gff3/triticum_dicoccoides/Triticum_dicoccoides.WEWSeq_v.1.0.43.gff3.gz",
+      "seqtype" : "DNA"
     },
     {
       "species" : "Triticum_aestivum",
-      "version" : "IWGSC_Ref1.0",
-      "fasta" : "input/161010_Chinese_Spring_v1.0_pseudomolecules.fasta"
+      "version" : "IWGSC_v1.0",
+      "fasta" : "ftp://ftp.ensemblgenomes.org/pub/plants/release-43/fasta/triticum_aestivum/dna/Triticum_aestivum.IWGSC.dna.toplevel.fa.gz",
+      "gff" : "ftp://ftp.ensemblgenomes.org/pub/plants/release-43/gff3/triticum_aestivum/Triticum_aestivum.IWGSC.43.gff3.gz",
+      "seqtype" : "DNA"
     }
   ]
 }
