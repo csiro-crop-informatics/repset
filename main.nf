@@ -42,6 +42,7 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2rna}/*_{index
 
 //DNA and RNA aligners in one channel as single indexing process defined
 alignersDNA2DNA.mix(alignersRNA2DNA).mix(alignersRNA2RNA)
+  .filter{ params.aligners == 'all' || it[0].matches(params.aligners) }
   .groupTuple(size:3, remainder: true, sort:true)
   .map { tool, alnModes ->
     [tool: tool, modes: [dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA')]]
@@ -478,7 +479,7 @@ process rnfEvaluateSimulated {
   //RNFtools alignment correctness evaluation relies on the order of refernce sequences being preserved in SAM header
   //If it is not we re-generate the header to enable correct alignment evaluation
   """
-  if cmp \
+  if cmp 1>&2 \
     <(samtools view -H ${samOrBam} | grep '^@SQ' | sed -E  's/(^.*\\tSN:)([^\\t]*).*/\\2/') \
     <(cut -f1 ${fai})
   then
@@ -493,8 +494,12 @@ process rnfEvaluateSimulated {
   | rnftools sam2es \
       --allowed-delta 100 \
       -i - \
-      -o - | tee ES | awk '\$1 !~ /^#/' \
-    | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary;
+      -o - \
+      | tee >(gzip --fast > ES.gz) \
+      | tee >(awk '\$1 !~ /^#/' | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary) \
+      | tee >(rnftools es2et -i - -o - \
+        | tee >(gzip --fast > ET.gz) \
+        | rnftools et2roc -i - -o ROC)
   """
   // """
   // #RNFtools alignment correctness evaluation relies on the order of refernce sequences being preserved in SAM header
