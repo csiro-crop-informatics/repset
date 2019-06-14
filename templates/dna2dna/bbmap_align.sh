@@ -5,6 +5,7 @@ bbmap.sh \
   in2=${reads[1]} \
   threads=${task.cpus} \
   keepnames=t \
+  trimreaddescriptions=t \
   sam=1.3 \
   out=out.sam \
   usejni=t \
