@@ -44,8 +44,11 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2rna}/*_{index
 alignersDNA2DNA.mix(alignersRNA2DNA).mix(alignersRNA2RNA)
   .groupTuple(size:3, remainder: true, sort:true)
   .map { tool, alnModes ->
-    [tool: tool, dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA') ]
+    [tool: tool, modes: [dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA')]]
   }
+  // .map { tool, alnModes ->
+  //   [tool: tool, dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA') ]
+  // }
  .set { aligners }
 
 /*
@@ -128,7 +131,7 @@ Channel.from(params.references).separate (fastaChn, gffChn) { it ->
 }
 
 process stageInputFile {
-  echo true
+  scratch false
   tag{meta.subMap(['species','version'])+[fileType: fileType]}
 
   //as above, storeDir not mounted accessible
@@ -264,24 +267,6 @@ process faidxTranscriptomeFASTA {
   """
 }
 
-
-// referencesOnly.mix(transcripts4indexing).view()
-
-// // referencesForTranscriptomeExtraction.map { [it[0], it[1][0], it[1][1]] }.view()
-// // referencesForTranscriptomeExtraction.map { meta, files -> [meta, files[0], files[1]] }.view()
-// // referencesForTranscriptomeExtraction.map { meta, files ->
-// //   files.sort { a,b -> a.name.substring(a.name.lastIndexOf('.')+1) <=> b.name.substring(b.name.lastIndexOf('.')+1)} //ensure gff goes after fasta
-// //   [meta, files[0], files[1]] }.view()
-
-// //referencesForAligners.mix(transcripts4indexing).view()
-// // aligners.combine(referencesForAligners.mix(transcripts4indexing)).view()
-// // aligners.combine(referencesForAligners).view()
-// // referencesForAligners.view()
-
-// // // // // // referencesForAlignersDNA.println { it }
-// // // // // // aligners.println { it }
-
-
 process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
@@ -295,17 +280,17 @@ process indexGenerator {
 
   output:
     set val(meta), file(ref), file(fai), file("*") into indices
-    // set val(meta), file(ref) into refsForEval
+
 
   when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
-    (refmeta.seqtype == 'RNA' && alignermeta.rna2rna && 'rna2rna'.matches(params.alnmode) ) || \
-    (refmeta.seqtype == 'DNA' && (alignermeta.rna2dna || alignermeta.dna2dna) && ('rna2dna'.matches(params.alnmode) || 'dna2dna'.matches(params.alnmode)) )
+    (refmeta.seqtype == 'RNA' && alignermeta.modes.rna2rna && 'rna2rna'.matches(params.alnmode) ) \
+    || (refmeta.seqtype == 'DNA' && (alignermeta.modes.rna2dna || alignermeta.modes.dna2dna) && ('rna2dna'.matches(params.alnmode) || 'dna2dna'.matches(params.alnmode)))
 
   //  exec: //dev
   //  meta =  alignermeta+refmeta//[target: "${ref}"]
-  //  println(prettyPrint(toJson(meta)))
+  //  println(prettyPrint(toJson([alignermeta,refmeta])))
   script:
-    meta = [tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
+    meta = [toolmodes: alignermeta.modes, tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
     template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
 
@@ -429,8 +414,10 @@ process mapSimulatedReads {
     set val(alignmeta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated
 
   when: //only align simulated reads to the corresponding genome, using the corresponding params set, in the correct mode: DNA2DNA, RNA2DNA, RNA2RNA
-    idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool && \
-    (paramsmeta.alignMode.startsWith(simmeta.seqtype) && paramsmeta.alignMode.endsWith(simmeta.coordinates) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
+    idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool \
+    && (paramsmeta.alignMode.startsWith(simmeta.seqtype) && paramsmeta.alignMode.endsWith(simmeta.coordinates) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype)) \
+    && idxmeta.toolmodes."${paramsmeta.alignMode.toLowerCase()}"
+    // (paramsmeta.alignMode.startsWith(simmeta.seqtype) && paramsmeta.alignMode.endsWith(simmeta.coordinates) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
 
   // exec:
   //   println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
@@ -487,16 +474,52 @@ process rnfEvaluateSimulated {
   // exec:
   script:
   // println prettyPrint(toJson(alignmeta))
-  //Sorting of the header required as order of ref seqs not guaranteed and and ref ids are encoded in read names in order of the reference from which they have been generated
-  //  #samtools view -H ${samOrBam} | reheader.awk | sort -k1,2 > header
-  //# -i <(cat header <(samtools view ${samOrBam}))
+
+  //RNFtools alignment correctness evaluation relies on the order of refernce sequences being preserved in SAM header
+  //If it is not we re-generate the header to enable correct alignment evaluation
   """
-  rnftools sam2es \
-    --allowed-delta 100 \
-    -i ${samOrBam} \
-    -o - | awk '\$1 !~ /^#/' \
-  | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary
+  if cmp \
+    <(samtools view -H ${samOrBam} | grep '^@SQ' | sed -E  's/(^.*\\tSN:)([^\\t]*).*/\\2/') \
+    <(cut -f1 ${fai})
+  then
+    samtools view -h ${samOrBam}
+  else
+    cat \
+      <(samtools view -H ${samOrBam} | head -1 | sed '1 s/\\tSO:[^s]*/\\tSO:unsorted/') \
+      <(awk '{print "@SQ\\tSN:"\$1"\\tLN:"\$2}' ${fai}) \
+      <(samtools view -H ${samOrBam} | tail -n+2 | grep -v '^@SQ') \
+      <(samtools view ${samOrBam})
+  fi \
+  | rnftools sam2es \
+      --allowed-delta 100 \
+      -i - \
+      -o - | tee ES | awk '\$1 !~ /^#/' \
+    | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary;
   """
+  // """
+  // #RNFtools alignment correctness evaluation relies on the order of refernce sequences being preserved in SAM header
+  // if cmp \
+  //   <(samtools view -H ${samOrBam} | grep '^@SQ' | sed -E  's/(^.*\\tSN:)([^\\t]*).*/\\2/') \
+  //   <(cut -f1 ${fai}); \
+  // then
+  //   rnftools sam2es \
+  //     --allowed-delta 100 \
+  //     -i ${samOrBam} \
+  //     -o - | tee ES | awk '\$1 !~ /^#/' \
+  //   | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary; \
+  // else
+  //   cat \
+  //     <(samtools view -H ${samOrBam} | head -1 | sed '1 s/\\tSO:[^s]*/\\tSO:unsorted/') \
+  //     <(awk '{print "@SQ\\tSN:"\$1"\\tLN:"\$2}' ${fai}) \
+  //     <(samtools view -H ${samOrBam} | tail -n+2 | grep -v '^@SQ') \
+  //     <(samtools view ${samOrBam}) \
+  //   | rnftools sam2es \
+  //     --allowed-delta 100 \
+  //     -i - \
+  //     -o - | tee ES | awk '\$1 !~ /^#/' \
+  //   | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary;
+  // fi
+  // """
   // """
   // paste \
   //   <( rnftools sam2es \
