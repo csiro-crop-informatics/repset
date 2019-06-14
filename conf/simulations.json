@@ -1,13 +1,11 @@
 {
   "simreadsDNA": {
     "simulator": [
-      "ArtIllumina",
-      "MasonIllumina"
+      "ArtIllumina"
     ],
     "coverage" : 0.2,
     "length": 100,
     "mode": [
-      "SE",
       "PE"
     ],
     "distance": [
