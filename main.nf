@@ -248,11 +248,11 @@ process extarctTranscripts {
     // '''
     //
     '''
-    gffread --merge -W -w- -g !{ref} !{features} \
+    gffread -W -w- -g !{ref} !{features} \
       | awk '/^>/ { if(NR>1) print "";  printf("%s\\t",$0); next; } { printf("%s",$0);} END {printf("\\n");}' \
       | tee tmp.fa \
       | awk 'NR==FNR{all[$1]+=1}; NR!=FNR{if(all[$1]==1){print}}' - tmp.fa  \
-      | tr '\\t' '\\n' |
+      | tr '\\t' '\\n' \
       > !{outfile} && rm tmp.fa
     '''
     // #-w- AND | awk '/^>/ { if(NR>1) print "";  printf("%s\\t",$0); next; } { printf("%s",$0);} END {printf("\\n");}' \
@@ -309,6 +309,7 @@ process rnfSimReads {
   // echo true
   tag{simmeta}
   label 'rnftools'
+  label 'slow'
 
   input:
     // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
