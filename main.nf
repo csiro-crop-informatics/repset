@@ -132,12 +132,12 @@ Channel.from(params.references).separate (fastaChn, gffChn) { it ->
 }
 
 process stageInputFile {
-  scratch false
   tag{meta.subMap(['species','version'])+[fileType: fileType]}
 
   //as above, storeDir not mounted accessible
   // storeDir { (infile.name).matches("REMOTE") ? (executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded") : null }
-  storeDir { (infile.name).matches("REMOTE.*") ? "${params.outdir}/downloaded" : null }
+  // storeDir { (infile.name).matches("REMOTE.*") ? "${params.outdir}/downloaded" : null }
+  storeDir { (infile.name).matches("REMOTE.*") ? "${workDir}/downloaded" : null } //- perhaps more robust as workdir is mounted in singularity unlike outdir?
 
   input:
     set val(meta), file(infile) from fastaChn.mix(gffChn)
@@ -216,6 +216,7 @@ process faidxGenomeFASTA {
 process extarctTranscripts {
   echo true
   label 'gffread'
+  label 'slow'
   tag{meta.subMap(['species','version'])}
   scratch false
 
@@ -242,8 +243,17 @@ process extarctTranscripts {
     outfile = "${basename}.transcripts.fa"
     // println(prettyPrint(toJson(outmeta)))
     // FEATURE_FIELD = meta.featfmt == 'bed' ? 8 : 3 //BED OR GFF3
+    // '''
+    // gffread --merge -W -w !{outfile} -g !{ref} !{features}
+    // '''
+    //
     '''
-    gffread -W -w !{outfile} -g !{ref} !{features}
+    gffread --merge -W -w- -g !{ref} !{features} \
+      | awk '/^>/ { if(NR>1) print "";  printf("%s\\t",$0); next; } { printf("%s",$0);} END {printf("\\n");}' \
+      | tee tmp.fa \
+      | awk 'NR==FNR{all[$1]+=1}; NR!=FNR{if(all[$1]==1){print}}' - tmp.fa  \
+      | tr '\\t' '\\n' |
+      > !{outfile} && rm tmp.fa
     '''
     // #-w- AND | awk '/^>/ { if(NR>1) print "";  printf("%s\\t",$0); next; } { printf("%s",$0);} END {printf("\\n");}' \
     // #| sort -k1,1V | tr '\\t' '\\n' > !{outfile}
@@ -456,6 +466,7 @@ process mapSimulatedReads {
 
 process rnfEvaluateSimulated {
   label 'rnftools'
+  label 'slow'
   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
 
   input:
@@ -497,9 +508,9 @@ process rnfEvaluateSimulated {
       -o - \
       | tee >(gzip --fast > ES.gz) \
       | tee >(awk '\$1 !~ /^#/' | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary) \
-      | tee >(rnftools es2et -i - -o - \
+      | rnftools es2et -i - -o - \
         | tee >(gzip --fast > ET.gz) \
-        | rnftools et2roc -i - -o ROC)
+        | rnftools et2roc -i - -o ROC
   """
   // """
   // #RNFtools alignment correctness evaluation relies on the order of refernce sequences being preserved in SAM header
