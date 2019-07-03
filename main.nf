@@ -326,6 +326,7 @@ process rnfSimReads {
   output:
     set val(simmeta), file("*.fq.gz") into readsForAlignment
     set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
+    // set val(simmeta), file("*.fq.gz") into readsForSimStats
 
   when:
     !(mode == "PE" && simulator == "CuReSim") && \
@@ -375,6 +376,18 @@ process rnfSimReads {
     && find . -type d -mindepth 2 | xargs rm -r
     """
 }
+
+// process simStats{
+//   input:
+//     set val(simmeta), file(reads) from readsForSimStats
+
+//   output:
+//     set val(simmeta), stdout(count) into simCounts
+
+//   """
+//   zcat ${reads[0]} | sed -n '1~4p' | wc -l
+//   """
+// }
 
 process convertReadCoordinates {
   label 'groovy'
@@ -646,7 +659,7 @@ process collateSummariesSimulated {
       entry.results = [:]
       it.eachLine { line ->
         (k, v) = line.split()
-        entry.results << [(k) : v ]
+        entry.results << [(k) : v.isInteger() ? v.toInteger() : v.isDouble() ? v.toDouble() : v ]
         //entry.results << [(categories[(k)]) : v ]
         headersResults << (k)
         //headersResults << (categories[(k)])
