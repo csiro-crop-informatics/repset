@@ -325,7 +325,7 @@ process rnfSimReads {
 
   output:
     set val(simmeta), file("*.fq.gz") into readsForAlignment
-    set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
+    set val(simmeta), file(ref), file(fai), file("*.fq.gz") into readsForCoordinateConversion
     // set val(simmeta), file("*.fq.gz") into readsForSimStats
 
   when:
@@ -396,7 +396,7 @@ process convertReadCoordinates {
 
 
   input:
-    set val(simmeta), file(ref), file(reads) from readsForCoordinateConversion
+    set val(simmeta), file(ref), file(fai), file(reads) from readsForCoordinateConversion
 
   output:
     set val(outmeta), file('*.fq.gz') into convertedCoordinatesReads
@@ -415,7 +415,9 @@ process convertReadCoordinates {
   outmeta.remove('coordiantes')
   outmeta.coordinates = 'DNA'
   """
-  tct_rnf.groovy --transcriptome ${ref} \
+  tct_rnf.groovy \
+    --genome-idx ${fai} \
+    --transcriptome ${ref} \
     --in-forward ${reads[0]} --in-reverse ${reads[1]} \
     --out-forward ${out1} --out-reverse ${out2}
   """
