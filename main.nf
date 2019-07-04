@@ -188,6 +188,7 @@ process faidxGenomeFASTA {
     set val(refmeta), file(infiles) from stagedReferences
 
   output:
+    set val(refmeta), file("${ref}.fai") into genomeIndicesForReadCoordinateConversion
     set val(refmeta), file(ref), file("${ref}.fai") into genomesForIndexing, genomesForRnfSimReads
     set val(refmeta), file(ref), file("${ref}.fai"), file("${gff}") optional true into referencesForTranscriptomeExtraction //refsForIndexing
 
@@ -325,7 +326,7 @@ process rnfSimReads {
 
   output:
     set val(simmeta), file("*.fq.gz") into readsForAlignment
-    set val(simmeta), file(ref), file(fai), file("*.fq.gz") into readsForCoordinateConversion
+    set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
     // set val(simmeta), file("*.fq.gz") into readsForSimStats
 
   when:
@@ -396,16 +397,18 @@ process convertReadCoordinates {
 
 
   input:
-    set val(simmeta), file(ref), file(fai), file(reads) from readsForCoordinateConversion
+    set val(simmeta), file(ref), file(reads), val(refmeta), file(fai) from readsForCoordinateConversion.combine(genomeIndicesForReadCoordinateConversion)
 
   output:
     set val(outmeta), file('*.fq.gz') into convertedCoordinatesReads
 
   when:
-    simmeta.seqtype == 'RNA' && 'rna2dna'.matches(params.alnmode)
+    simmeta.seqtype == 'RNA' && 'rna2dna'.matches(params.alnmode) \
+    && simmeta.species == refmeta.species && simmeta.version == refmeta.version
 
   // exec:
   //   println(prettyPrint(toJson(simmeta)))
+  //   println(prettyPrint(toJson(refmeta)))
 
   script:
   out1 = reads[0].name.replace('.1.fq.gz','.R1.fq.gz')
@@ -416,7 +419,7 @@ process convertReadCoordinates {
   outmeta.coordinates = 'DNA'
   """
   tct_rnf.groovy \
-    --genome-idx ${fai} \
+    --genome-index ${fai} \
     --transcriptome ${ref} \
     --in-forward ${reads[0]} --in-reverse ${reads[1]} \
     --out-forward ${out1} --out-reverse ${out2}
