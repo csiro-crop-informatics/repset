@@ -4,41 +4,41 @@
 
 
 # Table of Contents <!-- omit in toc -->
-- [Dependencies](#dependencies)
-- [Experiments](#experiments)
-  - [Quick start](#quick-start)
-  - [Simulated RNA-Seq (BEERS-based)](#simulated-rna-seq-beers-based)
-    - [Quick test run](#quick-test-run)
-    - [BEERS-based pipeline overview](#beers-based-pipeline-overview)
-  - [Real RNA-Seq](#real-rna-seq)
-  - [Simulated DNA-Seq](#simulated-dna-seq)
-  - [Real DNA-Seq](#real-dna-seq)
-  - [Execution environments](#execution-environments)
-    - [Running nextflow with docker](#running-nextflow-with-docker)
-    - [Running nextflow with singularity](#running-nextflow-with-singularity)
-    - [Running on AWS batch](#running-on-aws-batch)
-  - [Full pipeline run](#full-pipeline-run)
-    - [Capturing results and run metadata](#capturing-results-and-run-metadata)
-  - [Experimental pipeline overview](#experimental-pipeline-overview)
-  - [Execution environment](#execution-environment)
-- [Adding another aligner](#adding-another-aligner)
-  - [Example](#example)
-    - [Add indexing template](#add-indexing-template)
-    - [Add RNA alignment template](#add-rna-alignment-template)
-    - [Add DNA alignment template](#add-dna-alignment-template)
-    - [Add additional alignment parameters](#add-additional-alignment-parameters)
-    - [Specify container](#specify-container)
-- [Per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
-  - [Setting-up an automated build](#setting-up-an-automated-build)
-  - [Adding or updating a Dockerfile](#adding-or-updating-a-dockerfile)
-- [Report](#report)
-  - [Rendering outside the pipeline](#rendering-outside-the-pipeline)
-    - [Using docker](#using-docker)
-    - [Using singularity](#using-singularity)
-    - [Natively](#natively)
-- [Manuscript](#manuscript)
-  - [Rendering](#rendering)
-  - [Bibliography](#bibliography)
+- [Dependencies](#Dependencies)
+- [Experiments](#Experiments)
+  - [Quick start](#Quick-start)
+  - [Simulated RNA-Seq (BEERS-based)](#Simulated-RNA-Seq-BEERS-based)
+    - [Quick test run](#Quick-test-run)
+    - [BEERS-based pipeline overview](#BEERS-based-pipeline-overview)
+  - [Real RNA-Seq](#Real-RNA-Seq)
+  - [Simulated DNA-Seq](#Simulated-DNA-Seq)
+  - [Real DNA-Seq](#Real-DNA-Seq)
+  - [Execution environments](#Execution-environments)
+    - [Running nextflow with docker](#Running-nextflow-with-docker)
+    - [Running nextflow with singularity](#Running-nextflow-with-singularity)
+    - [Running on AWS batch](#Running-on-AWS-batch)
+  - [Full pipeline run](#Full-pipeline-run)
+    - [Capturing results and run metadata](#Capturing-results-and-run-metadata)
+  - [Experimental pipeline overview](#Experimental-pipeline-overview)
+  - [Execution environment](#Execution-environment)
+- [Adding another aligner](#Adding-another-aligner)
+  - [Example](#Example)
+    - [Add indexing template](#Add-indexing-template)
+    - [Add RNA alignment template](#Add-RNA-alignment-template)
+    - [Add DNA alignment template](#Add-DNA-alignment-template)
+    - [Add additional alignment parameters](#Add-additional-alignment-parameters)
+    - [Specify container](#Specify-container)
+- [Per-tool container images and docker automated builds](#Per-tool-container-images-and-docker-automated-builds)
+  - [Setting-up an automated build](#Setting-up-an-automated-build)
+  - [Adding or updating a Dockerfile](#Adding-or-updating-a-Dockerfile)
+- [Report](#Report)
+  - [Rendering outside the pipeline](#Rendering-outside-the-pipeline)
+    - [Using docker](#Using-docker)
+    - [Using singularity](#Using-singularity)
+    - [Natively](#Natively)
+- [Manuscript](#Manuscript)
+  - [Rendering](#Rendering)
+  - [Bibliography](#Bibliography)
 
 # Dependencies
 
@@ -275,7 +275,7 @@ TODO
 
 ### Specify container
 
-1. Upload a relevant container image to docker hub or [locate an existing one](https://hub.docker.com/search/?isAutomated=0&isOfficial=0&page=1&pullCount=0&q=bowtie2&starCount=0). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
+1. Upload a relevant container image to a docker registry (such as Docker Hub) or [locate an existing one](https://hub.docker.com/search/?isAutomated=0&isOfficial=0&page=1&pullCount=0&q=bowtie2&starCount=0). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
 Alternatively, follow our procedure below for [defining per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
 
 2. Insert container specification
@@ -304,8 +304,9 @@ The following approach relies on creating a branch for a specific version of a t
 ~~The same can be achieved by simply tagging the relevant commit, but this may result in proliferation of tags while branches can be merged into master and deleted while preserving the history.~~
 ~~If you'd rather use tags, in (2) change the 'Source type' below to 'Tag' and later tag an appropriate commit using `docker/tool/version` pattern rather than committing to a dedicated branch.~~ (tags can be problematic - if tag is based on version of a tool and container needs to be updated, tags may have to be removed/re-added)
 
-1. Link a [Docker Cloud](https://cloud.docker.com/) repo with this GitHub repo (go to Builds -> Configure Automated Builds)
-2. Add an automated build rule (replace `tool` with the name of the tool).
+1. Create [Docker Cloud](https://cloud.docker.com/) repo for your tool - *do not link to specific GitHub repo or configure automated build at this stage*, but only *after* it has been created - otherwise the tags for containers built later may be malformed.
+2. Link the created a [Docker Cloud](https://cloud.docker.com/) repo with this GitHub repo (go to Builds -> Configure Automated Builds)
+3. Add an automated build rule (replace `tool` with the name of the tool).
 
 | Source type   | Source                   | Docker Tag  | Dockerfile location | Build Context  |
 | ------------- | ------------------------ | ----------- | ------------------- | -------------- |
