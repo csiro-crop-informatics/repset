@@ -78,8 +78,22 @@ Channel.from(alignersParamsList).set {alignersParams}
 /*
   Generic method for extracting a string tag or a file basename from a metadata map
  */
- def getTagFromMeta(meta, delim = '_') {
+def getTagFromMeta(meta, delim = '_') {
   return meta.species+delim+meta.version //+(trialLines == null ? "" : delim+trialLines+delim+"trialLines")
+}
+
+/*
+  Given a file with '=' delimited key value pairs on each line
+  (this could e.g. be .command.trace)
+  parse and store in map provided,
+ */
+def parseFileMap(filemap, map, subset = false) {
+  filemap.splitEachLine("=", { record ->
+      if(record.size() > 1 && (subset == false || record[0] in subset)) {
+        v = record[1]
+        map."${record[0]}" = v.isInteger() ? v.toInteger() : v.isDouble() ? v.toDouble() : v
+      }
+    })
 }
 
 /*
@@ -325,9 +339,10 @@ process rnfSimReads {
     each distanceDev from params.simreadsDNA.distanceDev //PE only
 
   output:
-    set val(simmeta), file("*.fq.gz") into readsForAlignment
-    set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
-    // set val(simmeta), file("*.fq.gz") into readsForSimStats
+    // set val(simmeta), file("*.fq.gz") into readsForAlignment
+    // set val(simmeta), file(ref), file("*.fq.gz") into readsForCoordinateConversion
+    set val(simmeta), file(ref), file(simStats), file("*.fq.gz") into simulatedReads
+
 
   when:
     !(mode == "PE" && simulator == "CuReSim") && \
@@ -372,11 +387,33 @@ process rnfSimReads {
     rule: input: rnftools.input()
     " > Snakefile
     snakemake -p \
+    && paste --delimiters '=' <(echo -n nreads) <(sed -n '1~4p' *.fq | wc -l) > simStats \
     && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
     && time gzip --fast *.fq \
     && find . -type d -mindepth 2 | xargs rm -r
     """
 }
+
+//extract simulation stats from file (currently number of reads only), reshape and split to different channels
+readsForCoordinateConversion = Channel.create()
+simulatedReads.map { simmeta, ref, simStats, simReads ->
+    // simStats.splitEachLine("=", { record ->
+    //   if(record.size() > 1) {
+    //     v = record[1]
+    //     simmeta."${record[0]}" = v.isInteger() ? v.toInteger() : v.isDouble() ? v.toDouble() : v
+    //   }
+    // })
+    parseFileMap(simStats, simmeta)
+    new Tuple(simmeta, ref, simReads)
+  }
+  .tap ( readsForCoordinateConversion )
+  .map { simmeta, ref, simReads  ->
+    new Tuple(simmeta, simReads)
+  }
+  .set{ readsForAlignment }
+
+
+
 
 // process simStats{
 //   input:
@@ -490,11 +527,14 @@ process rnfEvaluateSimulated {
 
   input:
     set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated.map { meta, ref, fai, samOrBam, trace ->
-        trace.splitEachLine("=", { record ->
-          if(record.size() > 1 && record[0]=='realtime') { //to grab all, remove second condition and { meta."${record[0]}" = record[1] }
-            meta.'aligntime'  = record[1]
-          }
-        })
+        // trace.splitEachLine("=", { record ->
+        //   if(record.size() > 1 && record[0]=='realtime') { //to grab all, remove second condition and { meta."${record[0]}" = record[1] }
+        //     // meta.'aligntime'  = record[1]
+        //     v = record[1]
+        //     meta.'aligntime'  = v.isInteger() ? v.toInteger() : v.isDouble() ? v.toDouble() : v
+        //   }
+        // })
+        parseFileMap(trace, meta, 'realtime' ) //could be parseFileMap(trace, meta, ['realtime','..'] )
         new Tuple(meta, ref, fai, samOrBam)
       }
 
