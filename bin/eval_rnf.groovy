@@ -25,11 +25,11 @@ import static picocli.CommandLine.*
 @Option(names = ["-f", "--faidx"], description = ["FAI index for the reference FASTA file"], required = true)
 @Field private String fai
 
-@Option(names = ["-r", "--rname-match" ], description = "Ignore coordinates, only require reference sequnence name (RNAME) to match.")
-@Field private boolean rnameMatchOnly = false;
+// @Option(names = ["-r", "--rname-match" ], description = "Ignore coordinates, only require reference sequnence name (RNAME) to match.")
+// @Field private boolean rnameMatchOnly = false;
 
 @Option(names = ["-d", "--allowed-delta"], description = "Allowed difference between true coordinates and aligned coordinates.")
-@Field private int allowedDelata = 5;
+@Field private int allowedDelta = 5;
 
 @Option(names = ["-s", "--sam"], description = ["Input SAM file name"], required = true)
 @Field private String sam
@@ -60,7 +60,7 @@ File samFile = new File(sam)
 // File outFile = new File(output)
 // File faiFile = new File('Arabidopsis_thaliana_TAIR10.fasta.fai')
 // File samFile = new File('filtered.sam')
-int allowedDelta = 5
+
 
 //append = false
 //writer1 = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(outFile1, append)), "UTF-8"), BUFFER_SIZE);
@@ -98,7 +98,7 @@ def long mateAlignedToDifferentReferenceCount = 0;
 
 //Process alignments
 try {
-  esWriter.write '''# RN:   read name
+  esWriter.write """# RN:   read name
 # Q:    is mapped with quality
 # Chr:  chr id
 # D:    direction
@@ -112,7 +112,7 @@ try {
 #         u      segment is unmapped and should be mapped
 # Segs: number of segments
 #
-# RN    Q       Chr     D       L       R       Cat     Segs'''
+# RN\tQ\tChr\tD\tL\tR\tCat\tSegs"""
 
 
   samContent = new BufferedReader(new InputStreamReader(new FileInputStream(samFile), "UTF-8"), BUFFER_SIZE);
@@ -133,7 +133,7 @@ try {
     //      writer2.write(NEWLINE);
     //      continue;
     //    }
-
+    category = ''
 
     (QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL) = line.split('\t')
     // def recordSplit = line.split('\t')
@@ -145,109 +145,110 @@ try {
     //Reference ID check
     ref = coordsSplit[1].toInteger()
     refRecord = refsList[ref-1]
+    boolean isUnaligned = false
+    boolean isWrongRef = false
     if(RNAME =='*') {
       unalignedCount[mapq]++
-      continue
-    } else if(refRecord == RNAME) { //RNAME MATCH
+      isUnaligned = true
+    } else if(refRecord != RNAME) { //RNAME MATCH
+      alignedToIncorrectReferenceCount[mapq]++;
+      isWrongRef = true
+    } else {
       alignedToCorrectReferenceCount++;
       mateAlignedToDifferentReferenceCount += (RNEXT == '=' || RNEXT == refRecord) ? 0 : 1
-      if(rnameMatchOnly) {
-        continue;
-      }
-    } else {
-      alignedToIncorrectReferenceCount[mapq]++;
-      continue;
+      // if(rnameMatchOnly) {
+      //   continue;
+      // }
     }
-    //Alignment details
-
 
     //ORIENTATION
     boolean reverse = ((flag & 16) != 0)
 
-    //R1 or R2?
-    boolean isRead1 = ((flag & 64) != 0)
-    boolean isRead2 = ((flag & 128) != 0)
-    //SOME SANITY CHECKS...
-    if((isRead1 && isRead2) || (!isRead1 && !isRead2)) {
-      System.err.println('Error in SAM flag? '+flag)
-      System.exit(1)
-    }
-
-    //RNF encoded coordinates in read name
-    int simStart = coordsSplit[3].toInteger()
-    int simEnd = coordsSplit[4].toInteger()
-    // int simStart = isRead1? coordsSplit[3].toInteger() : coordsSplit[8].toInteger()
-    // int simEnd = isRead1? coordsSplit[4].toInteger() : coordsSplit[9].toInteger()
-    // int simStartMate = isRead2 ? coordsSplit[3].toInteger() : coordsSplit[8].toInteger()
-    // int simEndMate = isRead2 ? coordsSplit[4].toInteger() : coordsSplit[9].toInteger()
-    int simStartMate = coordsSplit[8].toInteger()
-    int simEndMate = coordsSplit[9].toInteger()
-
+    // //R1 or R2?
+    // boolean isRead1 = ((flag & 64) != 0)
+    // boolean isRead2 = ((flag & 128) != 0)
+    // //SOME SANITY CHECKS...
+    // if((isRead1 && isRead2) || (!isRead1 && !isRead2)) {
+    //   System.err.println('Error in SAM flag? '+flag)
+    //   System.exit(1)
+    // }
 
     //Alignment details
     def cigar = CIGAR
-    int alnStart = POS.toInteger() - getStartClip(cigar)
-    int alnEnd = alnStart + getAlignmentLength(cigar)-1 //Get aln len from CIGAR string
+    int alnStart = isUnaligned ? 0 : POS.toInteger() //- getStartClip(cigar)
+    int alnEnd = isUnaligned ? -1 : alnStart + getAlignmentLength(cigar)-1 //Get aln len from CIGAR string
 
-    int startDelta = (alnStart-simStart).abs()
-    int endDelta = (alnEnd-simEnd).abs()
-    int startDeltaMate = (alnStart-simStartMate).abs()
-    int endDeltaMate = (alnEnd-simEndMate).abs()
-
-    boolean isMatch = startDelta <= allowedDelta  && endDelta <= allowedDelta
-    boolean isMateMatch = startDeltaMate <= allowedDelta && endDeltaMate <= allowedDelta
-
-    category = ''
-    if(isMatch && isMateMatch) {
-      //both reads aligned to same location
-      bothMatch[mapq]++
-//      println simStart+ ' '+simEnd+ ' '+simStartMate+ ' '+simEndMate+ ' '+flag+' R1='+isRead1+' R2='+isRead2+' '+ (flag & 64)+ ' ' + (flag & 128) + ' isReverse='+reverse
-//      println alnStart+ ' '+alnEnd
-//      println line
-//      println startDelta+ ' '+endDelta+ ' '+startDeltaMate+' '+endDeltaMate
-//      println ''
-      category = 'both-segments-match'
-    } else if(isMatch) {
-      match[mapq]++
-      category = 'M_1'
-    } else if(isMateMatch) {
-      mateMatch[mapq]++
-      category = 'M_2'
-    } else {
-      mismatch[mapq]++
+    if(isUnaligned) {
+      category = 'u'
+    } else if(isWrongRef) {
       category = 'w'
+    } else {
+      //RNF encoded coordinates in read name
+      int simStart = coordsSplit[3].toInteger()
+      int simEnd = coordsSplit[4].toInteger()
+      int simStartMate = coordsSplit[8].toInteger()
+      int simEndMate = coordsSplit[9].toInteger()
+
+      //Expected v actual
+      int startDelta = (alnStart-simStart).abs()
+      int endDelta = (alnEnd-simEnd).abs()
+      int startDeltaMate = (alnStart-simStartMate).abs()
+      int endDeltaMate = (alnEnd-simEndMate).abs()
+
+      if(startDelta <= allowedDelta  && endDelta <= allowedDelta) {
+        match[mapq]++
+        category = 'M_1'
+      } else if(startDeltaMate <= allowedDelta && endDeltaMate <= allowedDelta) {
+        mateMatch[mapq]++
+        category = 'M_2'
+      } else {
+        mismatch[mapq]++
+        category = 'w'
+      }
     }
 
-    if(esWriter != null) {
-      esWriter.write NEWLINE
-      esWriter.write QNAME
-      esWriter.write SEP
-      //if(unampped...)
-      //else
-      esWriter.write "mapped_"
-      esWriter.write MAPQ
-      esWriter.write SEP
-      esWriter.write RNAME
-      esWriter.write SEP
-      esWriter.write reverse ? 'R' : 'F'
-      esWriter.write SEP
-      esWriter.write alnStart.toString()
-      esWriter.write SEP
-      esWriter.write alnEnd.toString()
-      esWriter.write SEP
-      esWriter.write category
-      esWriter.write SEP
-      esWriter.write '2' //Currently we're fixed on 2 segs anyway
-      // esWriter.write FLAG
-      esWriter.write SEP
-      esWriter.write "<<"
-      // esWriter.write isRead1 ? "R1" : isRead2 ? "R2" : "Which is it then?"
-    }
+  //     if(isMatch && isMateMatch) { //THIS DOES HAPPEn BUT RNF JUST RETURNS AFTER FIRST (R1) MATCH
+  //       //both reads aligned to same location
+  //       bothMatch[mapq]++
+  // //      println simStart+ ' '+simEnd+ ' '+simStartMate+ ' '+simEndMate+ ' '+flag+' R1='+isRead1+' R2='+isRead2+' '+ (flag & 64)+ ' ' + (flag & 128) + ' isReverse='+reverse
+  // //      println alnStart+ ' '+alnEnd
+  // //      println line
+  // //      println startDelta+ ' '+endDelta+ ' '+startDeltaMate+' '+endDeltaMate
+  // //      println ''
+  //       category = 'both-segments-match'
+  //     } else
+
+
+      //END RECORD PROCESSING, NOW REPORT
+      if(esWriter != null) {
+        esWriter.write NEWLINE
+        esWriter.write QNAME
+        esWriter.write SEP
+        //if(unampped...)
+        //else
+        esWriter.write isUnaligned ? "unmapped" : "mapped_"+MAPQ
+        esWriter.write SEP
+        esWriter.write isUnaligned ? '1' : RNAME //RNF puts 1 for unmapped, 'None' would make more sense
+        esWriter.write SEP
+        esWriter.write reverse ? 'R' : 'F' //'N' if not known
+        esWriter.write SEP
+        esWriter.write POS //alnStart.toString()
+        esWriter.write SEP
+        esWriter.write alnEnd < 1 ? "None" : alnEnd.toString()
+        esWriter.write SEP
+        esWriter.write category
+        esWriter.write SEP
+        esWriter.write '2' //Currently we're fixed on 2 segs anyway
+        // esWriter.write FLAG
+        // esWriter.write SEP
+        // esWriter.write "<<"
+        // esWriter.write isRead1 ? "R1" : isRead2 ? "R2" : "Which is it then?"
+      }
 
 
   }
   new File(output).withWriter { out ->
-    out.println "[EDGE-CASES] Both match: "+bothMatch.sum()+" "+bothMatch
+    // out.println "[EDGE-CASES] Both match: "+bothMatch.sum()+" "+bothMatch // This happens but RNF assignes all these to M_1
     out.println "Match: "+match.sum()+" "+match
     out.println "Mate match: "+mateMatch.sum()+" "+mateMatch
     out.println "Mismatch: "+mismatch.sum()+" "+mismatch
@@ -283,11 +284,11 @@ def int getAlignmentLength(String cigar) {
     if(Character.isDigit(c)){
       segment.append(c)
     } else {
-      if(c == 'M' || c == '=' || c == 'X' || c == 'D' || c == 'N' || c == 'S' || c =='H') {
-//      if(c == 'M' || c == '=' || c == 'X' || c == 'D' || c == 'N') {
+      // if(c == 'M' || c == '=' || c == 'X' || c == 'D' || c == 'N' || c == 'S' || c =='H') {
+      if(c == 'M' || c == '=' || c == 'X' || c == 'D' || c == 'N') {
         len+=segment.toInteger();
-      }else if(c=='I'){
-//      }else if(c=='I' || c == 'S' || c =='H'){
+      // }else if(c=='I'){
+     }else if(c=='I' || c == 'S' || c =='H'){
         //ignore insertions in reference?
         //also ignore soft- and hard-clipping?
       }else{
