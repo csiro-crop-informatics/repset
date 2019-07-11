@@ -3,7 +3,7 @@ FROM rsuchecki/miniconda3:4.6.14_050661b0ef92865fde5aea442f3440d1a7532659@sha256
 LABEL maintainer="Rad Suchecki <rad.suchecki@csiro.au>"
 SHELL ["/bin/bash", "-c"]
 
-RUN apt-get install -y groovy
+RUN apt-get update && apt-get install -y groovy
 
 ARG SAMTOOLS_VERSION=1.9
 
