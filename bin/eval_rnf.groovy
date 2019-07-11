@@ -12,7 +12,7 @@ import java.util.zip.GZIPOutputStream
        $/@|bold,blue  ║╣ ╚╗╔╝╠═╣║    ╠╦╝║║║╠╣    |@/$,
        $/@|bold,blue  ╚═╝ ╚╝ ╩ ╩╩═╝  ╩╚═╝╚╝╚     |@/$
        ],
-       description = "Evaluate SAM alignments against original positions RNF-encoded in read names.",
+       description = "Evaluate SAM alignments against original positions RNF-encoded in read names. Paired End only.",
        showDefaultValues = true,
        footerHeading = "%nFootnote(s)%n",
        footer = ["[1] ASCII Art thanks to http://patorjk.com/software/taag/"]
@@ -31,10 +31,10 @@ import static picocli.CommandLine.*
 @Option(names = ["-d", "--allowed-delta"], description = "Allowed difference between true coordinates and aligned coordinates.")
 @Field private int allowedDelta = 5;
 
-@Option(names = ["-s", "--sam"], description = ["Input SAM file name"], required = true)
-@Field private String sam
+@Option(names = ["-s", "--sam"], description = ["Input SAM file name"])
+@Field private String sam = '/dev/stdin'
 
-@Option(names = ["-O", "--output"], description = ["Output file name"])
+@Option(names = ["-O", "--output"], description = ["Summary output file name"])
 @Field private String output = '/dev/stdout'
 
 @Option(names = ["-E", "--es-output"], description = ["ES output file name"])
@@ -116,31 +116,16 @@ try {
 
 
   samContent = new BufferedReader(new InputStreamReader(new FileInputStream(samFile), "UTF-8"), BUFFER_SIZE);
-  //  gzipStream2 = new GZIPInputStream(new FileInputStream(fastqFile2), BUFFER_SIZE);
-  //  content2 = new BufferedReader(new InputStreamReader(gzipStream2, "UTF-8"), BUFFER_SIZE);
-  //  i = 4
+
   def bothMatch = new int[256]
   def match = new int[256]
   def mateMatch = new int[256]
   def mismatch = new int[256]
   while ((line = samContent.readLine()) != null && !line.isEmpty()) {
-//    println line
-    //    if(i++ % 4 != 0 ) {
-    //      //JUST OUTPUT/STORE LINE AS IS
-    //      writer1.write(line1);
-    //      writer1.write(NEWLINE);
-    //      writer2.write(line2);
-    //      writer2.write(NEWLINE);
-    //      continue;
-    //    }
-    category = ''
-
     (QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL) = line.split('\t')
-    // def recordSplit = line.split('\t')
     def coordsSplit = QNAME.split('__')[2].replaceAll('\\(','').replaceAll('\\)','').split(',')
     int mapq = MAPQ.toInteger()
     int flag = FLAG.toInteger()
-    //println coordsSplit
 
     //Reference ID check
     ref = coordsSplit[1].toInteger()
@@ -156,28 +141,17 @@ try {
     } else {
       alignedToCorrectReferenceCount++;
       mateAlignedToDifferentReferenceCount += (RNEXT == '=' || RNEXT == refRecord) ? 0 : 1
-      // if(rnameMatchOnly) {
-      //   continue;
-      // }
     }
 
     //ORIENTATION
     boolean reverse = ((flag & 16) != 0)
-
-    // //R1 or R2?
-    // boolean isRead1 = ((flag & 64) != 0)
-    // boolean isRead2 = ((flag & 128) != 0)
-    // //SOME SANITY CHECKS...
-    // if((isRead1 && isRead2) || (!isRead1 && !isRead2)) {
-    //   System.err.println('Error in SAM flag? '+flag)
-    //   System.exit(1)
-    // }
 
     //Alignment details
     def cigar = CIGAR
     int alnStart = isUnaligned ? 0 : POS.toInteger() //- getStartClip(cigar)
     int alnEnd = isUnaligned ? -1 : alnStart + getAlignmentLength(cigar)-1 //Get aln len from CIGAR string
 
+    category = ''
     if(isUnaligned) {
       category = 'u'
     } else if(isWrongRef) {
@@ -216,33 +190,26 @@ try {
   // //      println startDelta+ ' '+endDelta+ ' '+startDeltaMate+' '+endDeltaMate
   // //      println ''
   //       category = 'both-segments-match'
-  //     } else
-
+  //     }
 
       //END RECORD PROCESSING, NOW REPORT
       if(esWriter != null) {
         esWriter.write NEWLINE
         esWriter.write QNAME
         esWriter.write SEP
-        //if(unampped...)
-        //else
         esWriter.write isUnaligned ? "unmapped" : "mapped_"+MAPQ
         esWriter.write SEP
         esWriter.write isUnaligned ? '1' : RNAME //RNF puts 1 for unmapped, 'None' would make more sense
         esWriter.write SEP
-        esWriter.write reverse ? 'R' : 'F' //'N' if not known
+        esWriter.write reverse ? 'R' : 'F' //should be 'N' if not known
         esWriter.write SEP
-        esWriter.write POS //alnStart.toString()
+        esWriter.write POS
         esWriter.write SEP
         esWriter.write alnEnd < 1 ? "None" : alnEnd.toString()
         esWriter.write SEP
         esWriter.write category
         esWriter.write SEP
         esWriter.write '2' //Currently we're fixed on 2 segs anyway
-        // esWriter.write FLAG
-        // esWriter.write SEP
-        // esWriter.write "<<"
-        // esWriter.write isRead1 ? "R1" : isRead2 ? "R2" : "Which is it then?"
       }
 
 
@@ -255,8 +222,6 @@ try {
 //  println alignedToCorrectReferenceCount
     out.println "Aligned to wrong ref: "+alignedToIncorrectReferenceCount.sum()+" "+alignedToIncorrectReferenceCount
     out.println "Unaligned: "+unalignedCount.sum()+" "+unalignedCount
-
-//  println alignedToCorrectReferenceCount-match.sum()-mateMatch.sum()
     out.println "Total: "+(unalignedCount.sum()+alignedToIncorrectReferenceCount.sum()+bothMatch.sum()+match.sum()+mateMatch.sum()+mismatch.sum())
   }
 } catch (FileNotFoundException ex) {
