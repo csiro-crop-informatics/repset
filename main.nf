@@ -75,6 +75,10 @@ Channel.from(alignersParamsList).set {alignersParams}
 // Channel.from(alignersParamsList).into {alignersParams4realDNA; alignersParams4SimulatedDNA}
 
 
+println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(alignersParamsList)))
+
+
+
 /*
   Generic method for extracting a string tag or a file basename from a metadata map
  */
@@ -467,9 +471,18 @@ process convertReadCoordinates {
 
 // // convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams).view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
 
+def getContainer(tool, version=null) {
+  if(version) {
+    this.config.process.get("withLabel:${tool}__${version}" as String).get("container")
+  } else {
+    this.config.process.get("withLabel:${tool}" as String).get("container")
+  }
+}
+
 process mapSimulatedReads {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
+  // container { getContainer(idxmeta.tool) }
   tag("${idxmeta.subMap(['tool','species','version','seqtype'])} << ${simmeta.subMap(['simulator','seqtype'])} @ ${paramsmeta.subMap(['paramslabel','alignMode'])}")
 
   input:
@@ -478,7 +491,7 @@ process mapSimulatedReads {
    set val(simmeta), file(reads), val(idxmeta), file(ref), file(fai), file('*'), val(paramsmeta) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams)
 
   output:
-    set val(alignmeta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated
+    set val(alignmeta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated, alignedSimulated2
 
   when: //only align simulated reads to the corresponding genome, using the corresponding params set, in the correct mode: DNA2DNA, RNA2DNA, RNA2RNA
     idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool \
@@ -489,7 +502,8 @@ process mapSimulatedReads {
   // exec:
   //   println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
   script:
-    alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
+    // alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
+    alignmeta = [target: idxmeta, query: simmeta, params: paramsmeta]
     ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
     template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh under e.g. templates/rna2dna, could have separate templates for PE and SE // if(simmeta.mode == 'PE')
 }
@@ -520,9 +534,51 @@ process mapSimulatedReads {
 // //   """
 // // }
 
+process rnfEvaluateSimulated2 {
+  label 'groovy'
+  label 'ES'
+  tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
+
+  input:
+    set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated2.map { meta, ref, fai, samOrBam, trace ->
+        parseFileMap(trace, meta, 'realtime' ) //could be parseFileMap(trace, meta, ['realtime','..'] )
+        new Tuple(meta, ref, fai, samOrBam)
+      }
+
+  output:
+     set val(alignmeta), file('ES2.gz'), file ('summary2.txt') into summariesSimulated2
+
+  // exec:
+  script:
+  // println prettyPrint(toJson(alignmeta))
+
+  //RNFtools/format alignment correctness evaluation relies on the order of refernce sequences being preserved in SAM header
+  //If it is not we re-generate the header to enable correct alignment evaluation
+  """
+  if cmp 1>&2 \
+    <(samtools view -H ${samOrBam} | grep '^@SQ' | sed -E  's/(^.*\\tSN:)([^\\t]*).*/\\2/') \
+    <(cut -f1 ${fai})
+  then
+    samtools view -h ${samOrBam}
+  else
+    cat \
+      <(samtools view -H ${samOrBam} | head -1 | sed '1 s/\\tSO:[^s]*/\\tSO:unsorted/') \
+      <(awk '{print "@SQ\\tSN:"\$1"\\tLN:"\$2}' ${fai}) \
+      <(samtools view -H ${samOrBam} | tail -n+2 | grep -v '^@SQ') \
+      <(samtools view ${samOrBam})
+  fi \
+  | eval_rnf.groovy \
+      --allowed-delta 100 \
+      --faidx ${fai} \
+      --es-output ES2.gz \
+      --output summary2
+  """
+}
+
 process rnfEvaluateSimulated {
   label 'rnftools'
   label 'slow'
+  label 'ES'
   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
 
   input:
@@ -566,10 +622,11 @@ process rnfEvaluateSimulated {
       -i - \
       -o - \
       | tee >(gzip --fast > ES.gz) \
-      | tee >(awk '\$1 !~ /^#/' | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary) \
-      | rnftools es2et -i - -o - \
-        | tee >(gzip --fast > ET.gz) \
-        | rnftools et2roc -i - -o ROC
+      | awk '\$1 !~ /^#/' | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary
+      #| tee >(awk '\$1 !~ /^#/' | awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary) \
+      #| rnftools es2et -i - -o - \
+      #  | tee >(gzip --fast > ET.gz) \
+      #  | rnftools et2roc -i - -o ROC
   """
   // """
   // #RNFtools alignment correctness evaluation relies on the order of refernce sequences being preserved in SAM header
