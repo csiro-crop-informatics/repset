@@ -1,0 +1,1 @@
+FROM quay.io/biocontainers/gffread:0.11.4--hdbcaa40_0@sha256:168dc7742b722c5eac5a7c31f5228a5303baad349f304ff4b7f4de3c3ac11c10

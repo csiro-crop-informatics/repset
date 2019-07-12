@@ -4,40 +4,41 @@
 
 
 # Table of Contents <!-- omit in toc -->
-- [Dependencies](#dependencies)
-- [Experiments](#experiments)
-  - [Quick start](#quick-start)
-  - [Simulated RNA-Seq](#simulated-rna-seq)
-    - [Quick test run](#quick-test-run)
-  - [Real RNA-Seq](#real-rna-seq)
-  - [Simulated DNA-Seq](#simulated-dna-seq)
-  - [Real DNA-Seq](#real-dna-seq)
-  - [Execution environments](#execution-environments)
-    - [Running nextflow with docker](#running-nextflow-with-docker)
-    - [Running nextflow with singularity](#running-nextflow-with-singularity)
-    - [Running on AWS batch](#running-on-aws-batch)
-  - [Full pipeline run](#full-pipeline-run)
-    - [Capturing results and run metadata](#capturing-results-and-run-metadata)
-  - [Experimental pipeline overview](#experimental-pipeline-overview)
-  - [Execution environment](#execution-environment)
-- [Adding another aligner](#adding-another-aligner)
-  - [Example](#example)
-    - [Add indexing template](#add-indexing-template)
-    - [Add RNA alignment template](#add-rna-alignment-template)
-    - [Add DNA alignment template](#add-dna-alignment-template)
-    - [Add additional alignment parameters](#add-additional-alignment-parameters)
-    - [Specify container](#specify-container)
-- [Per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
-  - [Setting-up an automated build](#setting-up-an-automated-build)
-  - [Adding or updating a Dockerfile](#adding-or-updating-a-dockerfile)
-- [Report](#report)
-  - [Rendering outside the pipeline](#rendering-outside-the-pipeline)
-    - [Using docker](#using-docker)
-    - [Using singularity](#using-singularity)
-    - [Natively](#natively)
-- [Manuscript](#manuscript)
-  - [Rendering](#rendering)
-  - [Bibliography](#bibliography)
+- [Dependencies](#Dependencies)
+- [Experiments](#Experiments)
+  - [Quick start](#Quick-start)
+  - [Simulated RNA-Seq (BEERS-based)](#Simulated-RNA-Seq-BEERS-based)
+    - [Quick test run](#Quick-test-run)
+    - [BEERS-based pipeline overview](#BEERS-based-pipeline-overview)
+  - [Real RNA-Seq](#Real-RNA-Seq)
+  - [Simulated DNA-Seq](#Simulated-DNA-Seq)
+  - [Real DNA-Seq](#Real-DNA-Seq)
+  - [Execution environments](#Execution-environments)
+    - [Running nextflow with docker](#Running-nextflow-with-docker)
+    - [Running nextflow with singularity](#Running-nextflow-with-singularity)
+    - [Running on AWS batch](#Running-on-AWS-batch)
+  - [Full pipeline run](#Full-pipeline-run)
+    - [Capturing results and run metadata](#Capturing-results-and-run-metadata)
+  - [Experimental pipeline overview](#Experimental-pipeline-overview)
+  - [Execution environment](#Execution-environment)
+- [Adding another aligner](#Adding-another-aligner)
+  - [Example](#Example)
+    - [Add indexing template](#Add-indexing-template)
+    - [Add dna2dna (and rna2rna) alignment template](#Add-dna2dna-and-rna2rna-alignment-template)
+    - [Add rna2dna alignment template](#Add-rna2dna-alignment-template)
+    - [(Optional) Add additional alignment parameters](#Optional-Add-additional-alignment-parameters)
+    - [Specify container](#Specify-container)
+- [Per-tool container images and docker automated builds](#Per-tool-container-images-and-docker-automated-builds)
+  - [Setting-up an automated build](#Setting-up-an-automated-build)
+  - [Adding or updating a Dockerfile](#Adding-or-updating-a-Dockerfile)
+- [Report](#Report)
+  - [Rendering outside the pipeline](#Rendering-outside-the-pipeline)
+    - [Using docker](#Using-docker)
+    - [Using singularity](#Using-singularity)
+    - [Natively](#Natively)
+- [Manuscript](#Manuscript)
+  - [Rendering](#Rendering)
+  - [Bibliography](#Bibliography)
 
 # Dependencies
 
@@ -80,13 +81,15 @@ This may need to be adapted for your system in [nextflow.config](https://github.
 
 
 
-## Simulated RNA-Seq
+## Simulated RNA-Seq (BEERS-based)
 On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.5) consumed 56 CPU-days.
 See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
 and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
 This run included each of the input datasets in three replicates. Given the experimental context,
 replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`,
 thus reducing the CPU-time to under 8 days (based on a run of [version 0.6](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.6)).
+
+The executable for the BEERS-based RNA-Seq evaluation pipeline is `beers.nf`
 
 ### Quick test run
 
@@ -97,7 +100,9 @@ To only specify a single aligner you can e.g. use `--aligners biokanga` or for s
 
 Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including datasets with retained adapters.
 
+### BEERS-based pipeline overview
 
+![figures/dag.png](figures/dag-beers.png)
 
 ## Real RNA-Seq
 
@@ -193,7 +198,8 @@ The last of this calls will trigger minting of a DOI for that release if Zenodo 
 
 ## Experimental pipeline overview
 
-![figures/dag.png](figures/dag.png)
+<!-- ![figures/dag.png](figures/dag.png) -->
+<img src="figures/dag.png" alt="drawing" width="400"/>
 
 <!-- For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools. This earlier workflow also excludes evaluation based on real RNA-Seq data. -->
 
@@ -208,9 +214,12 @@ An aligner may be included for DNA alignment, RNA alignment or both. In each cas
 After you have cloned this repository:
 
 1. Add an indexing template to [`templates/index`](templates/index) subdirectory.
-2. Add an alignment template(s) to [`templates/rna`](templates/rna) and/or [`templates/dna`](templates/dna) subdirectories.
-3. Add one or more sets of aligner parameters to [conf/aligners.config](conf/aligners.config).
-4. Update [conf/containers.config](conf/containers.config) by specifying a docker hub repository from which an image will be pulled by the pipeline.
+2. Add an alignment template to one or more of the following directories if the tool can deal with the relevant alignment mode:
+  * [`templates/dna2dna`](templates/dna2dna)
+  * [`templates/rna2dna`](templates/rna2dna)
+  * [`templates/rna2rna`](templates/rna2rna)
+3. (Optional) Add one or more sets of aligner parameters to [conf/aligners.config](conf/aligners.config) as described [below](#Optional-Add-additional-alignment-parameters)
+4. Update [conf/containers.config](conf/containers.config) by specifying a Docker repository from which an image will be pulled by the pipeline.
 
 
 ## Example
@@ -224,30 +233,30 @@ echo \
 '#!/usr/bin/env bash
 
 bowtie2-build --threads ${task.cpus} ${ref} ${ref}
-> templates/index/bowtie2_index.sh
+' > templates/index/bowtie2_index.sh
 ```
 
-Applicable nextflow variables resolve as follows:
+Applicable **nextflow** (not bash!) variables resolve as follows:
 
 * `${task.cpus}` - number of cpu threads available to the alignment process
 * `${ref}` - the reference FASTA path/filename - in this case we use it both to specify the input file and the basename of the generated index
 
 
-### Add RNA alignment template
+### Add dna2dna (and rna2rna) alignment template
 
 ```
-echo -e \
+echo \
 '#!/usr/bin/env bash
 
 bowtie2 \
   -p ${task.cpus} \
   -x ${idxmeta.target} \
-  -1 ${r1} \
-  -2 ${r2} \
-  -f \
+  -1 ${reads[0]} \
+  -2 ${reads[1]} \
   --threads  ${task.cpus} \
-  --local \
-  > sam' \
+  ${ALIGN_PARAMS} \
+  > out.sam' \
+| tee templates/dna2dna/bowtie2_align.sh \
 > templates/rna/bowtie2_align.sh
 ```
 
@@ -255,28 +264,30 @@ Applicable nextflow variables resolve as follows :
 
 * `${task.cpus}` - number of logical cpus available to the alignment process
 * `${idxmeta.target}` - basename of the index file
-* `${r1}` and `${r2}` - path/filenames of paired-end reads
-
-In addition we have used bowtie's `--local` flag to increase alignment rates for reads spanning introns.
-
-### Add DNA alignment template
-
-TODO
-
-### Add additional alignment parameters
+* `${reads[0]}` and `${reads[1]}` - path/filenames of paired-end reads
+* ${ALIGN_PARAMS} any additional params passed to the aligner.
+  * Empty by default but one ore more sets of params can be defined in [conf/aligners.config](conf/aligners.config). When multiple sets of params are specified each set is used in separate execution.
 
 
+### Add rna2dna alignment template
+
+
+
+### (Optional) Add additional alignment parameters
+
+
+As mentioned above, fine tuning or exploration of parameter space can be done through addition of parameter sets in [conf/aligners.config](conf/aligners.config) or overriding it at runtime with appropriate YAML or JSON params file via `-params-file filename`. An aligner will be run for each set of params specified.
 
 ### Specify container
 
-1. Upload a relevant container image to docker hub or [locate an existing one](https://hub.docker.com/search/?isAutomated=0&isOfficial=0&page=1&pullCount=0&q=bowtie2&starCount=0). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
+1. Upload a relevant container image to a docker registry (such as Docker Hub) or [locate an existing one](https://quay.io/repository/biocontainers/bowtie2?tab=tags). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
 Alternatively, follow our procedure below for [defining per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
 
 2. Insert container specification
 
 ```
 withLabel: bowtie2 {
-  quay.io/biocontainers/bowtie2:2.3.5--py27he860b03_0
+  container = 'quay.io/biocontainers/bowtie2:2.3.5--py37he860b03_0'
 }
 ```
 within the `process {   }` block in [conf/containers.config](conf/containers.config).
@@ -288,7 +299,7 @@ Container images are pulled from docker hub, but nextflow is able to access othe
 
 Dockerfiles for individual tools used can be found under `dockerfiles/`.
 This includes various aligners but also other tools used by the pipeline.
-For each tool we created a docker hub/cloud repository and configured automated builds.
+For each tool (or tool-set) we created a docker hub/cloud repository and configured automated builds.
 
 ## Setting-up an automated build
 
@@ -298,8 +309,9 @@ The following approach relies on creating a branch for a specific version of a t
 ~~The same can be achieved by simply tagging the relevant commit, but this may result in proliferation of tags while branches can be merged into master and deleted while preserving the history.~~
 ~~If you'd rather use tags, in (2) change the 'Source type' below to 'Tag' and later tag an appropriate commit using `docker/tool/version` pattern rather than committing to a dedicated branch.~~ (tags can be problematic - if tag is based on version of a tool and container needs to be updated, tags may have to be removed/re-added)
 
-1. Link a [Docker Cloud](https://cloud.docker.com/) repo with this GitHub repo (go to Builds -> Configure Automated Builds)
-2. Add an automated build rule (replace `tool` with the name of the tool).
+1. Create [Docker Cloud](https://cloud.docker.com/) repo for your tool - *do not link to specific GitHub repo or configure automated build at this stage*, but only *after* it has been created - otherwise the tags for containers built later may be malformed.
+2. Link the created a [Docker Cloud](https://cloud.docker.com/) repo with this GitHub repo (go to Builds -> Configure Automated Builds)
+3. Add an automated build rule (replace `tool` with the name of the tool).
 
 | Source type   | Source                   | Docker Tag  | Dockerfile location | Build Context  |
 | ------------- | ------------------------ | ----------- | ------------------- | -------------- |
@@ -331,7 +343,11 @@ git push --set-upstream origin docker/${tool}/${version}
 ```
 
 This should trigger an automated build in the linked Docker Hub/cloud repository.
-If everything works as intended, you may update [conf/containers.config](conf/containers.config) to the new tool version
+
+In case the automated build is not triggered for a newly created Docker repo, it may help to delete the Docker repo and repeat steps 1-3 above. Then push some innocuous change to the branch to trigger the build.
+
+If everything works as intended, you may update [conf/containers.config](conf/containers.config) to the new tool version.
+
 
 Then either create a PR to merge the new branch into master or,
 if you have write permissions for this repository or working on your fork of it, checkout master and merge.
