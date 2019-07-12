@@ -338,7 +338,11 @@ git push --set-upstream origin docker/${tool}/${version}
 ```
 
 This should trigger an automated build in the linked Docker Hub/cloud repository.
-If everything works as intended, you may update [conf/containers.config](conf/containers.config) to the new tool version
+
+In case the automated build is not triggered for a newly created Docker repo, it may help to delete it and repeat steps 1-3 above.
+
+If everything works as intended, you may update [conf/containers.config](conf/containers.config) to the new tool version.
+
 
 Then either create a PR to merge the new branch into master or,
 if you have write permissions for this repository or working on your fork of it, checkout master and merge.
