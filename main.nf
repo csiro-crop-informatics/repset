@@ -300,7 +300,7 @@ process faidxTranscriptomeFASTA {
 process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") }
+  container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") } //TODO: need informative message if this fails to find a defined container (now get() on null)
   tag("${alignermeta.tool} << ${refmeta}")
 
   input:
@@ -501,6 +501,8 @@ process mapSimulatedReads {
     // (paramsmeta.alignMode.startsWith(simmeta.seqtype) && paramsmeta.alignMode.endsWith(simmeta.coordinates) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
 
   // exec:
+  //   println "Reads size: "+reads[0].size()
+  //   println "Ref size: "+ref.size()
   //   println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
   script:
     // alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
