@@ -5,22 +5,15 @@
 
 # Table of Contents <!-- omit in toc -->
 - [Dependencies](#Dependencies)
-- [Experiments](#Experiments)
-  - [Quick start](#Quick-start)
-  - [Simulated RNA-Seq (BEERS-based)](#Simulated-RNA-Seq-BEERS-based)
-    - [Quick test run](#Quick-test-run)
-    - [BEERS-based pipeline overview](#BEERS-based-pipeline-overview)
-  - [Real RNA-Seq](#Real-RNA-Seq)
-  - [Simulated DNA-Seq](#Simulated-DNA-Seq)
-  - [Real DNA-Seq](#Real-DNA-Seq)
-  - [Execution environments](#Execution-environments)
-    - [Running nextflow with docker](#Running-nextflow-with-docker)
-    - [Running nextflow with singularity](#Running-nextflow-with-singularity)
-    - [Running on AWS batch](#Running-on-AWS-batch)
-  - [Full pipeline run](#Full-pipeline-run)
-    - [Capturing results and run metadata](#Capturing-results-and-run-metadata)
-  - [Experimental pipeline overview](#Experimental-pipeline-overview)
-  - [Execution environment](#Execution-environment)
+- [Preliminaries](#Preliminaries)
+- [Running the pipeline - execution profiles](#Running-the-pipeline---execution-profiles)
+  - [Running with docker](#Running-with-docker)
+  - [Running with singularity](#Running-with-singularity)
+  - [Running on a SLURM cluster](#Running-on-a-SLURM-cluster)
+  - [Running on AWS batch](#Running-on-AWS-batch)
+- [Capturing results and run metadata](#Capturing-results-and-run-metadata)
+- [Experimental pipeline overview](#Experimental-pipeline-overview)
+- [Execution environment](#Execution-environment)
 - [Adding another aligner](#Adding-another-aligner)
   - [Example](#Example)
     - [Add indexing template](#Add-indexing-template)
@@ -47,94 +40,52 @@
   * either Singularity [![Singularity](https://img.shields.io/badge/Singularity-%E2%89%A53.1.1-orange.svg)](https://www.sylabs.io/singularity/)
    * or Docker
 
-# Experiments
+# Preliminaries
 
 The pipeline consists of several, partly dependent paths
 which facilitate the evaluation of aligners using
-either DNA-  or RNA-Seq data, either real or simulated.
+either DNA-  or RNA-Seq data, either ~~real~~ (temporarily unavailable) or simulated.
 The paths can be executed separately or in a single run.
 When running separately or re-running the pipeline
 the `-resume` flag ensures that previously computed
-results (or partial results) are reused.
+results (or partial results) are re-used.
 
-## Quick start
 
-Use the `--debug` flag to run the whole pipeline or part of it with reduced input data.
+~~Use the `--debug` flag to run the whole pipeline or part of it with reduced input data.~~
+Default execution will simulate, align and evaluate reads from a small dataset (a single chromosome from the genome assembly of *A thaliana*)
+
+
+# Running the pipeline - execution profiles
 
 There are several ways to execute the pipeline, each requires Nextflow and either Docker or Singularity.
-
-```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker --debug
-```
-
-or on a SLURM cluster
-
-```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule --debug
-```
-
-Note:
-1. `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module.
-This may need to be adapted for your system in [nextflow.config](https://github.com/csiro-crop-informatics/biokanga-manuscript/blob/6d0be3f77603f67d13ceeee18de83c517e39db96/nextflow.config#L82).
-2. Singularity must also be available on the node where you execute the pipeline, e.g. by running `module load singularity/3.1.1` prior to running the pipeline.
-3.
+See [nextflow.config](nextflow.config#L56-L92) for available execution profiles, e.g. for local execution this could be
 
 
-
-## Simulated RNA-Seq (BEERS-based)
-On our cluster, running pipeline [version 0.5](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.5) consumed 56 CPU-days.
-See execution [report](https://csiro-crop-informatics.github.io/biokanga-manuscript/report.html)
-and [timeline](https://csiro-crop-informatics.github.io/biokanga-manuscript/timeline.html).
-This run included each of the input datasets in three replicates. Given the experimental context,
-replication does not appear to contribute much, so it may suffice to execute the pipeline with a single replicate using `--replicates 1`,
-thus reducing the CPU-time to under 8 days (based on a run of [version 0.6](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases/tag/v0.6)).
-
-The executable for the BEERS-based RNA-Seq evaluation pipeline is `beers.nf`
-
-### Quick test run
-
-For a quick test run use the `--debug` flag.
-In this case only simulated reads from a single dataset and coming from a single human chromosome are aligned to it.
-Specific chromosome can be defined using `--debugChromosome ` which defaults to `chr21`. By default, all pre-defined aligners are executed.
-To only specify a single aligner you can e.g. use `--aligners biokanga` or for several aligners e.g. `--alignersRNA 'biokanga|dart|hisat2'`.
-
-Additional flag `--adapters` will make a debug run a bit longer but the output results should be slightly more interesting by including datasets with retained adapters.
-
-### BEERS-based pipeline overview
-
-![figures/dag.png](figures/dag-beers.png)
-
-## Real RNA-Seq
-
-TODO
-
-## Simulated DNA-Seq
-
-TODO
-
-
-## Real DNA-Seq
-
-TODO
-
-
-## Execution environments
-
-We provide several execution profiles, as before, you may use the `--debug` to test the pipeline and the execution environment before a full run.
-
-### Running nextflow with docker
+## Running with docker
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
 ```
 
-### Running nextflow with singularity
+## Running with singularity
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
 ```
 
-### Running on AWS batch
+## Running on a SLURM cluster
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule
+```
+
+Note:
+1. `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module.
+This may have to be adapted for your system in [nextflow.config](https://github.com/csiro-crop-informatics/biokanga-manuscript/blob/6d0be3f77603f67d13ceeee18de83c517e39db96/nextflow.config#L82).
+2. Singularity must also be available on the node where you execute the pipeline, e.g. by running `module load singularity/3.2.1` prior to running the pipeline.
+
+
+## Running on AWS batch
 
 If you are new to AWS batch and/or nextflow, follow [this blog post](https://antunderwood.gitlab.io/bioinformant-blog/posts/running_nextflow_on_aws_batch/), once you are done, or you already use AWS batch, simply run
 
@@ -150,28 +101,7 @@ after replacing `your_s3_bucket` with a bucket you have created on S3.
 [**Warning! You will be charged by AWS according to your resource use.**](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/monitoring-costs.html)
 
 
-## Full pipeline run
-
-There are a few ways to execute the pipeline, all require Nextflow and either Docker or Singularity.
-See [nextflow.config](nextflow.config#L46-L84) for available execution profiles, e.g. for local execution this could be
-
-```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
-```
-
-or on a SLURM cluster
-
-```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule
-```
-
-Note that `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module.
-This may need to be adapted for your system.
-In addition Singularity must also be available on the node where you execute the pipeline.
-
-To run the pipeline on [AWS batch](https://aws.amazon.com/batch/), follow the [instructions above](#running-on-aws-batch).
-
-### Capturing results and run metadata
+# Capturing results and run metadata
 
 Each pipeline run generates a number of files including
 * results in the form of report, figures, tables etc.
@@ -196,14 +126,14 @@ On successful completion of the pipeline a series of API calls will be made to
 
 The last of this calls will trigger minting of a DOI for that release if Zenodo integration is configured and enabled for the repository.
 
-## Experimental pipeline overview
+# Experimental pipeline overview
 
 <!-- ![figures/dag.png](figures/dag.png) -->
-<img src="figures/dag.png" alt="drawing" width="400"/>
+<!-- <img src="figures/dag.png" alt="drawing" width="400"/> -->
 
 <!-- For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools. This earlier workflow also excludes evaluation based on real RNA-Seq data. -->
 
-## Execution environment
+# Execution environment
 
 Execution environment is captured in `runmeta.json`.
 
