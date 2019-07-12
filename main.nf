@@ -504,8 +504,10 @@ process mapSimulatedReads {
   //   println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
   script:
     // alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
-    alignmeta = [target: idxmeta, query: simmeta, params: paramsmeta]
-    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS
+    alignmeta = [tool: [name: idxmeta.tool, version: 'TODO'], target: idxmeta.subMap((idxmeta.keySet()-'toolmodes'-'tool')),
+                 query: simmeta, params: paramsmeta.subMap(paramsmeta.keySet()-'tool')]
+    println(prettyPrint(toJson(alignmeta)))
+    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS //picked-up by alignment template
     template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh under e.g. templates/rna2dna, could have separate templates for PE and SE // if(simmeta.mode == 'PE')
 }
 
