@@ -1,0 +1,1 @@
+FROM quay.io/biocontainers/minimap2:2.17--h84994c4_0@sha256:5f1aa9d32f90caceef5f7a9f8e44a5c65418756fa831218d65d4b5f93d94e917
