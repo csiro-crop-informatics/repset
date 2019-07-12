@@ -75,7 +75,7 @@ Channel.from(alignersParamsList).set {alignersParams}
 // Channel.from(alignersParamsList).into {alignersParams4realDNA; alignersParams4SimulatedDNA}
 
 
-println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(alignersParamsList)))
+// println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(alignersParamsList)))
 
 
 
@@ -414,6 +414,7 @@ simulatedReads.map { simmeta, ref, simStats, simReads ->
   .map { simmeta, ref, simReads  ->
     new Tuple(simmeta, simReads)
   }
+  // .view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))) }
   .set{ readsForAlignment }
 
 
@@ -535,7 +536,7 @@ process mapSimulatedReads {
 // // }
 
 process rnfEvaluateSimulated2 {
-  label 'groovy'
+  label 'groovy_samtools'
   label 'ES'
   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
 
@@ -555,23 +556,12 @@ process rnfEvaluateSimulated2 {
   //RNFtools/format alignment correctness evaluation relies on the order of refernce sequences being preserved in SAM header
   //If it is not we re-generate the header to enable correct alignment evaluation
   """
-  if cmp 1>&2 \
-    <(samtools view -H ${samOrBam} | grep '^@SQ' | sed -E  's/(^.*\\tSN:)([^\\t]*).*/\\2/') \
-    <(cut -f1 ${fai})
-  then
-    samtools view -h ${samOrBam}
-  else
-    cat \
-      <(samtools view -H ${samOrBam} | head -1 | sed '1 s/\\tSO:[^s]*/\\tSO:unsorted/') \
-      <(awk '{print "@SQ\\tSN:"\$1"\\tLN:"\$2}' ${fai}) \
-      <(samtools view -H ${samOrBam} | tail -n+2 | grep -v '^@SQ') \
-      <(samtools view ${samOrBam})
-  fi \
+  samtools view ${samOrBam} \
   | eval_rnf.groovy \
       --allowed-delta 100 \
       --faidx ${fai} \
       --es-output ES2.gz \
-      --output summary2
+      --output summary2.txt
   """
 }
 
@@ -596,6 +586,7 @@ process rnfEvaluateSimulated {
 
   output:
      set val(alignmeta), file(summary) into summariesSimulated
+     file 'ES.gz'
     //  set val(alignmeta), file(detail) into detailsSimulated
 
   // exec:
