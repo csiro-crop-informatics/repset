@@ -24,9 +24,9 @@
 - [Adding another aligner](#Adding-another-aligner)
   - [Example](#Example)
     - [Add indexing template](#Add-indexing-template)
-    - [Add RNA alignment template](#Add-RNA-alignment-template)
-    - [Add DNA alignment template](#Add-DNA-alignment-template)
-    - [Add additional alignment parameters](#Add-additional-alignment-parameters)
+    - [Add dna2dna (and rna2rna) alignment template](#Add-dna2dna-and-rna2rna-alignment-template)
+    - [Add rna2dna alignment template](#Add-rna2dna-alignment-template)
+    - [(Optional) Add additional alignment parameters](#Optional-Add-additional-alignment-parameters)
     - [Specify container](#Specify-container)
 - [Per-tool container images and docker automated builds](#Per-tool-container-images-and-docker-automated-builds)
   - [Setting-up an automated build](#Setting-up-an-automated-build)
@@ -214,9 +214,12 @@ An aligner may be included for DNA alignment, RNA alignment or both. In each cas
 After you have cloned this repository:
 
 1. Add an indexing template to [`templates/index`](templates/index) subdirectory.
-2. Add an alignment template(s) to [`templates/rna`](templates/rna) and/or [`templates/dna`](templates/dna) subdirectories.
-3. Add one or more sets of aligner parameters to [conf/aligners.config](conf/aligners.config).
-4. Update [conf/containers.config](conf/containers.config) by specifying a docker hub repository from which an image will be pulled by the pipeline.
+2. Add an alignment template to one or more of the following directories if the tool can deal with the relevant alignment mode:
+  * [`templates/dna2dna`](templates/dna2dna)
+  * [`templates/rna2dna`](templates/rna2dna)
+  * [`templates/rna2rna`](templates/rna2rna)
+3. (Optional) Add one or more sets of aligner parameters to [conf/aligners.config](conf/aligners.config) as described [below](#Optional-Add-additional-alignment-parameters)
+4. Update [conf/containers.config](conf/containers.config) by specifying a Docker repository from which an image will be pulled by the pipeline.
 
 
 ## Example
@@ -230,30 +233,30 @@ echo \
 '#!/usr/bin/env bash
 
 bowtie2-build --threads ${task.cpus} ${ref} ${ref}
-> templates/index/bowtie2_index.sh
+' > templates/index/bowtie2_index.sh
 ```
 
-Applicable nextflow variables resolve as follows:
+Applicable **nextflow** (not bash!) variables resolve as follows:
 
 * `${task.cpus}` - number of cpu threads available to the alignment process
 * `${ref}` - the reference FASTA path/filename - in this case we use it both to specify the input file and the basename of the generated index
 
 
-### Add RNA alignment template
+### Add dna2dna (and rna2rna) alignment template
 
 ```
-echo -e \
+echo \
 '#!/usr/bin/env bash
 
 bowtie2 \
   -p ${task.cpus} \
   -x ${idxmeta.target} \
-  -1 ${r1} \
-  -2 ${r2} \
-  -f \
+  -1 ${reads[0]} \
+  -2 ${reads[1]} \
   --threads  ${task.cpus} \
-  --local \
-  > sam' \
+  ${ALIGN_PARAMS} \
+  > out.sam' \
+| tee templates/dna2dna/bowtie2_align.sh \
 > templates/rna/bowtie2_align.sh
 ```
 
@@ -261,28 +264,30 @@ Applicable nextflow variables resolve as follows :
 
 * `${task.cpus}` - number of logical cpus available to the alignment process
 * `${idxmeta.target}` - basename of the index file
-* `${r1}` and `${r2}` - path/filenames of paired-end reads
-
-In addition we have used bowtie's `--local` flag to increase alignment rates for reads spanning introns.
-
-### Add DNA alignment template
-
-TODO
-
-### Add additional alignment parameters
+* `${reads[0]}` and `${reads[1]}` - path/filenames of paired-end reads
+* ${ALIGN_PARAMS} any additional params passed to the aligner.
+  * Empty by default but one ore more sets of params can be defined in [conf/aligners.config](conf/aligners.config). When multiple sets of params are specified each set is used in separate execution.
 
 
+### Add rna2dna alignment template
+
+
+
+### (Optional) Add additional alignment parameters
+
+
+As mentioned above, fine tuning or exploration of parameter space can be done through addition of parameter sets in [conf/aligners.config](conf/aligners.config) or overriding it at runtime with appropriate YAML or JSON params file via `-params-file filename`. An aligner will be run for each set of params specified.
 
 ### Specify container
 
-1. Upload a relevant container image to a docker registry (such as Docker Hub) or [locate an existing one](https://hub.docker.com/search/?isAutomated=0&isOfficial=0&page=1&pullCount=0&q=bowtie2&starCount=0). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
+1. Upload a relevant container image to a docker registry (such as Docker Hub) or [locate an existing one](https://quay.io/repository/biocontainers/bowtie2?tab=tags). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
 Alternatively, follow our procedure below for [defining per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
 
 2. Insert container specification
 
 ```
 withLabel: bowtie2 {
-  quay.io/biocontainers/bowtie2:2.3.5--py27he860b03_0
+  container = 'quay.io/biocontainers/bowtie2:2.3.5--py37he860b03_0'
 }
 ```
 within the `process {   }` block in [conf/containers.config](conf/containers.config).
@@ -294,7 +299,7 @@ Container images are pulled from docker hub, but nextflow is able to access othe
 
 Dockerfiles for individual tools used can be found under `dockerfiles/`.
 This includes various aligners but also other tools used by the pipeline.
-For each tool we created a docker hub/cloud repository and configured automated builds.
+For each tool (or tool-set) we created a docker hub/cloud repository and configured automated builds.
 
 ## Setting-up an automated build
 
@@ -339,7 +344,7 @@ git push --set-upstream origin docker/${tool}/${version}
 
 This should trigger an automated build in the linked Docker Hub/cloud repository.
 
-In case the automated build is not triggered for a newly created Docker repo, it may help to delete it and repeat steps 1-3 above.
+In case the automated build is not triggered for a newly created Docker repo, it may help to delete the Docker repo and repeat steps 1-3 above. Then push some innocuous change to the branch to trigger the build.
 
 If everything works as intended, you may update [conf/containers.config](conf/containers.config) to the new tool version.
 
