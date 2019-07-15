@@ -93,7 +93,7 @@ if(outES != null) {
   esWriter = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(outFileES, append)), "UTF-8"), BUFFER_SIZE);
 }
 
-def long alignedToCorrectReferenceCount = 0;
+// def long alignedToCorrectReferenceCount = 0;
 def alignedToIncorrectReferenceCount = new long[256];
 def unalignedCount = new long[256];
 def long mateAlignedToDifferentReferenceCount = 0;
@@ -120,7 +120,7 @@ try {
 
   samContent = new BufferedReader(new InputStreamReader(new FileInputStream(samFile), "UTF-8"), BUFFER_SIZE);
 
-  def bothMatch = new int[256]
+  // def bothMatch = new int[256]
   def match = new int[256]
   def mateMatch = new int[256]
   def mismatch = new int[256]
@@ -147,7 +147,7 @@ try {
       alignedToIncorrectReferenceCount[mapq]++;
       isWrongRef = true
     } else {
-      alignedToCorrectReferenceCount++;
+      // alignedToCorrectReferenceCount++;
       mateAlignedToDifferentReferenceCount += (RNEXT == '=' || RNEXT == refRecord) ? 0 : 1
     }
 
@@ -225,12 +225,13 @@ try {
   new File(output).withWriter { out ->
     // out.println "[EDGE-CASES] Both match: "+bothMatch.sum()+" "+bothMatch // This happens but RNF assignes all these to M_1
     out.println "Match: "+match.sum()+" "+match
-    out.println "Mate match: "+mateMatch.sum()+" "+mateMatch
+    out.println "Mate_match: "+mateMatch.sum()+" "+mateMatch
     out.println "Mismatch: "+mismatch.sum()+" "+mismatch
 //  println alignedToCorrectReferenceCount
-    out.println "Aligned to wrong ref: "+alignedToIncorrectReferenceCount.sum()+" "+alignedToIncorrectReferenceCount
+    out.println "Wrong_reference: "+alignedToIncorrectReferenceCount.sum()+" "+alignedToIncorrectReferenceCount
     out.println "Unaligned: "+unalignedCount.sum()+" "+unalignedCount
-    out.println "Total: "+(unalignedCount.sum()+alignedToIncorrectReferenceCount.sum()+bothMatch.sum()+match.sum()+mateMatch.sum()+mismatch.sum())
+    out.println "Total: "+(unalignedCount.sum()+alignedToIncorrectReferenceCount.sum()+match.sum()+mateMatch.sum()+mismatch.sum())
+    // out.println "Total: "+(unalignedCount.sum()+alignedToIncorrectReferenceCount.sum()+bothMatch.sum()+match.sum()+mateMatch.sum()+mismatch.sum())
   }
 } catch (FileNotFoundException ex) {
   ex.printStackTrace();
