@@ -195,7 +195,7 @@ Applicable nextflow variables resolve as follows :
 * `${task.cpus}` - number of logical cpus available to the alignment process
 * `${idxmeta.target}` - basename of the index file
 * `${reads[0]}` and `${reads[1]}` - path/filenames of paired-end reads
-* ${ALIGN_PARAMS} any additional params passed to the aligner.
+* `${ALIGN_PARAMS}` any additional params passed to the aligner.
   * Empty by default but one ore more sets of params can be defined in [conf/aligners.config](conf/aligners.config). When multiple sets of params are specified each set is used in separate execution.
 
 
