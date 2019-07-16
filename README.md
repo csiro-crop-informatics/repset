@@ -6,11 +6,14 @@
 # Table of Contents <!-- omit in toc -->
 - [Dependencies](#Dependencies)
 - [Preliminaries](#Preliminaries)
-- [Running the pipeline - execution profiles](#Running-the-pipeline---execution-profiles)
-  - [Running with docker](#Running-with-docker)
-  - [Running with singularity](#Running-with-singularity)
-  - [Running on a SLURM cluster](#Running-on-a-SLURM-cluster)
-  - [Running on AWS batch](#Running-on-AWS-batch)
+- [Running the pipeline](#Running-the-pipeline)
+  - [Execution profiles](#Execution-profiles)
+    - [Running with docker](#Running-with-docker)
+    - [Running with singularity](#Running-with-singularity)
+    - [Running on a SLURM cluster](#Running-on-a-SLURM-cluster)
+    - [Running on AWS batch](#Running-on-AWS-batch)
+  - [Alignment modes](#Alignment-modes)
+  - [Evaluated aligners](#Evaluated-aligners)
 - [Capturing results and run metadata](#Capturing-results-and-run-metadata)
 - [Experimental pipeline overview](#Experimental-pipeline-overview)
 - [Execution environment](#Execution-environment)
@@ -55,25 +58,27 @@ results (or partial results) are re-used.
 Default execution will simulate, align and evaluate reads from a small dataset (a single chromosome from the genome assembly of *A thaliana*)
 
 
-# Running the pipeline - execution profiles
+# Running the pipeline
+
+## Execution profiles
 
 There are several ways to execute the pipeline, each requires Nextflow and either Docker or Singularity.
 See [nextflow.config](nextflow.config#L56-L92) for available execution profiles, e.g. for local execution this could be
 
 
-## Running with docker
+### Running with docker
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
 ```
 
-## Running with singularity
+### Running with singularity
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
 ```
 
-## Running on a SLURM cluster
+### Running on a SLURM cluster
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule
@@ -85,7 +90,7 @@ This may have to be adapted for your system in [nextflow.config](https://github.
 2. Singularity must also be available on the node where you execute the pipeline, e.g. by running `module load singularity/3.2.1` prior to running the pipeline.
 
 
-## Running on AWS batch
+### Running on AWS batch
 
 If you are new to AWS batch and/or nextflow, follow [this blog post](https://antunderwood.gitlab.io/bioinformant-blog/posts/running_nextflow_on_aws_batch/), once you are done, or you already use AWS batch, simply run
 
@@ -99,6 +104,25 @@ nextflow run csiro-crop-informatics/biokanga-manuscript \
 after replacing `your_s3_bucket` with a bucket you have created on S3.
 
 [**Warning! You will be charged by AWS according to your resource use.**](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/monitoring-costs.html)
+
+
+## Alignment modes
+
+The workflow incorporates three ways of mapping and evaluating reads, `dna2dna`, `rna2rna`, `rna2dna`
+and by default all are executed. To restrict execution to one or two of those,
+you can run the workflow with e.g. `--alnmode dna2dna` or `--alnmode rna2rna|rna2dna`.
+
+## Evaluated aligners
+
+An alignment/mapping tool is included in the evaluation if appropriate templates are included
+as specified below in [Adding another aligner](#Adding-another-aligner).
+To execute the workflow for only a subset of the available tools, you can specify e.g.
+
+* `--aligners star` - only evaluate a single aligner
+* `--aligners 'bwa|bowtie2|biokanga'` - evaluate a subset of aligners
+* `--aligners '^((?!bwa).)*$'` - evaluate all but this aligner
+
+Other regular expressions can be specified to taylor the list of evaluated aligners.
 
 
 # Capturing results and run metadata
