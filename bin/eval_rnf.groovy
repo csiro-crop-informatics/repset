@@ -250,14 +250,20 @@ try {
   }
 
   //RE-FORMAT DEEPEST LEVEL FROM MAP(MAPQ -> count) TO LIST WITH ["MAPQ" -> value, "count" -> value]
-  stats.each { naryKey, naryValue ->
-    naryValue.each { category, mapqMap ->
+  //ALSO ADD "brief" SUMMARY AND PUT PER-MAPQ BREAKDOWN under "details"
+  stats.each { naryKey, naryMap ->
+    brief = [:]
+    naryMap.each { category, mapqMap ->
       mapqList = []
       mapqMap.each {mapq, count ->
         mapqList << [MAPQ: mapq, count: count]
       }
-      naryValue.put(category,mapqList.sort())
+      naryMap.put(category,mapqList.sort())
+      sum = mapqMap.values().sum()
+      brief.put(category, sum == null ? 0 : sum)
     }
+    // naryMap.brief = brief
+    stats.put(naryKey, [brief: brief, detailed: naryMap])
   }
 
   new File(output).withWriter { out ->
