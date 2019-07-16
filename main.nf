@@ -1,7 +1,9 @@
 #!/usr/bin/env nextflow
 
 //For pretty-printing nested maps etc
-import static groovy.json.JsonOutput.*
+import static groovy.json.JsonGenerator.*
+// import static groovy.json.JsonSlurper as JsonSlurper
+
 //Otherwise JSON generation triggers stackoverflow when encountering Path objects
 jsonGenerator = new groovy.json.JsonGenerator.Options()
                 .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
@@ -297,11 +299,19 @@ process faidxTranscriptomeFASTA {
   """
 }
 
+// aligners.combine(genomesForIndexing.mix(transcriptomesForIndexing))
+// .filter { alignermeta, refmeta, ref, fai ->
+//   (refmeta.seqtype == 'RNA' && alignermeta.modes.rna2rna && 'rna2rna'.matches(params.alnmode) ) \
+//    || (refmeta.seqtype == 'DNA' && (alignermeta.modes.rna2dna || alignermeta.modes.dna2dna) && ('rna2dna'.matches(params.alnmode) || 'dna2dna'.matches(params.alnmode)))
+// }
+// .count().subscribe { println it }
+
 process indexGenerator {
   label 'index'
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") } //TODO: need informative message if this fails to find a defined container (now get() on null)
-  tag("${alignermeta.tool} << ${refmeta}")
+  // tag("${alignermeta.tool} << ${refmeta}")
+  tag("${alignermeta} << ${refmeta}  REF:${ref} FAI${fai}")
 
   input:
     // set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAligners.mix(transcripts4indexing))
@@ -539,173 +549,52 @@ process mapSimulatedReads {
 // //   """
 // // }
 
-process rnfEvaluateSimulated {
+process evaluateAlignmentsRNF {
   label 'samtools'
-  label 'ES'
-  tag{alignmeta.tool.subMap(['tool'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
+  // label 'ES'
+  tag{alignmeta.tool.subMap(['name'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
   // tag{alignmeta.params.subMap(['paramslabel'])}
   // tag{alignmeta.subMap(['tool','simulator','target.species','alignMode','paramslabel'])}
 
   input:
     set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated.map { meta, ref, fai, samOrBam, trace ->
-        parseFileMap(trace, meta, 'realtime' ) //could be parseFileMap(trace, meta, ['realtime','..'] )
+        meta.trace = [:]
+        parseFileMap(trace, meta.trace) //could be parseFileMap(trace, meta.trace, 'realtime') or parseFileMap(trace, meta, ['realtime','..']) or parseFileMap(trace, meta) to capture all fields
         new Tuple(meta, ref, fai, samOrBam)
       }
 
   output:
-     set val(alignmeta), file('*.gz'), file ('*.txt') into summariesSimulated2
+     set val(alignmeta), file ('*.json') into evaluatedAlignmentsRNF
+    //  set val(alignmeta), file('ES.gz'),  into esChannel  //add to script: --es-output ES.gz
 
   // exec:
   script:
-  println prettyPrint(toJson(alignmeta))
+  // println prettyPrint(toJson(alignmeta))
   // println alignmeta.inspect()
 
-  //RNFtools/format alignment correctness evaluation relies on the order of refernce sequences being preserved in SAM header
-  //If it is not we re-generate the header to enable correct alignment evaluation
-  //
-  // TODO: add -F 2304 to exclude secondary/supplementary if numbers are to add-up
-  //
-  // FILTER = params.evaluateMultimappers ? '' : "-F 2304"
   """
   set -eo pipefail
-  samtools view -F 2304 ${samOrBam} \
+  samtools view ${samOrBam} \
   | eval_rnf.groovy \
       --allowed-delta ${params.allowedDelta} \
       --faidx ${fai} \
-      --es-output ES2.gz \
-      --output summary2.txt \
+      --output summary.json \
   """
 }
 
+def slurper = new groovy.json.JsonSlurper()
 
+evaluatedAlignmentsRNF.map { META, JSON ->
+      META.evaluation = slurper.parseText(JSON.text)
+      META
+  }
+  .collect()
+  .map {
+    file("${params.outdir}").mkdirs()
+    outfile = file("${params.outdir}/allstats.json")
+    outfile << groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))
+  }
 
-// // // process collateDetailsSimulatedDNA {
-// // //   label 'stats'
-// // //   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
-
-// // //   input:
-// // //     val collected from detailsSimulatedDNA.collect()
-
-// // //   output:
-// // //     file 'details.tsv' into collatedDetailsSimulatedDNA
-
-// // //   exec:
-// // //   def outfileTSV = task.workDir.resolve('details.tsv')
-// // //   i = 0;
-// // //   sep = "\t"
-// // //   header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
-// // //   // outfileTSV << header
-// // //   outfileTSV.withWriter { target ->
-// // //     target << header
-// // //     collected.each {
-// // //       if(i++ %2 == 0) {
-// // //         meta = it
-// // //       } else {
-// // //         common = meta.simulator+sep+meta.tool+sep+meta.mode+"\n"
-// // //         it.withReader { source ->
-// // //           String line
-// // //           while( line=source.readLine() ) {
-// // //             StringBuilder sb = new StringBuilder()
-// // //             sb.append(meta.species).append(sep).append(line).append(sep).append(common)
-// // //             target << sb
-// // //             // target << meta.species+sep+line+sep+common
-// // //           }
-// // //         }
-// // //       }
-// // //       // it.eachLine { line ->
-// // //       //   outfileTSV << meta.species+sep+line+sep+common
-// // //       // }
-// // //     }
-// // //   }
-// // // }
-
-// process collateSummariesSimulated {
-//   label 'stats'
-//   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
-
-//   input:
-//     val collected from summariesSimulated.collect()
-
-//   output:
-//     // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
-//     set file('summaries.json'), file('categories.json') into collatedSummariesSimulated
-
-//   exec:
-//   def outfileJSON = task.workDir.resolve('summaries.json')
-//   def categoriesJSON = task.workDir.resolve('categories.json')
-//   // def outfileCSV = task.workDir.resolve('summaries.csv')
-//   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
-//   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
-//   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
-//   categoriesJSON << prettyPrint(toJson(categories))
-//   entry = null
-//   entries = []
-//   // entries << [categories: categories]
-//   i=0;
-//   TreeSet headersMeta = []
-//   TreeSet headersResults = []
-//   collected.each {
-//     if(i++ %2 == 0) {
-//       if(entry != null) {
-//         entries << entry
-//         entry.meta.each {k,v ->
-//           headersMeta << k
-//         }
-//       }
-//       entry = [:]
-//       entry.meta = it.clone()
-//     } else {
-//       entry.results = [:]
-//       it.eachLine { line ->
-//         (k, v) = line.split()
-//         entry.results << [(k) : v.isInteger() ? v.toInteger() : v.isDouble() ? v.toDouble() : v ]
-//         //entry.results << [(categories[(k)]) : v ]
-//         headersResults << (k)
-//         //headersResults << (categories[(k)])
-//       }
-//     }
-//   }
-//   entries << entry
-//   outfileJSON << prettyPrint(toJson(entries))
-
-//   // //GENERATE CSV OUTPUT
-//   // SEP=","
-//   // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
-//   // entries.each { entry ->
-//   //   line = ""
-//   //   headersMeta.each { k ->
-//   //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
-//   //     line += line == "" ? val : (SEP+val)
-//   //   }
-//   //   headersResults.each { k ->
-//   //     value = entry.results[k]
-//   //     line += SEP
-//   //     // println(k + ' -> ' + value)
-//   //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
-//   //   }
-//   //   outfileCSV << line+"\n"
-//   // }
-
-// }
-
-// // process plotDetailSimulated {
-// //   label 'rscript'
-// //   label 'figures'
-
-// //   input:
-// //     file '*' from collatedDetailsSimulated
-
-// //   output:
-// //     file '*' into collatedDetailsPlotsSimulated
-
-// //   script:        //============================ TODO : move under bin/
-// //   binWidth='1E5'
-// //   """
-// //   touch plotPlaceholderD
-// //   #< !{csv} plot_details_simulatedDNA.R
-// //   """
-
-// // }
 
 // process plotSummarySimulated {
 //   label 'rscript'
@@ -724,253 +613,86 @@ process rnfEvaluateSimulated {
 //   '''
 // }
 
-//Simulated {
-//   label 'rnftools'
-//   tag{alignmeta.subMap(['tool','simulator','target','paramslabel'])}
+
+
+// process plotSummarySimulated {
+//   label 'rscript'
+//   label 'figures'
 
 //   input:
-//     set val(alignmeta), file(samOrBam) from alignedSimulated
+//     // set file(csv), file(json) from collatedSummariesSimulatedDNA
+//     set file(json), file(categories) from collatedSummariesSimulatedDNA
 
 //   output:
-//      set val(alignmeta), file(summary) into summariesSimulated
-//      set val(alignmeta), file(detail) into detailsSimulated
+//     file '*' into collatedSummariesPlotsSimulated
 
-//   // exec:
-//   script:
-//   println prettyPrint(toJson(alignmeta))
-//   """
-//   paste \
-//     <( rnftools sam2es --allowed-delta 100 -i ${samOrBam} -o - | tee ES  | awk '\$1 !~ /^#/' \
-//       | tee >( awk -vOFS="\\t" '{category[\$7]++}; END{for(k in category) {print k,category[k]}}' > summary ) \
-//     ) \
-//     <( samtools view ${samOrBam} ) \
-//   | awk -vOFS="\\t" '{if(\$1 == \$9 && \$5 == \$12){print \$11,\$12,\$7} else {print "BAM - ES mismatch, terminating",\$0 > "/dev/stderr"; exit 1}}' > detail
-//   """
-
-// // rnftools sam2es OUTPUT header
-// // # RN:   read name
-// // # Q:    is mapped with quality
-// // # Chr:  chr id
-// // # D:    direction
-// // # L:    leftmost nucleotide
-// // # R:    rightmost nucleotide
-// // # Cat:  category of alignment assigned by LAVEnder
-// // #         M_i    i-th segment is correctly mapped
-// // #         m      segment should be unmapped but it is mapped
-// // #         w      segment is mapped to a wrong location
-// // #         U      segment is unmapped and should be unmapped
-// // #         u      segment is unmapped and should be mapped
-// // # Segs: number of segments
-// // #
-// // # RN    Q       Chr     D       L       R       Cat     Segs
+//   shell:
+//   '''
+//   < !{json} plot_simulatedDNA.R
+//   '''
 // }
 
-// // process collateDetailsSimulatedDNA {
-// //   label 'stats'
-// //   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+// //WRAP-UP
+// writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-// //   input:
-// //     val collected from detailsSimulatedDNA.collect()
+// process render {
+//   tag {"Render ${Rmd}"}
+//   label 'rrender'
+//   label 'report'
+//   stageInMode 'copy'
+//   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
-// //   output:
-// //     file 'details.tsv' into collatedDetailsSimulatedDNA
+//   input:
+//     // file('*') from plots.flatten().toList()
+//     // file('*') from plotsRealRNA.flatten().toList()
+//     file(Rmd) from writing
+//     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
+//     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
 
-// //   exec:
-// //   def outfileTSV = task.workDir.resolve('details.tsv')
-// //   i = 0;
-// //   sep = "\t"
-// //   header = "Species\tChromosome\tPosition\tClass\tSimulator\tAligner\tMode\n"
-// //   // outfileTSV << header
-// //   outfileTSV.withWriter { target ->
-// //     target << header
-// //     collected.each {
-// //       if(i++ %2 == 0) {
-// //         meta = it
-// //       } else {
-// //         common = meta.simulator+sep+meta.tool+sep+meta.mode+"\n"
-// //         it.withReader { source ->
-// //           String line
-// //           while( line=source.readLine() ) {
-// //             StringBuilder sb = new StringBuilder()
-// //             sb.append(meta.species).append(sep).append(line).append(sep).append(common)
-// //             target << sb
-// //             // target << meta.species+sep+line+sep+common
-// //           }
-// //         }
-// //       }
-// //       // it.eachLine { line ->
-// //       //   outfileTSV << meta.species+sep+line+sep+common
-// //       // }
-// //     }
-// //   }
-// // }
+//   output:
+//     file '*'
 
-// // process collateSummariesSimulated {
-// //   label 'stats'
-// //   executor 'local' //explicit to avoid a warning being prined. Either way must be local exec as no script block for this process just nextflow/groovy exec
+//   script:
+//   """
+//   #!/usr/bin/env Rscript
 
-// //   input:
-// //     val collected from summariesSimulated.collect()
+//   library(rmarkdown)
+//   library(rticles)
+//   library(bookdown)
 
-// //   output:
-// //     // set file('summaries.csv'), file('summaries.json') into collatedSummariesSimulatedDNA
-// //     set file('summaries.json'), file('categories.json') into collatedSummariesSimulated
+//   rmarkdown::render("${Rmd}")
+//   """
+// }
+// }
 
-// //   exec:
-// //   def outfileJSON = task.workDir.resolve('summaries.json')
-// //   def categoriesJSON = task.workDir.resolve('categories.json')
-// //   // def outfileCSV = task.workDir.resolve('summaries.csv')
-// //   categories = ["M_1":"First segment is correctly mapped", "M_2":"Second segment is correctly mapped",
-// //   "m":"segment should be unmapped but it is mapped", "w":"segment is mapped to a wrong location",
-// //   "U":"segment is unmapped and should be unmapped", "u":"segment is unmapped and should be mapped"]
-// //   categoriesJSON << prettyPrint(toJson(categories))
-// //   entry = null
-// //   entries = []
-// //   // entries << [categories: categories]
-// //   i=0;
-// //   TreeSet headersMeta = []
-// //   TreeSet headersResults = []
-// //   collected.each {
-// //     if(i++ %2 == 0) {
-// //       if(entry != null) {
-// //         entries << entry
-// //         entry.meta.each {k,v ->
-// //           headersMeta << k
-// //         }
-// //       }
-// //       entry = [:]
-// //       entry.meta = it.clone()
-// //     } else {
-// //       entry.results = [:]
-// //       it.eachLine { line ->
-// //         (k, v) = line.split()
-// //         entry.results << [(k) : v ]
-// //         //entry.results << [(categories[(k)]) : v ]
-// //         headersResults << (k)
-// //         //headersResults << (categories[(k)])
-// //       }
-// //     }
-// //   }
-// //   entries << entry
-// //   outfileJSON << prettyPrint(toJson(entries))
+// //WRAP-UP
+// writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-// //   // //GENERATE CSV OUTPUT
-// //   // SEP=","
-// //   // outfileCSV << headersMeta.join(SEP)+SEP+headersResults.join(SEP)+"\n"
-// //   // entries.each { entry ->
-// //   //   line = ""
-// //   //   headersMeta.each { k ->
-// //   //     val = "${entry.meta[k]}".isNumber() ? entry.meta[k] :  "\"${entry.meta[k]}\""
-// //   //     line += line == "" ? val : (SEP+val)
-// //   //   }
-// //   //   headersResults.each { k ->
-// //   //     value = entry.results[k]
-// //   //     line += SEP
-// //   //     // println(k + ' -> ' + value)
-// //   //     line += value == null ? 0 : (value.isNumber() ? value : "\"${value}\"") //NOT QUITE RIGHT, ok for 'w' not for 'u'
-// //   //   }
-// //   //   outfileCSV << line+"\n"
-// //   // }
+// process render {
+//   tag {"Render ${Rmd}"}
+//   label 'rrender'
+//   label 'report'
+//   stageInMode 'copy'
+//   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
-// // }
+//   input:
+//     // file('*') from plots.flatten().toList()
+//     // file('*') from plotsRealRNA.flatten().toList()
+//     file(Rmd) from writing
+//     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
+//     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
 
-// // // process plotDetailSimulated {
-// // //   label 'rscript'
-// // //   label 'figures'
+//   output:
+//     file '*'
 
-// // //   input:
-// // //     file '*' from collatedDetailsSimulated
+//   script:
+//   """
+//   #!/usr/bin/env Rscript
 
-// // //   output:
-// // //     file '*' into collatedDetailsPlotsSimulated
+//   library(rmarkdown)
+//   library(rticles)
+//   library(bookdown)
 
-// // //   script:        //============================ TODO : move under bin/
-// // //   binWidth='1E5'
-// // //   """
-// // //   touch plotPlaceholderD
-// // //   #< !{csv} plot_details_simulatedDNA.R
-// // //   """
-
-// // // }
-
-// // // process plotSummarySimulated {
-// // //   label 'rscript'
-// // //   label 'figures'
-
-// // //   input:
-// // //     // set file(csv), file(json) from collatedSummariesSimulatedDNA
-// // //     set file(json), file(categories) from collatedSummariesSimulatedDNA
-
-// // //   output:
-// // //     file '*' into collatedSummariesPlotsSimulated
-
-// // //   shell:
-// // //   '''
-// // //   < !{json} plot_simulatedDNA.R
-// // //   '''
-// // // }
-
-// // // //WRAP-UP
-// // // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
-
-// // // process render {
-// // //   tag {"Render ${Rmd}"}
-// // //   label 'rrender'
-// // //   label 'report'
-// // //   stageInMode 'copy'
-// // //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
-
-// // //   input:
-// // //     // file('*') from plots.flatten().toList()
-// // //     // file('*') from plotsRealRNA.flatten().toList()
-// // //     file(Rmd) from writing
-// // //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
-// // //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
-
-// // //   output:
-// // //     file '*'
-
-// // //   script:
-// // //   """
-// // //   #!/usr/bin/env Rscript
-
-// // //   library(rmarkdown)
-// // //   library(rticles)
-// // //   library(bookdown)
-
-// // //   rmarkdown::render("${Rmd}")
-// // //   """
-// // // }
-// // // }
-
-// // // //WRAP-UP
-// // // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
-
-// // // process render {
-// // //   tag {"Render ${Rmd}"}
-// // //   label 'rrender'
-// // //   label 'report'
-// // //   stageInMode 'copy'
-// // //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
-
-// // //   input:
-// // //     // file('*') from plots.flatten().toList()
-// // //     // file('*') from plotsRealRNA.flatten().toList()
-// // //     file(Rmd) from writing
-// // //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
-// // //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
-
-// // //   output:
-// // //     file '*'
-
-// // //   script:
-// // //   """
-// // //   #!/usr/bin/env Rscript
-
-// // //   library(rmarkdown)
-// // //   library(rticles)
-// // //   library(bookdown)
-
-// // //   rmarkdown::render("${Rmd}")
-// // //   """
-// // // }
+//   rmarkdown::render("${Rmd}")
+//   """
+// }
