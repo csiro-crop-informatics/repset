@@ -11,8 +11,6 @@ jsonGenerator = new groovy.json.JsonGenerator.Options()
 
 //RETURNS DNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  // .filter { 'dna2dna'.matches(params.alnmode) }
-  // .filter{ params.alignersDNA2DNA == 'all' || it[0].matches(params.alignersDNA2DNA) }
   .map {
     params.defaults.alignersParams.DNA2DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
     params.defaults.alignersParams.DNA2DNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
@@ -22,8 +20,6 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna2dna}/*_{index
 
 //RETURNS RNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  // .filter { 'rna2dna'.matches(params.alnmode) }
-  // .filter{ params.alignersRNA2DNA == 'all' || it[0].matches(params.alignersRNA2DNA) }
   .map {
     params.defaults.alignersParams.RNA2DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
     params.defaults.alignersParams.RNA2DNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
@@ -33,8 +29,6 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2dna}/*_{index
 
 //RETURNS RNA2RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
 Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2rna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  // .filter { 'rna2rna'.matches(params.alnmode) }
-  // .filter{ params.alignersRNA2RNA == 'all' || it[0].matches(params.alignersRNA2RNA) }
   .map {
     params.defaults.alignersParams.RNA2RNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
     params.defaults.alignersParams.RNA2RNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
@@ -44,14 +38,10 @@ Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2rna}/*_{index
 
 //DNA and RNA aligners in one channel as single indexing process defined
 alignersDNA2DNA.mix(alignersRNA2DNA).mix(alignersRNA2RNA)
-  // .filter{ params.aligners == 'all' || it[0].matches(params.aligners) }
   .groupTuple(size:3, remainder: true, sort:true)
   .map { tool, alnModes ->
     [tool: tool, modes: [dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA')]]
   }
-  // .map { tool, alnModes ->
-  //   [tool: tool, dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA') ]
-  // }
  .filter{ params.aligners == 'all' || it.tool.matches(params.aligners) }
  .set { aligners }
 
