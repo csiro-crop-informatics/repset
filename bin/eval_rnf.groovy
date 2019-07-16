@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 
-// import static groovy.json.JsonOutput.* //for debuggig only
+import static groovy.json.JsonOutput.*
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
@@ -93,15 +93,12 @@ if(outES != null) {
   esWriter = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(outFileES, append)), "UTF-8"), BUFFER_SIZE);
 }
 
-// def long alignedToCorrectReferenceCount = 0;
-def alignedToIncorrectReferenceCount = new long[256];
-def unalignedCount = new long[256];
-def long mateAlignedToDifferentReferenceCount = 0;
 
 
 //Process alignments
 try {
-  esWriter.write """# RN:   read name
+  if(esWriter != null) {
+    esWriter.write """# RN:   read name
 # Q:    is mapped with quality
 # Chr:  chr id
 # D:    direction
@@ -116,15 +113,27 @@ try {
 # Segs: number of segments
 #
 # RN\tQ\tChr\tD\tL\tR\tCat\tSegs"""
+  }
 
+  samContentBuffer = new BufferedReader(new InputStreamReader(new FileInputStream(samFile), "UTF-8"), BUFFER_SIZE);
 
-  samContent = new BufferedReader(new InputStreamReader(new FileInputStream(samFile), "UTF-8"), BUFFER_SIZE);
+  // def long alignedToCorrectReferenceCount = 0;
+  // def wrongReference = new long[256];
+  // def unalignedCount = new long[256];
+  // def mateAlignedToDifferentReferenceCount = new long[256];
 
   // def bothMatch = new int[256]
-  def match = new int[256]
-  def mateMatch = new int[256]
-  def mismatch = new int[256]
-  while ((line = samContent.readLine()) != null && !line.isEmpty()) {
+  // def match = new int[256]
+  // def mateMatch = new int[256]
+  // def mismatch = new int[256]
+
+  def stats = [:]
+  ['primary','secondary','supplementary'].each { level ->
+    stats."${level}" = [match: [:], mateMatch: [:], mismatch: [:], unaligned: [:], wrongReference: [:], mateReferenceMismatch: [:]]
+  }
+
+
+  while ((line = samContentBuffer.readLine()) != null && !line.isEmpty()) {
     (QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL) = line.split('\t')
     def coordsSplit = QNAME.split('__')[2].replaceAll('\\(','').replaceAll('\\)','').split(',')
     int mapq = MAPQ.toInteger()
@@ -135,20 +144,32 @@ try {
     refRecord = refsList[ref-1]
     boolean isUnaligned = false
     boolean isWrongRef = false
+
+    //MULTI-MAPPER? we want to separate those in reporting
+    boolean isSecondary = ((flag & 256) != 0)
+    boolean isSupplementary = ((flag & 2048) != 0)
+    boolean isPrimary = (!isSecondary && !isSupplementary)
+    statsKey = isPrimary ? 'primary' : isSecondary ? 'secondary' : isSupplementary ? 'supplementary' : "ERROR - record should be primary or secondary or supplementary"
+
     /**
     Treating missing CIGAR as indication of unaligned. This is for consistency with how RNF deals with e.g. kallisto pseudobam.
     We could go back to the idea of only checking if a read aligned to the correct reference in rna2rna mode which could be a sufficient requirement
     e.g. when only interested in quantification.
     **/
     if(RNAME == '*' || CIGAR  == '*') {
-      unalignedCount[mapq]++
+      // unalignedCount[mapq]++
+      addStat(stats, statsKey, 'unaligned', mapq)
       isUnaligned = true
     } else if(refRecord != RNAME) { //RNAME MATCH
-      alignedToIncorrectReferenceCount[mapq]++;
+      // wrongReference[mapq]++;
+      addStat(stats, statsKey, 'wrongReference', mapq)
       isWrongRef = true
     } else {
       // alignedToCorrectReferenceCount++;
-      mateAlignedToDifferentReferenceCount += (RNEXT == '=' || RNEXT == refRecord) ? 0 : 1
+      // mateAlignedToDifferentReferenceCount[mapq] += (RNEXT == '=' || RNEXT == refRecord) ? 0 : 1
+      if(RNEXT != '=' && RNEXT != refRecord) {
+         addStat(stats, statsKey, 'mateReferenceMismatch', mapq)
+      }
     }
 
     //ORIENTATION
@@ -178,13 +199,18 @@ try {
       int endDeltaMate = (alnEnd-simEndMate).abs()
 
       if(startDelta <= allowedDelta  && endDelta <= allowedDelta) {
-        match[mapq]++
+        // match[mapq]++
+        addStat(stats, statsKey, 'match', mapq)
         category = 'M_1'
       } else if(startDeltaMate <= allowedDelta && endDeltaMate <= allowedDelta) {
-        mateMatch[mapq]++
+        // mateMatch[mapq]++
+        addStat(stats, statsKey, 'mateMatch', mapq)
         category = 'M_2'
       } else {
-        mismatch[mapq]++
+        // mismatch[mapq]++
+        addStat(stats, statsKey, 'mismatch', mapq)
+            // matches = stats.get(statsKey).get('mismatch')
+            // matches.put(mapq, matches.containsKey(mapq) ? matches.get(mapq)+1 : 1)
         category = 'w'
       }
     }
@@ -222,16 +248,31 @@ try {
 
 
   }
+
+  //RE-FORMAT DEEPEST LEVEL FROM MAP(MAPQ -> count) TO LIST WITH ["MAPQ" -> value, "count" -> value]
+  stats.each { naryKey, naryValue ->
+    naryValue.each { category, mapqMap ->
+      mapqList = []
+      mapqMap.each {mapq, count ->
+        mapqList << [MAPQ: mapq, count: count]
+      }
+      naryValue.put(category,mapqList.sort())
+    }
+  }
+
   new File(output).withWriter { out ->
     // out.println "[EDGE-CASES] Both match: "+bothMatch.sum()+" "+bothMatch // This happens but RNF assignes all these to M_1
-    out.println "Match: "+match.sum()+" "+match
-    out.println "Mate_match: "+mateMatch.sum()+" "+mateMatch
-    out.println "Mismatch: "+mismatch.sum()+" "+mismatch
-//  println alignedToCorrectReferenceCount
-    out.println "Wrong_reference: "+alignedToIncorrectReferenceCount.sum()+" "+alignedToIncorrectReferenceCount
-    out.println "Unaligned: "+unalignedCount.sum()+" "+unalignedCount
-    out.println "Total: "+(unalignedCount.sum()+alignedToIncorrectReferenceCount.sum()+match.sum()+mateMatch.sum()+mismatch.sum())
-    // out.println "Total: "+(unalignedCount.sum()+alignedToIncorrectReferenceCount.sum()+bothMatch.sum()+match.sum()+mateMatch.sum()+mismatch.sum())
+//     out.println "Match: "+match.sum()+" "+match
+//     out.println "Mate_match: "+mateMatch.sum()+" "+mateMatch
+//     out.println "Mismatch: "+mismatch.sum()+" "+mismatch
+// //  println alignedToCorrectReferenceCount
+//     out.println "Wrong_reference: "+wrongReference.sum()+" "+wrongReference
+//     out.println "Unaligned: "+unalignedCount.sum()+" "+unalignedCount
+//     out.println "Total_reported: "+(unalignedCount.sum()+wrongReference.sum()+match.sum()+mateMatch.sum()+mismatch.sum())
+//     out.println "Mate_reference_mismatch: "+mateAlignedToDifferentReferenceCount.count()+" "+mateAlignedToDifferentReferenceCount
+
+    out.println(prettyPrint(toJson(stats)))
+    // out.println "Total: "+(unalignedCount.sum()+wrongReference.sum()+bothMatch.sum()+match.sum()+mateMatch.sum()+mismatch.sum())
   }
 } catch (FileNotFoundException ex) {
   ex.printStackTrace();
@@ -286,4 +327,9 @@ def int getStartClip(String cigar) {
 def int getEndClip(String cigar) {
   def m = (cigar =~ /[0-9]+[HS]$/)
   return m.count == 0 ? 0 : (m[0][0..-2]).toInteger()
+}
+
+def addStat(Map stats, String statsKey, String statsCategory, int mapq) {
+  matches = stats.get(statsKey).get(statsCategory)
+  matches.put(mapq, matches.containsKey(mapq) ? matches.get(mapq)+1 : 1)
 }
