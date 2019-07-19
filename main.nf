@@ -93,6 +93,14 @@ def parseFileMap(filemap, map, subset = false) {
     })
 }
 
+// /*
+//   Delayed interpolation
+// */
+// def String bindTemplate(template, binding) {
+//   def engine = new groovy.text.SimpleTemplateEngine()
+//   engine.createTemplate(template).make(binding).toString()
+// }
+
 /*
   Simplistic method for checking if String is URL
  */
@@ -295,7 +303,7 @@ process indexGenerator {
   //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") } //TODO: need informative message if this fails to find a defined container (now get() on null)
   // tag("${alignermeta.tool} << ${refmeta}")
-  tag("${alignermeta} << ${refmeta}  REF:${ref} FAI${fai}")
+  tag {refmeta.subMap(['species','version','seqtype']+alignermeta.subMap(['tool']))}
 
   input:
     // set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAligners.mix(transcripts4indexing))
@@ -314,6 +322,10 @@ process indexGenerator {
   //  meta =  alignermeta+refmeta//[target: "${ref}"]
   //  println(prettyPrint(toJson([alignermeta,refmeta])))
   script:
+    // binding = ['REFERENCE': 'reference/path', task: task]
+    // """
+    // ${bindTemplate(mapper.index, binding)}
+    // """
     meta = [toolmodes: alignermeta.modes, tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
     template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
 }
@@ -474,11 +486,13 @@ def getContainer(tool, version=null) {
   }
 }
 
+// println params.containers
+
 process mapSimulatedReads {
   label 'align'
   container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
   // container { getContainer(idxmeta.tool) }
-  tag("${idxmeta.subMap(['tool','species','version','seqtype'])} << ${simmeta.subMap(['simulator','seqtype'])} @ ${paramsmeta.subMap(['paramslabel','alignMode'])}")
+  tag {"${idxmeta.subMap(['tool','species','version','seqtype'])} << ${simmeta.subMap(['simulator','seqtype'])} @ ${paramsmeta.subMap(['paramslabel','alignMode'])}"}
 
   input:
     // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
@@ -499,8 +513,9 @@ process mapSimulatedReads {
   //   println "Ref size: "+ref.size()
   //   println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
   script:
+    println getContainer(idxmeta.tool)
     // alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
-    alignmeta = [tool: [name: idxmeta.tool, version: 'TODO'], target: idxmeta.subMap((idxmeta.keySet()-'toolmodes'-'tool')),
+    alignmeta = [tool: [name: idxmeta.tool, version: 'TODO', container: task.container], target: idxmeta.subMap((idxmeta.keySet()-'toolmodes'-'tool')),
                  query: simmeta, params: paramsmeta.subMap(paramsmeta.keySet()-'tool')]
     // println(prettyPrint(toJson(alignmeta)))
     ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS //picked-up by alignment template
@@ -566,8 +581,12 @@ process evaluateAlignmentsRNF {
   """
 }
 
-def slurper = new groovy.json.JsonSlurper()
 
+/**
+1. Embed evaluation results JSON in META JSON.
+2. Collect all datapoints in one JSON for output.
+**/
+def slurper = new groovy.json.JsonSlurper()
 evaluatedAlignmentsRNF.map { META, JSON ->
       META.evaluation = slurper.parseText(JSON.text)
       META
@@ -576,7 +595,7 @@ evaluatedAlignmentsRNF.map { META, JSON ->
   .map {
     file("${params.outdir}").mkdirs()
     outfile = file("${params.outdir}/allstats.json")
-    outfile << groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))
+    outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.tool.name <=>  k2.tool.name} ) ))
   }
 
 

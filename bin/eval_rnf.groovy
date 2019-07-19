@@ -34,11 +34,14 @@ import static picocli.CommandLine.*
 @Option(names = ["-s", "--sam"], description = ["Input SAM file name"])
 @Field private String sam = '/dev/stdin'
 
-@Option(names = ["-O", "--output"], description = ["Summary output file name"])
+@Option(names = ["-O", "--output"], description = ["Summary JSON output file name"])
 @Field private String output = '/dev/stdout'
 
 @Option(names = ["-E", "--es-output"], description = ["ES output file name"])
 @Field private String outES
+
+@Option(names = ["-M", "--per-MAPQ"], description = ["Include per-MAPQ breakdown of results in output JSON"])
+@Field private boolean perMAPQ = false;
 
 @Option(names= ["-h", "--help"], usageHelp=true, description="Show this help message and exit.")
 @Field private boolean helpRequested
@@ -263,7 +266,12 @@ try {
       brief.put(category, sum == null ? 0 : sum)
     }
     // naryMap.brief = brief
-    stats.put(naryKey, [brief: brief, detailed: naryMap])
+    if(perMAPQ) {
+      stats.put(naryKey, [brief: brief, detailed: naryMap])
+    } else {
+      stats.put(naryKey, brief)
+    }
+
   }
 
   new File(output).withWriter { out ->
