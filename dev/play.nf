@@ -84,69 +84,65 @@ def versionValidationMaps = [dna2dna: [:], rna2dna: [:], rna2rna: [:]]
 mapperParams = Channel.from params.mapperParams
 .each { //PUT IN DEFAULT VALUES
   if(!it.containsKey('label')) it.put('label', 'default');
-  if(!it.containsKey('version')) it.put('version', 'ALL_AVAILABLE');
-  // if(!it.containsKey('version')) it.put('version', allVersions."${it.tool}");
+  // if(!it.containsKey('version')) it.put('version', 'ALL_AVAILABLE');
+  if(!it.containsKey('version')) it.put('version', allVersions."${it.tool}");
   if(!it.containsKey('mode')) it.put('mode', allModes);
 }.each { rec -> //VALIDATE
-  ['dna2dna', 'rna2dna', 'rna2rna']. each { mode ->
-    validationMap = validationMaps."${mode}"
-    if(mode.matches(rec.mode)) {
-      key = [rec.tool, rec.version, rec.label].join("_")
-      stored = validationMap.putIfAbsent(key, rec)
-      if(stored != null) {
-        log.error """Validation error: non-unique label for aligner params set for ${mode}
-        Previously encountered: ${stored}
-        Offending record: ${rec}
-        If tool/version/mode overlap then the labels must be unique"""
-        System.exit 1
-      }
-      // versionValidationMap = versionValidationMaps."${mode}"
-      // noVersionKey = [rec.tool, rec.label].join(" label:")
-      addToListInMap(versionValidationMaps."${mode}", [rec.tool, rec.label].join(" label:"), rec.version)
-      // if(versionValidationMap.containsKey(noVersionKey)) {
-      //   storedVersions = versionValidationMap.get(noVersionKey)
-      //   storedVersions.add(rec.version)
-      //   versionValidationMap.put(noVersionKey,storedVersions)
-      // } else {
-      //   versionValidationMap.put(noVersionKey, [rec.version])
-      // }
-    }
-  }
+  println rec
 }
-versionValidationMaps.each { mode -> //VALIDATE SOME MORE
-  mode.value.each { tool_label, versions ->
-    if(versions.size() > 1 && 'ALL_AVAILABLE' in versions) {
-      log.error """Validation error: ambiguous assignment of alignment parameter set labels.
-        Parameter set assigned to ALL_AVAILABLE as well as a specific version of a tool.
-        ${tool_label} : ${versions}
-        If tool/version/mode overlap then the labels must be unique"""
-        System.exit 1
-    }
-  }
-}
-// println groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(versionValidationMaps))
-// println groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(versionValidationMaps))
-mapperParams.view { groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)) }
-// mapperParams.view()
-
-readsChn = Channel.from(['some_reads', 'some_more_reads'])
-
-// process mapReads {
-//   tag { "${mapper.tool} ${reads} ${par}" }
-//   container { "${mapper.container}" }
-//   // echo true
-//   input:
-//      set val(mapper), val(reads), val(par) from  indices.combine(readsChn).combine(mapperParams)
-//     //  set val(mapper), val(ref) from  indices
-
-//   when:
-//     mapper.tool == par.tool && mapper.version.matches()
-//   // script:
-//   exec:
-//     def binding = [task: task.clone(), reads: reads]
-//     // println "${mapper} ${ref}"
-//     // println bindTemplate(mapper.index, binding) // "${bindTemplate(mapper.index, binding)}"
-//     //templateToScript(mapper.dna2dna, binding)
+// }.each { rec -> //VALIDATE
+//   ['dna2dna', 'rna2dna', 'rna2rna']. each { mode ->
+//     validationMap = validationMaps."${mode}"
+//     if(mode.matches(rec.mode)) {
+//       key = [rec.tool, rec.version, rec.label].join("_")
+//       stored = validationMap.putIfAbsent(key, rec)
+//       if(stored != null) {
+//         log.error """Validation error: non-unique label for aligner params set for ${mode}
+//         Previously encountered: ${stored}
+//         Offending record: ${rec}
+//         If tool/version/mode overlap then the labels must be unique"""
+//         System.exit 1
+//       }
+//       addToListInMap(versionValidationMaps."${mode}", [rec.tool, rec.label].join(" label:"), rec.version)
+//     }
+//   }
+// }
+// versionValidationMaps.each { mode -> //VALIDATE SOME MORE
+//   mode.value.each { tool_label, versions ->
+//     if(versions.size() > 1 && 'ALL_AVAILABLE' in versions) {
+//       log.error """Validation error: ambiguous assignment of alignment parameter set labels.
+//         Parameter set assigned to ALL_AVAILABLE as well as a specific version of a tool.
+//         ${tool_label} : ${versions}
+//         If tool/version/mode overlap then the labels must be unique"""
+//         System.exit 1
+//     }
+//   }
 // }
 
-// indices.view()
+
+// // println groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(versionValidationMaps))
+// // println groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(versionValidationMaps))
+// mapperParams.view { groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)) }
+// // mapperParams.view()
+
+// readsChn = Channel.from(['some_reads', 'some_more_reads'])
+
+// // process mapReads {
+// //   tag { "${mapper.tool} ${reads} ${par}" }
+// //   container { "${mapper.container}" }
+// //   // echo true
+// //   input:
+// //      set val(mapper), val(reads), val(par) from  indices.combine(readsChn).combine(mapperParams)
+// //     //  set val(mapper), val(ref) from  indices
+
+// //   when:
+// //     mapper.tool == par.tool && mapper.version.matches()
+// //   // script:
+// //   exec:
+// //     def binding = [task: task.clone(), reads: reads]
+// //     // println "${mapper} ${ref}"
+// //     // println bindTemplate(mapper.index, binding) // "${bindTemplate(mapper.index, binding)}"
+// //     //templateToScript(mapper.dna2dna, binding)
+// // }
+
+// // indices.view()
