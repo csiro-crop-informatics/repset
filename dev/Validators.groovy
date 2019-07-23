@@ -18,11 +18,9 @@ def addToListInMap (map, key, value) {
 
 def validateMappersDefinitions (mappers, allRequired, allModes) {
   def allVersions = [:] //Keep track of tool versions declared in config
-  println (allModes.split('\\|')+allRequired)
   mappers.each { rec ->
     addToListInMap(allVersions, rec.tool, rec.version)
     rec.each {k, v ->
-      println "${k} -> ${v}"
       if(!(k in (allModes.split('\\|')+allRequired))) {
         System.err.println """Validation error: unexpected field in mapper definition:
           Offending field: ${k}
@@ -64,11 +62,13 @@ def validateMapperParamsDefinitions (mapperParams, allVersions) {
       System.exit 1
     }
     if(it.containsKey('version')){
-      if(!it.version.split('\\||,').every {ver -> ver in allVersions."${it.tool}"}) {
+      it.version = it.version instanceof String ? it.version.split('\\||,') as List : it.version
+      if(!it.version.every {ver -> ver in allVersions."${it.tool}"}) {
         System.err.println """Validation error:  params defined for undefined mapper version, please define in mapperParams
           Offending record: ${it}"""
         System.exit 1
       }
+
     } else {
       it.put('version', allVersions."${it.tool}") //NOT SPECIFIED SO PARAM SET APPLIES TO ALL VERSIONS
     }
@@ -79,6 +79,7 @@ def validateMapperParamsDefinitions (mapperParams, allVersions) {
         versions = rec.version instanceof Collection ? rec.version : [rec.version]
         versions.each{ ver ->
           key = [rec.tool, ver, rec.label].join("_")
+          // println "key "+key
           stored = validationMap.putIfAbsent(key, rec)
           if(stored != null) {
             System.err.println """Validation error: non-unique label for aligner params set for ${mode}
