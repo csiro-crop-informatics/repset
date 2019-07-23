@@ -126,7 +126,7 @@ mapperParams = Channel.from params.mapperParams
         If tool/version/mode overlap then the labels must be unique"""
         System.exit 1
       }
-      // println rec
+      println rec
       // addToListInMap(versionValidationMaps."${mode}", [rec.tool, rec.label].join(" label:"), rec.version)
     }
   }
