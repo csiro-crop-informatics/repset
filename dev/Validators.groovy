@@ -60,17 +60,18 @@ def fileExists(path, rec) {
   }
 }
 
-def validateTemplatesAndScripts (mappers, keys) {
-  path = '../templates'
+def validateTemplatesAndScripts (mappers, keys, path = "$baseDir/templates") {
   println keys
   mappers.each { rec ->
+    rec.templates = []
     rec.each { k, v ->
       if(k in keys) { //one of index, dna2dna etc...
-        // if(v){
-        //   if(! new File(templates+rec.tool+))
-        // } else
-        if(v ==~ /^[\w\-_]+.sh$/ ) { //assuming template filename, must end with .sh and no /
+        if(v == true) {
+          fileExists([path,k,rec.tool+'.sh'].join('/'), rec)
+          rec.templates << k
+        } else if(v ==~ /^[\w\-_]+.sh$/ ) { //assuming template filename, must end with .sh and no /
           fileExists([path,k,v].join('/'), rec)
+          rec.templates << k
         }
       }
     }

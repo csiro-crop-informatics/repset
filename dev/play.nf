@@ -11,8 +11,8 @@ def allRequired = ['tool','version','container','index'] //Fields required for e
 def allModes = 'dna2dna|rna2rna|rna2dna' //At leas one mode has to be defined as supported by each tool
 def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allModes)
 
-validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(allModes.split('\\|') as List)))
-System.exit 0
+//Check if specified template files exist
+validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(allModes.split('\\|') as List)), '../templates')
 
 //Read, sanitize and validate alignment/mapping param sets
 validators.validateMapperParamsDefinitions(params.mapperParamsDefinitions, allVersions)
@@ -31,7 +31,7 @@ mapModesChannel = Channel.from(params.mapmode.split('\\||,'))
 /*
 Resolve variables emebeded in single-quoted strings
 */
-def String templateToScript(template, binding) {
+def String resolveScriptVariables(template, binding) {
   def engine = new groovy.text.SimpleTemplateEngine()
   engine.createTemplate(template).make(binding).toString()
 }
@@ -40,7 +40,7 @@ process index {
   memory '100.MB'
   tag { "${mapper.container}" }
   container { "${mapper.container}" }
-  //echo true
+  echo true
 
   input:
     val mapper from mappersChannel
@@ -54,35 +54,39 @@ process index {
     def binding = [ref: ref, task: task.clone()]
   // println bindTemplate(mapper.index, binding) // "${bindTemplate(mapper.index, binding)}"
   script:
-    templateToScript(mapper.index, binding)
+    if('index' in mapper.templates) { //Indexing template expected
+      template mapper.index == true ? "index/${mapper.tool}.sh" : "index/${mapper.index}"
+    } else { //indexing script defined in config
+      resolveScriptVariables(mapper.index, binding)
+    }
 }
 
-// readsChn = Channel.from(['some_reads', 'some_more_reads'])
-readsChn = Channel.from(['some_reads'])
+// // readsChn = Channel.from(['some_reads', 'some_more_reads'])
+// readsChn = Channel.from(['some_reads'])
 
-process mapReads {
-  maxForks 1
-  tag { "${mapper.tool}@${mapper.version} ${reads} params:${par.label}" }
-  container { "${mapper.container}" }
-  // echo true
-  input:
-     set val(mapper), val(reads), val(mode), val(par) from indices.combine(readsChn).combine(mapModesChannel).combine(mappersParamsChannel)
-    //  set val(mapper), val(ref) from  indices
+// process mapReads {
+//   maxForks 1
+//   tag { "${mapper.tool}@${mapper.version} ${reads} params:${par.label}" }
+//   container { "${mapper.container}" }
+//   // echo true
+//   input:
+//      set val(mapper), val(reads), val(mode), val(par) from indices.combine(readsChn).combine(mapModesChannel).combine(mappersParamsChannel)
+//     //  set val(mapper), val(ref) from  indices
 
-  when:
-    mapper.tool == par.tool && mapper.version.matches(par.version.join('|')) && mapper.containsKey(mode) && mode.matches(par.mode)
-  // script:
-  exec:
-    println (groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(mapper)))
-    println mode
-    println (groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(par)))
-    def binding = [task: task.clone(), reads: reads]
-    // println "${mapper} ${ref}"
-    // println bindTemplate(mapper.index, binding) // "${bindTemplate(mapper.index, binding)}"
-    //templateToScript(mapper.dna2dna, binding)
-}
+//   when:
+//     mapper.tool == par.tool && mapper.version.matches(par.version.join('|')) && mapper.containsKey(mode) && mode.matches(par.mode)
+//   // script:
+//   exec:
+//     println (groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(mapper)))
+//     println mode
+//     println (groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(par)))
+//     def binding = [task: task.clone(), reads: reads]
+//     // println "${mapper} ${ref}"
+//     // println bindTemplate(mapper.index, binding) // "${bindTemplate(mapper.index, binding)}"
+//     //resolveScriptVariables(mapper.dna2dna, binding)
+// }
 
-// // indices.view()
+// // // indices.view()
 
 
 
