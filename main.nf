@@ -518,13 +518,13 @@ process convertReadCoordinates {
 process mapSimulatedReads {
   label 'align'
   container { "${mapper.container}" }
-  tag {"${mapper.tool}@${mapper.version} ${refmeta.subMap(['species','version','seqtype'])} << ${simmeta.subMap(['simulator','seqtype'])} @ ${mode} params: ${paramsmeta.label}"}
+  // tag {"${mapper.tool}@${mapper.version} ${refmeta.subMap(['species','version','seqtype'])} << ${simmeta.subMap(['simulator','seqtype'])} @ ${mode} params: ${paramsmeta.label}"}
 
   input:
     set val(simmeta), file(reads), val(mapper), val(refmeta), file(ref), file(fai), file('*'), val(paramsmeta), val(mode) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(mappersParamsChannel).combine(mapModesChannel)
 
-  // output:q
-  //   set val(alignmeta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated
+  // output:
+  //   set val(mapmeta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated
 
   when: //only align simulated reads to the corresponding genome, using the corresponding params set, in the correct mode: DNA2DNA, RNA2DNA, RNA2RNA
     mapper.tool == paramsmeta.tool && mapper.version.matches(paramsmeta.version.join('|')) \
@@ -537,54 +537,34 @@ process mapSimulatedReads {
     //&& paramsmeta.mode.endsWith(simmeta.coordinates.toLowerCase()) &&  paramsmeta.mode.endsWith(refmeta.seqtype.toLowerCase()))
   //   // (paramsmeta.alignMode.startsWith(simmeta.seqtype) && paramsmeta.alignMode.endsWith(simmeta.coordinates) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
 
-  exec:
+  // exec:
   //   println "Reads size: "+reads[0].size()
   //   println "Ref size: "+ref.size()
   // println mapper.version.matches(paramsmeta.version.join('|'))
-    println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson([simmeta, mapper, refmeta, paramsmeta, [mode:mode]])))
-    ALIGN_PARAMS = paramsmeta.params
-    def binding = [ref: ref, reads: reads, task: task.clone(), ALIGN_PARAMS: paramsmeta.params]
+    // mapmeta = [tool: [name: mapper.tool, version: mapper.version, container: task.container],
+    //              target: refmeta,
+    //              query: simmeta,
+    //              params: paramsmeta.params,
+    //              mode: mode]
+    // println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(mapmeta)))
+    // println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson([simmeta, mapper, refmeta, paramsmeta, [mode:mode]])))
+
+
   // println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
   // script:
-    script:
-      if(mode in mapper.templates) { //Indexing template expected
-        template mapper."${mode}" == true ? "${mode}/${mapper.tool}.sh" : "${mode}/${mapper.${mode}}" //either default or explicit template file name
-      } else { //indexing script defined in config
-        resolveScriptVariables(mapper."${mode}", binding)
-      }
-  //   // alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
-  //   alignmeta = [tool: [name: idxmeta.tool, version: 'TODO', container: task.container], target: idxmeta.subMap((idxmeta.keySet()-'toolmodes'-'tool')),
-  //                query: simmeta, params: paramsmeta.subMap(paramsmeta.keySet()-'tool')]
-  //   // println(prettyPrint(toJson(alignmeta)))
-  //   ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS //picked-up by alignment template
-  //   template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh under e.g. templates/rna2dna, could have separate templates for PE and SE // if(simmeta.mode == 'PE')
+  script:
+    ALIGN_PARAMS = paramsmeta.params
+    def binding = [ref: ref, reads: reads, task: task.clone(), ALIGN_PARAMS: paramsmeta.params]
+    if(mode in mapper.templates) { //Indexing template expected
+      template mapper."${mode}" == true ? "${mode}/${mapper.tool}.sh" : "${mode}/${mapper.${mode}}" //either default or explicit template file name
+    } else { //indexing script defined in config
+      resolveScriptVariables(mapper."${mode}", binding)
+    }
 }
 
 // // // alignedSimulated.view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
 
 
-// // // process evaluateSimulated {
-// // //   echo true
-// // //   label 'samtools'
-// // //   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
-
-// // //   input:
-// // //     set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated
-
-// // //   // output:
-// // //   //    set val(alignmeta), file(summary) into summariesSimulated
-// // //     //  set val(alignmeta), file(detail) into detailsSimulated
-
-// // //   // exec:
-// // //   script:
-// // //   println prettyPrint(toJson(alignmeta))
-// // //   //Sorting of the header required as order of ref seqs not guaranteed and and ref ids are encoded in read names in order of the reference from which they have been generated
-// // //   //  #samtools view -H ${samOrBam} | reheader.awk | sort -k1,2 > header
-// // //   //# -i <(cat header <(samtools view ${samOrBam}))
-// // //   """
-// // //   ls -lah
-// // //   """
-// // // }
 
 // process evaluateAlignmentsRNF {
 //   label 'samtools'
