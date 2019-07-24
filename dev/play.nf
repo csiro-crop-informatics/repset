@@ -23,6 +23,7 @@ mappersChannel = Channel.from(params.mappersDefinitions)
   // .view {groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 mappersParamsChannel = Channel.from(params.mapperParamsDefinitions)
 
+//one or more mapping mode
 mapModesChannel = Channel.from(params.mapmode.split('\\||,'))
 
 // println groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(allVersions))
@@ -61,30 +62,38 @@ process index {
     }
 }
 
-// // readsChn = Channel.from(['some_reads', 'some_more_reads'])
-// readsChn = Channel.from(['some_reads'])
+// readsChn = Channel.from(['some_reads', 'some_more_reads'])
+readsChn = Channel.from(['some_reads'])
 
-// process mapReads {
-//   maxForks 1
-//   tag { "${mapper.tool}@${mapper.version} ${reads} params:${par.label}" }
-//   container { "${mapper.container}" }
-//   // echo true
-//   input:
-//      set val(mapper), val(reads), val(mode), val(par) from indices.combine(readsChn).combine(mapModesChannel).combine(mappersParamsChannel)
-//     //  set val(mapper), val(ref) from  indices
+process mapReads {
+  maxForks 1
+  tag { "${mapper.tool}@${mapper.version} ${reads} params:${par.label}" }
+  container { "${mapper.container}" }
+  // echo true
+  input:
+     set val(mapper), val(reads), val(mode), val(par) from indices.combine(readsChn).combine(mapModesChannel).combine(mappersParamsChannel)
+    //  set val(mapper), val(ref) from  indices
 
-//   when:
-//     mapper.tool == par.tool && mapper.version.matches(par.version.join('|')) && mapper.containsKey(mode) && mode.matches(par.mode)
-//   // script:
-//   exec:
-//     println (groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(mapper)))
-//     println mode
-//     println (groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(par)))
-//     def binding = [task: task.clone(), reads: reads]
-//     // println "${mapper} ${ref}"
-//     // println bindTemplate(mapper.index, binding) // "${bindTemplate(mapper.index, binding)}"
-//     //resolveScriptVariables(mapper.dna2dna, binding)
-// }
+  when:
+    mapper.tool == par.tool && mapper.version.matches(par.version.join('|')) && mapper.containsKey(mode) && mode.matches(par.mode)
+  // script:
+  exec:
+    // println (groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(mapper)))
+    // println mode
+    // println (groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(par)))
+    def binding = [task: task.clone(), reads: reads, ref: "blah"]
+    // println "${mapper} ${ref}"
+    // println bindTemplate(mapper.index, binding) // "${bindTemplate(mapper.index, binding)}"
+    //resolveScriptVariables(mapper.dna2dna, binding)
+  // script:
+    if(mode in mapper.templates) { //Mapping template expected
+      // template mapper."${mode}" == true ? "${mode}/${mapper.tool}.sh" : "${mode}/${mapper.${mode}}"
+      println mapper."${mode}" == true ? "${mode}/${mapper.tool}.sh" : "${mode}/${mapper.${mode}}"
+    } else { //mapping script defined in config
+      // resolveScriptVariables(mapper."${mode}", binding)
+      println resolveScriptVariables(mapper."${mode}", binding)
+    }
+}
 
 // // // indices.view()
 
