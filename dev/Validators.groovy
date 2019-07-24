@@ -50,6 +50,16 @@ def validateMappersDefinitions (mappers, allRequired, allModes) {
   return allVersions
 }
 
+def fileExists(path, rec) {
+  println "validating ${path}"
+  if(!new File(path).exists()) {
+    System.err.println """Validation error: specified template file does not exist!
+    Expected file path: ${path}
+    Offending record: ${rec}"""
+    System.exit 1
+  }
+}
+
 def validateTemplatesAndScripts (mappers, keys) {
   path = '../templates'
   println keys
@@ -60,14 +70,7 @@ def validateTemplatesAndScripts (mappers, keys) {
         //   if(! new File(templates+rec.tool+))
         // } else
         if(v ==~ /^[\w\-_]+.sh$/ ) { //assuming template filename, must end with .sh and no /
-          def f = [path,k,v].join('/')
-          println "validating ${f}"
-          if(!new File(f).exists()) {
-            System.err.println """Validation error: specified template file does not exist!
-            Expected file path: ${f}
-            Offending record: ${rec}"""
-            System.exit 1
-          }
+          fileExists([path,k,v].join('/'), rec)
         }
       }
     }
