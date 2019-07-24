@@ -11,6 +11,9 @@ def allRequired = ['tool','version','container','index'] //Fields required for e
 def allModes = 'dna2dna|rna2rna|rna2dna' //At leas one mode has to be defined as supported by each tool
 def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allModes)
 
+validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(allModes.split('\\|') as List)))
+System.exit 0
+
 //Read, sanitize and validate alignment/mapping param sets
 validators.validateMapperParamsDefinitions(params.mapperParamsDefinitions, allVersions)
 

@@ -50,6 +50,30 @@ def validateMappersDefinitions (mappers, allRequired, allModes) {
   return allVersions
 }
 
+def validateTemplatesAndScripts (mappers, keys) {
+  path = '../templates'
+  println keys
+  mappers.each { rec ->
+    rec.each { k, v ->
+      if(k in keys) { //one of index, dna2dna etc...
+        // if(v){
+        //   if(! new File(templates+rec.tool+))
+        // } else
+        if(v ==~ /^[\w\-_]+.sh$/ ) { //assuming template filename, must end with .sh and no /
+          def f = [path,k,v].join('/')
+          println "validating ${f}"
+          if(!new File(f).exists()) {
+            System.err.println """Validation error: specified template file does not exist!
+            Expected file path: ${f}
+            Offending record: ${rec}"""
+            System.exit 1
+          }
+        }
+      }
+    }
+  }
+}
+
 def validateMapperParamsDefinitions (mapperParams, allVersions) {
   def validationMaps = [dna2dna: [:], rna2dna: [:], rna2rna: [:]]
   mapperParams.each { //PUT IN DEFAULT VALUES
