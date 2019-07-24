@@ -3,6 +3,6 @@
 bwa mem \
   -t ${task.cpus} \
   ${ALIGN_PARAMS} \
-  ${idxmeta.target} \
+  ${ref} \
   ${reads} \
   > out.sam

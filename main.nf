@@ -9,41 +9,69 @@ jsonGenerator = new groovy.json.JsonGenerator.Options()
                 .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
                 .build()
 
-//RETURNS DNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
-Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  .map {
-    params.defaults.alignersParams.DNA2DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
-    params.defaults.alignersParams.DNA2DNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
-    [it[0], "DNA2DNA"]
-  }
-  .set {alignersDNA2DNA}
 
-//RETURNS RNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
-Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  .map {
-    params.defaults.alignersParams.RNA2DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
-    params.defaults.alignersParams.RNA2DNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
-    [it[0], "RNA2DNA"]
-  }
-  .set { alignersRNA2DNA }
+//Input validation specified elswhere
+def validators = new GroovyShell().parse(new File("${baseDir}/groovy/Validators.groovy"))
 
-//RETURNS RNA2RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
-Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2rna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
-  .map {
-    params.defaults.alignersParams.RNA2RNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
-    params.defaults.alignersParams.RNA2RNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
-    [it[0], "RNA2RNA"]
-  }
-  .set { alignersRNA2RNA }
+//Read, parse, validate and sanitize alignment/mapping tools config
+def allRequired = ['tool','version','container','index'] //Fields required for each tool in config
+def allModes = 'dna2dna|rna2rna|rna2dna' //At leas one mode has to be defined as supported by each tool
+def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allModes)
 
-//DNA and RNA aligners in one channel as single indexing process defined
-alignersDNA2DNA.mix(alignersRNA2DNA).mix(alignersRNA2RNA)
-  .groupTuple(size:3, remainder: true, sort:true)
-  .map { tool, alnModes ->
-    [tool: tool, modes: [dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA')]]
-  }
- .filter{ params.aligners == 'all' || it.tool.matches(params.aligners) }
- .set { aligners }
+//Check if specified template files exist
+validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(allModes.split('\\|') as List)), "${baseDir}/templates")
+
+//Read, sanitize and validate alignment/mapping param sets
+validators.validateMapperParamsDefinitions(params.mapperParamsDefinitions, allVersions)
+
+//Validated now, so gobble up mappers and their params definitions
+mappersChannel = Channel.from(params.mappersDefinitions)
+  .filter{ params.mappers == 'all' || it.tool.matches(params.mappers) } //TODO Could allow :version
+
+mappersParamsChannel = Channel.from(params.mapperParamsDefinitions)
+
+//one or more mapping mode
+mapModesChannel = Channel.from(params.mapmode.split('\\||,'))
+
+
+
+
+
+// //RETURNS DNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
+// Channel.fromFilePairs("${workflow.projectDir}/templates/{index,dna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+//   .map {
+//     params.defaults.alignersParams.DNA2DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
+//     params.defaults.alignersParams.DNA2DNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
+//     [it[0], "DNA2DNA"]
+//   }
+//   .set {alignersDNA2DNA}
+
+// //RETURNS RNA2DNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
+// Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2dna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+//   .map {
+//     params.defaults.alignersParams.RNA2DNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
+//     params.defaults.alignersParams.RNA2DNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
+//     [it[0], "RNA2DNA"]
+//   }
+//   .set { alignersRNA2DNA }
+
+// //RETURNS RNA2RNA ALIGNER NAMES/LABELS IF BOTH INDEXING AND ALIGNMENT TEMPLATES PRESENT
+// Channel.fromFilePairs("${workflow.projectDir}/templates/{index,rna2rna}/*_{index,align}.sh", maxDepth: 1, checkIfExists: true)
+//   .map {
+//     params.defaults.alignersParams.RNA2RNA.putIfAbsent(it[0], [default: ''])  //make sure empty default param set available for every templated aligner
+//     params.defaults.alignersParams.RNA2RNA.(it[0]).putIfAbsent('default', '') //make sure empty default param set available for every templated aligner
+//     [it[0], "RNA2RNA"]
+//   }
+//   .set { alignersRNA2RNA }
+
+// //DNA and RNA aligners in one channel as single indexing process defined
+// alignersDNA2DNA.mix(alignersRNA2DNA).mix(alignersRNA2RNA)
+//   .groupTuple(size:3, remainder: true, sort:true)
+//   .map { tool, alnModes ->
+//     [tool: tool, modes: [dna2dna: alnModes.contains('DNA2DNA'), rna2dna: alnModes.contains('RNA2DNA'), rna2rna: alnModes.contains('RNA2RNA')]]
+//   }
+//  .filter{ params.aligners == 'all' || it.tool.matches(params.aligners) }
+//  .set { aligners }
 
 /*
  * Add to or overwrite map content recursively
@@ -55,20 +83,20 @@ Map.metaClass.addNested = { Map rhs ->
     lhs
 }
 
-//Combine default and user parmas maps, then transform into a list and read into a channel to be consumed by alignment process(es)
-alignersParamsList = []
-params.defaults.alignersParams.addNested(params.alignersParams).each { alignMode, rnaOrDnaParams ->
-  rnaOrDnaParams.each { tool, paramsets ->
-    paramsets.each { paramslabel, ALIGN_PARAMS ->
-      alignersParamsList << [tool: tool, paramslabel: paramslabel, alignMode: alignMode, ALIGN_PARAMS:ALIGN_PARAMS]
-    }
-  }
-}
-Channel.from(alignersParamsList).set {alignersParams}
-// Channel.from(alignersParamsList).into {alignersParams4realDNA; alignersParams4SimulatedDNA}
+// //Combine default and user parmas maps, then transform into a list and read into a channel to be consumed by alignment process(es)
+// alignersParamsList = []
+// params.defaults.alignersParams.addNested(params.alignersParams).each { alignMode, rnaOrDnaParams ->
+//   rnaOrDnaParams.each { tool, paramsets ->
+//     paramsets.each { paramslabel, ALIGN_PARAMS ->
+//       alignersParamsList << [tool: tool, paramslabel: paramslabel, alignMode: alignMode, ALIGN_PARAMS:ALIGN_PARAMS]
+//     }
+//   }
+// }
+// Channel.from(alignersParamsList).set {alignersParams}
+// // Channel.from(alignersParamsList).into {alignersParams4realDNA; alignersParams4SimulatedDNA}
 
 
-// println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(alignersParamsList)))
+// // println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(alignersParamsList)))
 
 
 
@@ -233,6 +261,7 @@ process faidxGenomeFASTA {
 //   // .view()
 //   .into {referencesForAligners; references4rnfSimReads}
 
+
 process extarctTranscripts {
   echo true
   label 'gffread'
@@ -253,7 +282,7 @@ process extarctTranscripts {
     set val(outmeta), file(outfile) into extractedTranscriptomes //transcripts4indexing, transcripts4rnfSimReads
 
   when:
-    'rna2rna'.matches(params.alnmode) || 'rna2dna'.matches(params.alnmode)
+    'rna2rna'.matches(params.mapmode) || 'rna2dna'.matches(params.mapmode)
 
   shell:
     // println(prettyPrint(toJson(meta)))
@@ -298,36 +327,44 @@ process faidxTranscriptomeFASTA {
   """
 }
 
+/*
+Resolve variables emebeded in single-quoted strings
+*/
+def String resolveScriptVariables(String template, Map binding) {
+  def engine = new groovy.text.SimpleTemplateEngine()
+  engine.createTemplate(template).make(binding).toString()
+}
+
+
 process indexGenerator {
   label 'index'
-  //label "${tool}" // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  container { this.config.process.get("withLabel:${alignermeta.tool}" as String).get("container") } //TODO: need informative message if this fails to find a defined container (now get() on null)
+  maxForks 1
+  container { "${mapper.container}" }
   // tag("${alignermeta.tool} << ${refmeta}")
-  tag {refmeta.subMap(['species','version','seqtype']+alignermeta.subMap(['tool']))}
+  tag { [refmeta.subMap(['species','version','seqtype']), mapper.subMap(['tool','version'])] }
 
   input:
-    // set val(alignermeta), val(refmeta), file(ref) from aligners.combine(referencesForAligners.mix(transcripts4indexing))
-    // set val(alignermeta), val(refmeta), file(ref), file(fai) from aligners.combine(refsForIndexing)
-    set val(alignermeta), val(refmeta), file(ref), file(fai) from aligners.combine(genomesForIndexing.mix(transcriptomesForIndexing))
+    // set val(alignermeta), val(refmeta), file(ref), file(fai) from aligners.combine(genomesForIndexing.mix(transcriptomesForIndexing))
+    set val(mapper), val(refmeta), file(ref), file(fai) from mappersChannel.combine(genomesForIndexing.mix(transcriptomesForIndexing))
 
   output:
-    set val(meta), file(ref), file(fai), file("*") into indices
+    set val(mapper), val(refmeta), file(ref), file(fai), file("*") into indices
 
 
-  when: //check if dataset intended for {D,R}NA alignment reference and tool available for that purpose
-    (refmeta.seqtype == 'RNA' && alignermeta.modes.rna2rna && 'rna2rna'.matches(params.alnmode) ) \
-    || (refmeta.seqtype == 'DNA' && (alignermeta.modes.rna2dna  && 'rna2dna'.matches(params.alnmode)) || (alignermeta.modes.dna2dna && 'dna2dna'.matches(params.alnmode)))
+  when: //check if reference intended for {D,R}NA alignment reference and tool has a template declared for that purpose which is also included in mapmode
+    [['RNA','rna2rna'],['DNA','rna2dna'],['DNA','dna2dna']].any { refmeta.seqtype == it[0] && mapper.containsKey(it[1]) && it[1].matches(params.mapmode) }
 
-  //  exec: //dev
-  //  meta =  alignermeta+refmeta//[target: "${ref}"]
-  //  println(prettyPrint(toJson([alignermeta,refmeta])))
-  script:
-    // binding = ['REFERENCE': 'reference/path', task: task]
-    // """
-    // ${bindTemplate(mapper.index, binding)}
-    // """
-    meta = [toolmodes: alignermeta.modes, tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
-    template "index/${alignermeta.tool}_index.sh" //points to e.g. biokanga_index.sh under templates/
+  exec:
+    //meta = [toolmodes: alignermeta.modes, tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
+    // meta = [mapper: mapper, target: refmeta+[file: ref]]
+    // println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(mapper+refmeta+[ref: ref])))
+    def binding = [ref: "${ref.name}", task: task.clone()]
+    script:
+      if('index' in mapper.templates) { //Indexing template expected
+        template mapper.index == true ? "index/${mapper.tool}.sh" : "index/${mapper.index}" //either default or explicit template file name
+      } else { //indexing script defined in config
+        resolveScriptVariables(mapper.index, binding)
+      }
 }
 
 process rnfSimReads {
@@ -426,17 +463,17 @@ simulatedReads.map { simmeta, ref, simStats, simReads ->
 
 
 
-// process simStats{
-//   input:
-//     set val(simmeta), file(reads) from readsForSimStats
+// // process simStats{
+// //   input:
+// //     set val(simmeta), file(reads) from readsForSimStats
 
-//   output:
-//     set val(simmeta), stdout(count) into simCounts
+// //   output:
+// //     set val(simmeta), stdout(count) into simCounts
 
-//   """
-//   zcat ${reads[0]} | sed -n '1~4p' | wc -l
-//   """
-// }
+// //   """
+// //   zcat ${reads[0]} | sed -n '1~4p' | wc -l
+// //   """
+// // }
 
 process convertReadCoordinates {
   label 'groovy'
@@ -474,228 +511,229 @@ process convertReadCoordinates {
   """
 }
 
-// // convertedCoordinatesReads.view()
+// // // convertedCoordinatesReads.view()
 
-// // convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams).view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
-
-def getContainer(tool, version=null) {
-  if(version) {
-    this.config.process.get("withLabel:${tool}__${version}" as String).get("container")
-  } else {
-    this.config.process.get("withLabel:${tool}" as String).get("container")
-  }
-}
-
-// println params.containers
+// // // convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams).view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
 
 process mapSimulatedReads {
   label 'align'
-  container { this.config.process.get("withLabel:${idxmeta.tool}" as String).get("container") } // label("${idxmeta.tool}") // it is currently not possible to set dynamic process labels in NF, see https://github.com/nextflow-io/nextflow/issues/894
-  // container { getContainer(idxmeta.tool) }
-  tag {"${idxmeta.subMap(['tool','species','version','seqtype'])} << ${simmeta.subMap(['simulator','seqtype'])} @ ${paramsmeta.subMap(['paramslabel','alignMode'])}"}
+  container { "${mapper.container}" }
+  tag {"${mapper.tool}@${mapper.version} ${refmeta.subMap(['species','version','seqtype'])} << ${simmeta.subMap(['simulator','seqtype'])} @ ${mode} params: ${paramsmeta.label}"}
 
   input:
-    // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from readsForAlignersDNA.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-   // set val(simmeta), file("?.fq.gz"), val(idxmeta), file('*'), val(paramsmeta) from convertedCoordinatesReads.combine(indices).combine(alignersParams4SimulatedDNA) //cartesian product i.e. all input sets of reads vs all dbs
-   set val(simmeta), file(reads), val(idxmeta), file(ref), file(fai), file('*'), val(paramsmeta) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams)
+    set val(simmeta), file(reads), val(mapper), val(refmeta), file(ref), file(fai), file('*'), val(paramsmeta), val(mode) from convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(mappersParamsChannel).combine(mapModesChannel)
 
-  output:
-    set val(alignmeta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated
+  // output:q
+  //   set val(alignmeta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated
 
   when: //only align simulated reads to the corresponding genome, using the corresponding params set, in the correct mode: DNA2DNA, RNA2DNA, RNA2RNA
-    idxmeta.species == simmeta.species && idxmeta.version == simmeta.version && paramsmeta.tool == idxmeta.tool \
-    && (paramsmeta.alignMode.startsWith(simmeta.seqtype) && paramsmeta.alignMode.endsWith(simmeta.coordinates) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype)) \
-    && idxmeta.toolmodes."${paramsmeta.alignMode.toLowerCase()}"
-    // (paramsmeta.alignMode.startsWith(simmeta.seqtype) && paramsmeta.alignMode.endsWith(simmeta.coordinates) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
+    mapper.tool == paramsmeta.tool && mapper.version.matches(paramsmeta.version.join('|')) \
+    && mapper.containsKey(mode) && mode.matches(paramsmeta.mode) \
+    && refmeta.species == simmeta.species && refmeta.version == simmeta.version \
+    && mode.startsWith(simmeta.seqtype.toLowerCase()) \
+    && mode.endsWith(simmeta.coordinates.toLowerCase()) \
+    && mode.endsWith(refmeta.seqtype.toLowerCase())
 
-  // exec:
+    //&& paramsmeta.mode.endsWith(simmeta.coordinates.toLowerCase()) &&  paramsmeta.mode.endsWith(refmeta.seqtype.toLowerCase()))
+  //   // (paramsmeta.alignMode.startsWith(simmeta.seqtype) && paramsmeta.alignMode.endsWith(simmeta.coordinates) &&  paramsmeta.alignMode.endsWith(idxmeta.seqtype))
+
+  exec:
   //   println "Reads size: "+reads[0].size()
   //   println "Ref size: "+ref.size()
-  //   println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
-  script:
-    println getContainer(idxmeta.tool)
-    // alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
-    alignmeta = [tool: [name: idxmeta.tool, version: 'TODO', container: task.container], target: idxmeta.subMap((idxmeta.keySet()-'toolmodes'-'tool')),
-                 query: simmeta, params: paramsmeta.subMap(paramsmeta.keySet()-'tool')]
-    // println(prettyPrint(toJson(alignmeta)))
-    ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS //picked-up by alignment template
-    template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh under e.g. templates/rna2dna, could have separate templates for PE and SE // if(simmeta.mode == 'PE')
+  // println mapper.version.matches(paramsmeta.version.join('|'))
+    println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson([simmeta, mapper, refmeta, paramsmeta, [mode:mode]])))
+    ALIGN_PARAMS = paramsmeta.params
+    def binding = [ref: ref, reads: reads, task: task.clone(), ALIGN_PARAMS: paramsmeta.params]
+  // println(prettyPrint(toJson(simmeta))+'\n'+prettyPrint(toJson(idxmeta))+'\n'+prettyPrint(toJson(paramsmeta)))
+  // script:
+    script:
+      if(mode in mapper.templates) { //Indexing template expected
+        template mapper."${mode}" == true ? "${mode}/${mapper.tool}.sh" : "${mode}/${mapper.${mode}}" //either default or explicit template file name
+      } else { //indexing script defined in config
+        resolveScriptVariables(mapper."${mode}", binding)
+      }
+  //   // alignmeta = idxmeta.subMap(['target']) + simmeta.clone() + paramsmeta.clone() + [targettype: idxmeta.seqtype]
+  //   alignmeta = [tool: [name: idxmeta.tool, version: 'TODO', container: task.container], target: idxmeta.subMap((idxmeta.keySet()-'toolmodes'-'tool')),
+  //                query: simmeta, params: paramsmeta.subMap(paramsmeta.keySet()-'tool')]
+  //   // println(prettyPrint(toJson(alignmeta)))
+  //   ALIGN_PARAMS = paramsmeta.ALIGN_PARAMS //picked-up by alignment template
+  //   template "${paramsmeta.alignMode.toLowerCase()}/${idxmeta.tool}_align.sh"  //points to e.g. biokanga_align.sh under e.g. templates/rna2dna, could have separate templates for PE and SE // if(simmeta.mode == 'PE')
 }
 
-// // alignedSimulated.view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
+// // // alignedSimulated.view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
 
 
-// // process evaluateSimulated {
-// //   echo true
-// //   label 'samtools'
-// //   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
+// // // process evaluateSimulated {
+// // //   echo true
+// // //   label 'samtools'
+// // //   tag{alignmeta.subMap(['tool','simulator','target','alignMode','paramslabel'])}
+
+// // //   input:
+// // //     set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated
+
+// // //   // output:
+// // //   //    set val(alignmeta), file(summary) into summariesSimulated
+// // //     //  set val(alignmeta), file(detail) into detailsSimulated
+
+// // //   // exec:
+// // //   script:
+// // //   println prettyPrint(toJson(alignmeta))
+// // //   //Sorting of the header required as order of ref seqs not guaranteed and and ref ids are encoded in read names in order of the reference from which they have been generated
+// // //   //  #samtools view -H ${samOrBam} | reheader.awk | sort -k1,2 > header
+// // //   //# -i <(cat header <(samtools view ${samOrBam}))
+// // //   """
+// // //   ls -lah
+// // //   """
+// // // }
+
+// process evaluateAlignmentsRNF {
+//   label 'samtools'
+//   // label 'ES'
+//   tag{alignmeta.tool.subMap(['name'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
+//   // tag{alignmeta.params.subMap(['paramslabel'])}
+//   // tag{alignmeta.subMap(['tool','simulator','target.species','alignMode','paramslabel'])}
+
+//   input:
+//     set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated.map { meta, ref, fai, samOrBam, trace ->
+//         meta.trace = [:]
+//         parseFileMap(trace, meta.trace) //could be parseFileMap(trace, meta.trace, 'realtime') or parseFileMap(trace, meta, ['realtime','..']) or parseFileMap(trace, meta) to capture all fields
+//         new Tuple(meta, ref, fai, samOrBam)
+//       }
+
+//   output:
+//      set val(alignmeta), file ('*.json') into evaluatedAlignmentsRNF
+//     //  set val(alignmeta), file('ES.gz'),  into esChannel  //add to script: --es-output ES.gz
+
+//   // exec:
+//   script:
+//   // println prettyPrint(toJson(alignmeta))
+//   // println alignmeta.inspect()
+
+//   """
+//   set -eo pipefail
+//   samtools view ${samOrBam} \
+//   | eval_rnf.groovy \
+//       --allowed-delta ${params.allowedDelta} \
+//       --faidx ${fai} \
+//       --output summary.json \
+//   """
+// }
+
+
+// /**
+// 1. Embed evaluation results JSON in META JSON.
+// 2. Collect all datapoints in one JSON for output.
+// **/
+// def slurper = new groovy.json.JsonSlurper()
+// evaluatedAlignmentsRNF.map { META, JSON ->
+//       META.evaluation = slurper.parseText(JSON.text)
+//       META
+//   }
+//   .collect()
+//   .map {
+//     file("${params.outdir}").mkdirs()
+//     outfile = file("${params.outdir}/allstats.json")
+//     outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.tool.name <=>  k2.tool.name} ) ))
+//   }
+
+
+// // process plotSummarySimulated {
+// //   label 'rscript'
+// //   label 'figures'
 
 // //   input:
-// //     set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated
+// //     // set file(csv), file(json) from collatedSummariesSimulatedDNA
+// //     set file(json), file(categories) from collatedSummariesSimulated
 
-// //   // output:
-// //   //    set val(alignmeta), file(summary) into summariesSimulated
-// //     //  set val(alignmeta), file(detail) into detailsSimulated
+// //   output:
+// //     file '*' into collatedSummariesPlotsSimulated
 
-// //   // exec:
-// //   script:
-// //   println prettyPrint(toJson(alignmeta))
-// //   //Sorting of the header required as order of ref seqs not guaranteed and and ref ids are encoded in read names in order of the reference from which they have been generated
-// //   //  #samtools view -H ${samOrBam} | reheader.awk | sort -k1,2 > header
-// //   //# -i <(cat header <(samtools view ${samOrBam}))
-// //   """
-// //   ls -lah
-// //   """
+// //   shell:
+// //   '''
+// //   < !{json} plot_simulatedDNA.R
+// //   '''
 // // }
 
-process evaluateAlignmentsRNF {
-  label 'samtools'
-  // label 'ES'
-  tag{alignmeta.tool.subMap(['name'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
-  // tag{alignmeta.params.subMap(['paramslabel'])}
-  // tag{alignmeta.subMap(['tool','simulator','target.species','alignMode','paramslabel'])}
-
-  input:
-    set val(alignmeta), file(ref), file(fai), file(samOrBam) from alignedSimulated.map { meta, ref, fai, samOrBam, trace ->
-        meta.trace = [:]
-        parseFileMap(trace, meta.trace) //could be parseFileMap(trace, meta.trace, 'realtime') or parseFileMap(trace, meta, ['realtime','..']) or parseFileMap(trace, meta) to capture all fields
-        new Tuple(meta, ref, fai, samOrBam)
-      }
-
-  output:
-     set val(alignmeta), file ('*.json') into evaluatedAlignmentsRNF
-    //  set val(alignmeta), file('ES.gz'),  into esChannel  //add to script: --es-output ES.gz
-
-  // exec:
-  script:
-  // println prettyPrint(toJson(alignmeta))
-  // println alignmeta.inspect()
-
-  """
-  set -eo pipefail
-  samtools view ${samOrBam} \
-  | eval_rnf.groovy \
-      --allowed-delta ${params.allowedDelta} \
-      --faidx ${fai} \
-      --output summary.json \
-  """
-}
 
 
-/**
-1. Embed evaluation results JSON in META JSON.
-2. Collect all datapoints in one JSON for output.
-**/
-def slurper = new groovy.json.JsonSlurper()
-evaluatedAlignmentsRNF.map { META, JSON ->
-      META.evaluation = slurper.parseText(JSON.text)
-      META
-  }
-  .collect()
-  .map {
-    file("${params.outdir}").mkdirs()
-    outfile = file("${params.outdir}/allstats.json")
-    outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.tool.name <=>  k2.tool.name} ) ))
-  }
+// // process plotSummarySimulated {
+// //   label 'rscript'
+// //   label 'figures'
 
+// //   input:
+// //     // set file(csv), file(json) from collatedSummariesSimulatedDNA
+// //     set file(json), file(categories) from collatedSummariesSimulatedDNA
 
-// process plotSummarySimulated {
-//   label 'rscript'
-//   label 'figures'
+// //   output:
+// //     file '*' into collatedSummariesPlotsSimulated
 
-//   input:
-//     // set file(csv), file(json) from collatedSummariesSimulatedDNA
-//     set file(json), file(categories) from collatedSummariesSimulated
+// //   shell:
+// //   '''
+// //   < !{json} plot_simulatedDNA.R
+// //   '''
+// // }
 
-//   output:
-//     file '*' into collatedSummariesPlotsSimulated
+// // //WRAP-UP
+// // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-//   shell:
-//   '''
-//   < !{json} plot_simulatedDNA.R
-//   '''
-// }
+// // process render {
+// //   tag {"Render ${Rmd}"}
+// //   label 'rrender'
+// //   label 'report'
+// //   stageInMode 'copy'
+// //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
+// //   input:
+// //     // file('*') from plots.flatten().toList()
+// //     // file('*') from plotsRealRNA.flatten().toList()
+// //     file(Rmd) from writing
+// //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
+// //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
 
+// //   output:
+// //     file '*'
 
-// process plotSummarySimulated {
-//   label 'rscript'
-//   label 'figures'
+// //   script:
+// //   """
+// //   #!/usr/bin/env Rscript
 
-//   input:
-//     // set file(csv), file(json) from collatedSummariesSimulatedDNA
-//     set file(json), file(categories) from collatedSummariesSimulatedDNA
+// //   library(rmarkdown)
+// //   library(rticles)
+// //   library(bookdown)
 
-//   output:
-//     file '*' into collatedSummariesPlotsSimulated
+// //   rmarkdown::render("${Rmd}")
+// //   """
+// // }
+// // }
 
-//   shell:
-//   '''
-//   < !{json} plot_simulatedDNA.R
-//   '''
-// }
+// // //WRAP-UP
+// // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-// //WRAP-UP
-// writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+// // process render {
+// //   tag {"Render ${Rmd}"}
+// //   label 'rrender'
+// //   label 'report'
+// //   stageInMode 'copy'
+// //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
-// process render {
-//   tag {"Render ${Rmd}"}
-//   label 'rrender'
-//   label 'report'
-//   stageInMode 'copy'
-//   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+// //   input:
+// //     // file('*') from plots.flatten().toList()
+// //     // file('*') from plotsRealRNA.flatten().toList()
+// //     file(Rmd) from writing
+// //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
+// //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
 
-//   input:
-//     // file('*') from plots.flatten().toList()
-//     // file('*') from plotsRealRNA.flatten().toList()
-//     file(Rmd) from writing
-//     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
-//     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
+// //   output:
+// //     file '*'
 
-//   output:
-//     file '*'
+// //   script:
+// //   """
+// //   #!/usr/bin/env Rscript
 
-//   script:
-//   """
-//   #!/usr/bin/env Rscript
+// //   library(rmarkdown)
+// //   library(rticles)
+// //   library(bookdown)
 
-//   library(rmarkdown)
-//   library(rticles)
-//   library(bookdown)
-
-//   rmarkdown::render("${Rmd}")
-//   """
-// }
-// }
-
-// //WRAP-UP
-// writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
-
-// process render {
-//   tag {"Render ${Rmd}"}
-//   label 'rrender'
-//   label 'report'
-//   stageInMode 'copy'
-//   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
-
-//   input:
-//     // file('*') from plots.flatten().toList()
-//     // file('*') from plotsRealRNA.flatten().toList()
-//     file(Rmd) from writing
-//     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
-//     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
-
-//   output:
-//     file '*'
-
-//   script:
-//   """
-//   #!/usr/bin/env Rscript
-
-//   library(rmarkdown)
-//   library(rticles)
-//   library(bookdown)
-
-//   rmarkdown::render("${Rmd}")
-//   """
-// }
+// //   rmarkdown::render("${Rmd}")
+// //   """
+// // }

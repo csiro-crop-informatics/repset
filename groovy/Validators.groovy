@@ -51,7 +51,7 @@ def validateMappersDefinitions (mappers, allRequired, allModes) {
 }
 
 def fileExists(path, rec) {
-  println "validating ${path}"
+  // println "validating ${path}"
   if(!new File(path).exists()) {
     System.err.println """Validation error: specified template file does not exist!
     Expected file path: ${path}
@@ -60,8 +60,8 @@ def fileExists(path, rec) {
   }
 }
 
-def validateTemplatesAndScripts (mappers, keys, path = "$baseDir/templates") {
-  println keys
+def validateTemplatesAndScripts (mappers, keys, path) {
+  // println keys
   mappers.each { rec ->
     rec.templates = []
     rec.each { k, v ->

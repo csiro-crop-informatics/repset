@@ -3,7 +3,7 @@
 kallisto quant \
   --threads ${task.cpus} \
   ${ALIGN_PARAMS} \
-  --index ${idxmeta.target}.idx \
+  --index ${ref}.idx \
   --pseudobam \
   --output-dir . \
   ${reads}

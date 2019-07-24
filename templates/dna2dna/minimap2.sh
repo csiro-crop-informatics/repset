@@ -4,6 +4,6 @@ minimap2 \
   -ax sr \
   -t ${task.cpus} \
   ${ALIGN_PARAMS} \
-  ${idxmeta.target}.mmi \
+  ${ref}.mmi \
   ${reads} \
   > out.sam

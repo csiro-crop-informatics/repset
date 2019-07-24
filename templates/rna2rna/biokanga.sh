@@ -5,7 +5,7 @@
 
 
 biokanga align \
-  --sfx ${idxmeta.target}.sfx \
+  --sfx ${ref}.sfx \
   --in ${reads[0]} \
   --pair ${reads[1]}  \
   --out out.bam \
