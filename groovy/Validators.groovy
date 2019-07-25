@@ -2,9 +2,9 @@ def addToListInMap (map, key, value) {
   if(map.containsKey(key)) {
     stored = map.get(key)
     if(value in stored) {
-      System.err.println """Adding a previously stored value
-        Current: ${value}
-        Stored: ${stored}"""
+      System.err.println """Error: duplicate entry for ${key}
+        Current value  : ${value}
+        Stored value(s): ${stored.join(' ')}"""
       System.exit 1
     }
     stored.add(value)
