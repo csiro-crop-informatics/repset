@@ -1,10 +1,13 @@
-def addToListInMap (map, key, value) {
+import static groovy.json.JsonGenerator.*
+
+def addToListInMap (map, key, value, context) {
   if(map.containsKey(key)) {
     stored = map.get(key)
     if(value in stored) {
       System.err.println """Error: duplicate entry for ${key}
         Current value  : ${value}
-        Stored value(s): ${stored.join(' ')}"""
+        Stored value(s): ${stored.join(' ')}
+        Context: ${context}"""
       System.exit 1
     }
     stored.add(value)
@@ -19,7 +22,7 @@ def addToListInMap (map, key, value) {
 def validateMappersDefinitions (mappers, allRequired, allModes) {
   def allVersions = [:] //Keep track of tool versions declared in config
   mappers.each { rec ->
-    addToListInMap(allVersions, rec.tool, rec.version)
+    addToListInMap(allVersions, rec.tool, rec.version, rec)
     rec.each {k, v ->
       if(!(k in (allModes.split('\\|')+allRequired))) {
         System.err.println """Validation error: unexpected field in mapper definition:
@@ -78,8 +81,12 @@ def validateTemplatesAndScripts (mappers, keys, path) {
   }
 }
 
-def validateMapperParamsDefinitions (mapperParams, allVersions) {
-  def validationMaps = [dna2dna: [:], rna2dna: [:], rna2rna: [:]]
+def validateMapperParamsDefinitions (mapperParams, allVersions, allModes) {
+  // def validationMaps = [dna2dna: [:], rna2dna: [:], rna2rna: [:]]
+  def validationMaps = [:]
+  allModes.split('\\|'). each {
+    validationMaps.put(it, [:])
+  }
   mapperParams.each { //PUT IN DEFAULT VALUES
     if(!it.containsKey('label')) it.put('label', 'default');
     if(!it.containsKey('mode')) it.put('mode', allModes);
@@ -96,28 +103,58 @@ def validateMapperParamsDefinitions (mapperParams, allVersions) {
           Offending record: ${it}"""
         System.exit 1
       }
-
     } else {
       it.put('version', allVersions."${it.tool}") //NOT SPECIFIED SO PARAM SET APPLIES TO ALL VERSIONS
     }
   }.each { rec -> //VALIDATE
-    ['dna2dna', 'rna2dna', 'rna2rna']. each { mode ->
-      validationMap = validationMaps."${mode}"
+    // ['dna2dna', 'rna2dna', 'rna2rna']. each { mode ->
+    allModes.split('\\|'). each { mode ->
+      def validationMap = validationMaps."${mode}"
       if(mode.matches(rec.mode)) {
         versions = rec.version instanceof Collection ? rec.version : [rec.version]
         versions.each{ ver ->
-          key = [rec.tool, ver, rec.label].join("_")
-          // println "key "+key
-          stored = validationMap.putIfAbsent(key, rec)
-          if(stored != null) {
-            System.err.println """Validation error: non-unique label for aligner params set for ${mode}
-            Previously encountered: ${stored}
-            Offending record: ${rec}
-            If tool/version/mode overlap then the labels must be unique"""
-            System.exit 1
-          }
+          // key = [rec.tool, ver, rec.label].join("_")
+          // key = [rec.tool, ver].join("_")
+          key = "${rec.tool}_${ver}"
+          addToListInMap(validationMap, key, rec.label, "If tool/version/mode overlap then the labels must be unique: ${rec}")
+          // // println "key "+key
+          // stored = validationMap.putIfAbsent(key, rec)
+          // if(stored != null) {
+          //   System.err.println """Validation error: non-unique label for aligner params set for ${mode}
+          //   Previously encountered: ${stored}
+          //   Offending record: ${rec}
+          //   If tool/version/mode overlap then the labels must be unique"""
+          //   System.exit 1
+          // }
+        }
+      }
+      // println rec
+      // println mode
+      // println(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(validationMap)))
+    }
+  }
+  //ADD EMPTY PARAM SET FOR ANY TOOL@VERSION NOT EXPLICITLY DEFINED - DON"T LIKE THIS
+  allModes.split('\\|').each { mode ->
+    def validationMap = validationMaps."${mode}"
+    allVersions.each { tool, ver ->
+      versions = ver instanceof Collection ? ver : [ver]
+      versions.each { v ->
+        // def key = [tool, v, 'default'].join("_")
+        // println "\nCurrent ${tool}_${v} ${mode}"
+        // println validationMap.keySet()
+        stored = validationMap.putIfAbsent("${tool}_${v}", "default")
+        // if(!(validationMaps."${mode}".containsKey("${tool}_${v}"))) {
+        if(stored == null) {
+          // println "Putting ${tool}_${v} ${mode}"
+          mapperParams << [tool: tool, version:v, mode: mode, label: 'default', params: '']
+        // } else {
+        //   println "Already in"
         }
       }
     }
   }
+  // println(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(allVersions)))
+  // println(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(mapperParams)))
+  // println(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(validationMaps)))
+  // System.exit 0
 }
