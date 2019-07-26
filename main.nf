@@ -300,7 +300,6 @@ mappersIdxChannel.combine(genomesForIndexing.mix(transcriptomesForIndexing))
 
 process indexGenerator {
   label 'index'
-  maxForks 1
   container { "${mapper.container}" }
   // tag("${alignermeta.tool} << ${refmeta}")
   tag { [refmeta.subMap(['species','version','seqtype']), mapper.subMap(['tool','version'])] }
@@ -550,9 +549,9 @@ process evaluateAlignmentsRNF {
 
   input:
     set val(meta), file(ref), file(fai), file(samOrBam) from alignedSimulated.map { meta, ref, fai, samOrBam, trace ->
-        meta.trace = [:]
-        parseFileMap(trace, meta.trace) //could be parseFileMap(trace, meta.trace, 'realtime') or parseFileMap(trace, meta, ['realtime','..']) or parseFileMap(trace, meta) to capture all fields
-        new Tuple(meta, ref, fai, samOrBam)
+        def traceMap = [:]
+        parseFileMap(trace, traceMap) //could be parseFileMap(trace, meta.trace, 'realtime') or parseFileMap(trace, meta, ['realtime','..']) or parseFileMap(trace, meta) to capture all fields
+        [meta+[trace: traceMap], ref, fai, samOrBam]
       }
 
   output:
