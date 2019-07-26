@@ -22,7 +22,7 @@ def allVersions = validators.validateMappersDefinitions(params.mappersDefinition
 validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(allModes.split('\\|') as List)), "${baseDir}/templates")
 
 //Read, sanitize and validate alignment/mapping param sets
-validators.validateMapperParamsDefinitions(params.mapperParamsDefinitions, allVersions)
+validators.validateMapperParamsDefinitions(params.mapperParamsDefinitions, allVersions, allModes)
 
 //Validated now, so gobble up mappers...
 // mappersChannel = Channel.from(params.mappersDefinitions)
@@ -475,6 +475,9 @@ process convertReadCoordinates {
 
 // mappersMapChannel  .view { it -> groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 
+/*
+ This is where we combine
+*/
 convertedCoordinatesReads.mix(readsForAlignment)
 .combine(indices)
 .filter { simmeta, reads, idxmeta, ref, fai, idx ->
@@ -485,7 +488,8 @@ convertedCoordinatesReads.mix(readsForAlignment)
 .combine(mappersParamsChannel)
 .filter { simmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta -> //tool & version check
   [mapper.tool, idxmeta.mapper.tool].every { it == paramsmeta.tool }  \
-  && [mapper.version, idxmeta.mapper.version].every { it in paramsmeta.version }
+  && mapper.version == idxmeta.mapper.version \
+  && mapper.version in paramsmeta.version
 }
 .combine(mapModesChannel)
 .filter { simmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta, mode ->  //map mode check
@@ -504,7 +508,8 @@ convertedCoordinatesReads.mix(readsForAlignment)
     paramsmeta.params
   ]
 }
-.view{ groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+// .view{ groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+// .count()
 .set{ combinedToMap }
 
 
@@ -578,8 +583,8 @@ evaluatedAlignmentsRNF.map { META, JSON ->
   .map {
     file("${params.outdir}").mkdirs()
     outfile = file("${params.outdir}/allstats.json")
-    outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))
-    // outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.tool.name <=>  k2.tool.name} ) ))
+    // outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))
+    outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.mapper.tool <=>  k2.mapper.tool} ) ))
   }
 
 
