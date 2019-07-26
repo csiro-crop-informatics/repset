@@ -4,37 +4,37 @@
 
 
 # Table of Contents <!-- omit in toc -->
-- [Dependencies](#Dependencies)
-- [Preliminaries](#Preliminaries)
-- [Running the pipeline](#Running-the-pipeline)
-  - [Execution profiles](#Execution-profiles)
-    - [Running with docker](#Running-with-docker)
-    - [Running with singularity](#Running-with-singularity)
-    - [Running on a SLURM cluster](#Running-on-a-SLURM-cluster)
-    - [Running on AWS batch](#Running-on-AWS-batch)
-  - [Alignment modes](#Alignment-modes)
-  - [Evaluated aligners](#Evaluated-aligners)
-- [Capturing results and run metadata](#Capturing-results-and-run-metadata)
-- [Experimental pipeline overview](#Experimental-pipeline-overview)
-- [Execution environment](#Execution-environment)
-- [Adding another aligner](#Adding-another-aligner)
-  - [Example](#Example)
-    - [Add indexing template](#Add-indexing-template)
-    - [Add dna2dna (and rna2rna) alignment template](#Add-dna2dna-and-rna2rna-alignment-template)
-    - [Add rna2dna alignment template](#Add-rna2dna-alignment-template)
-    - [(Optional) Add additional alignment parameters](#Optional-Add-additional-alignment-parameters)
-    - [Specify container](#Specify-container)
-- [Per-tool container images and docker automated builds](#Per-tool-container-images-and-docker-automated-builds)
-  - [Setting-up an automated build](#Setting-up-an-automated-build)
-  - [Adding or updating a Dockerfile](#Adding-or-updating-a-Dockerfile)
-- [Report](#Report)
-  - [Rendering outside the pipeline](#Rendering-outside-the-pipeline)
-    - [Using docker](#Using-docker)
-    - [Using singularity](#Using-singularity)
-    - [Natively](#Natively)
-- [Manuscript](#Manuscript)
-  - [Rendering](#Rendering)
-  - [Bibliography](#Bibliography)
+- [Dependencies](#dependencies)
+- [Preliminaries](#preliminaries)
+- [Running the pipeline](#running-the-pipeline)
+  - [Execution profiles](#execution-profiles)
+    - [Running with docker](#running-with-docker)
+    - [Running with singularity](#running-with-singularity)
+    - [Running on a SLURM cluster](#running-on-a-slurm-cluster)
+    - [Running on AWS batch](#running-on-aws-batch)
+  - [Mapping modes](#mapping-modes)
+  - [Evaluated mappers](#evaluated-mappers)
+- [Capturing results and run metadata](#capturing-results-and-run-metadata)
+- [Experimental pipeline overview](#experimental-pipeline-overview)
+- [Execution environment](#execution-environment)
+- [Adding another mapper](#adding-another-mapper)
+    - [Template variables](#template-variables)
+      - [Indexing](#indexing)
+      - [Mapping](#mapping)
+    - [Separate template files (optional)](#separate-template-files-optional)
+  - [Non-core mapping parameters (optional)](#non-core-mapping-parameters-optional)
+  - [Notes on container specification in `conf/mappers.config`](#notes-on-container-specification-in-confmappersconfig)
+- [Per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
+  - [Setting-up an automated build](#setting-up-an-automated-build)
+  - [Adding or updating a Dockerfile](#adding-or-updating-a-dockerfile)
+- [Report](#report)
+  - [Rendering outside the pipeline](#rendering-outside-the-pipeline)
+    - [Using docker](#using-docker)
+    - [Using singularity](#using-singularity)
+    - [Natively](#natively)
+- [Manuscript](#manuscript)
+  - [Rendering](#rendering)
+  - [Bibliography](#bibliography)
 
 # Dependencies
 
@@ -46,16 +46,15 @@
 # Preliminaries
 
 The pipeline consists of several, partly dependent paths
-which facilitate the evaluation of aligners using
+which facilitate the evaluation of mappers using
 either DNA-  or RNA-Seq data, either ~~real~~ (temporarily unavailable) or simulated.
 The paths can be executed separately or in a single run.
 When running separately or re-running the pipeline
 the `-resume` flag ensures that previously computed
 results (or partial results) are re-used.
 
-
-~~Use the `--debug` flag to run the whole pipeline or part of it with reduced input data.~~
-Default execution will simulate, align and evaluate reads from a small dataset (a single chromosome from the genome assembly of *A thaliana*)
+Default execution will simulate, align and evaluate reads from a small dataset (a single chromosome from the genome assembly of *A thaliana*).
+You can use the `--debug` flag to reduce compute requirements in trial runs on the default data set.
 
 
 # Running the pipeline
@@ -63,7 +62,7 @@ Default execution will simulate, align and evaluate reads from a small dataset (
 ## Execution profiles
 
 There are several ways to execute the pipeline, each requires Nextflow and either Docker or Singularity.
-See [nextflow.config](nextflow.config#L56-L92) for available execution profiles, e.g. for local execution this could be
+See [nextflow.config](nextflow.config#L74-L110) for available execution profiles, e.g. for local execution this could be
 
 
 ### Running with docker
@@ -106,23 +105,23 @@ after replacing `your_s3_bucket` with a bucket you have created on S3.
 [**Warning! You will be charged by AWS according to your resource use.**](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/monitoring-costs.html)
 
 
-## Alignment modes
+## Mapping modes
 
 The workflow incorporates three ways of mapping and evaluating reads, `dna2dna`, `rna2rna`, `rna2dna`
 and by default all are executed. To restrict execution to one or two of those,
-you can run the workflow with e.g. `--alnmode dna2dna` or `--alnmode rna2rna|rna2dna`.
+you can run the workflow with e.g. `--mapmode dna2dna` or `--mapmode rna2rna|rna2dna`.
 
-## Evaluated aligners
+## Evaluated mappers
 
 An alignment/mapping tool is included in the evaluation if appropriate templates are included
-as specified below in [Adding another aligner](#Adding-another-aligner).
+as specified below in [Adding another mapper](#adding-another-mapper).
 To execute the workflow for only a subset of the available tools, you can specify e.g.
 
-* `--aligners star` - only evaluate a single aligner
-* `--aligners 'bwa|bowtie2|biokanga'` - evaluate a subset of aligners
-* `--aligners '^((?!bwa).)*$'` - evaluate all but this aligner
+* `--mappers star` - only evaluate a single tool
+* `--mappers 'bwa|bowtie2|biokanga'` - evaluate a subset of tools
+* `--mappers '^((?!bwa).)*$'` - evaluate all but this tool
 
-Other regular expressions can be specified to taylor the list of evaluated aligners.
+Other regular expressions can be specified to taylor the list of evaluated tools.
 
 
 # Capturing results and run metadata
@@ -161,98 +160,104 @@ The last of this calls will trigger minting of a DOI for that release if Zenodo 
 
 Execution environment is captured in `runmeta.json`.
 
-# Adding another aligner
+# Adding another mapper
 
-An aligner may be included for DNA alignment, RNA alignment or both. In each case the same indexing template will be used.
+A mapper may be included for any or all of the mapping modes (`dna2dna, rna2dna, rna2rna`).
+In each case the same indexing template will be used.
 
-After you have cloned this repository:
-
-1. Add an indexing template to [`templates/index`](templates/index) subdirectory.
-2. Add an alignment template to one or more of the following directories if the tool can deal with the relevant alignment mode:
-  * [`templates/dna2dna`](templates/dna2dna)
-  * [`templates/rna2dna`](templates/rna2dna)
-  * [`templates/rna2rna`](templates/rna2rna)
-3. (Optional) Add one or more sets of aligner parameters to [conf/aligners.config](conf/aligners.config) as described [below](#Optional-Add-additional-alignment-parameters)
-4. Update [conf/containers.config](conf/containers.config) by specifying a Docker repository from which an image will be pulled by the pipeline.
-
-
-## Example
-
-Let's be more specific and follow an example. We will add [bowtie2](https://github.com/BenLangmead/bowtie2/releases/tag/v2.3.5).
-
-### Add indexing template
+After you have cloned this repository **add another entry in [`conf/mappers.config`](conf/mappers.config)**, under
 
 ```
-echo \
-'#!/usr/bin/env bash
-
-bowtie2-build --threads ${task.cpus} ${ref} ${ref}
-' > templates/index/bowtie2_index.sh
+params {
+  mappersDefinitions = [
+    //insert here
+  ]
+}
 ```
+
+For example, to add a hypothetical `my_mapper` version `1.0` you might add the following:
+
+```groovy
+[
+  tool: 'my_mapper',
+  version: '1.0',
+  container: 'path/to/docker/repository/my_mapper:1.0',
+  index: 'my_mapper index --input-fasta ${ref} --output-index ${ref}.idx',
+  dna2dna:
+  '''
+  my_mapper align --index ${ref} \
+  -1 ${reads[0]} -2 ${reads[1]} \
+  --threads ${task.cpus} \
+  ${ALIGN_PARAMS} > out.sam
+  '''
+],
+```
+
+Additional script templates can be added for `rna2rna` and `rna2dna` mapping modes.
+Script templates must be wrapped in either single (`'script'`) or triple single (`'''script'''`) quotes.
+If you would rather keep the templates in separate files follow [these instructions](#separate-template-files-optional).
+
+### Template variables
 
 Applicable **nextflow** (not bash!) variables resolve as follows:
 
-* `${task.cpus}` - number of cpu threads available to the alignment process
-* `${ref}` - the reference FASTA path/filename - in this case we use it both to specify the input file and the basename of the generated index
+#### Indexing
 
+* `${task.cpus}` - number of cpu threads available to the indexing process
+* `${ref}` - the reference FASTA filename - we use it both to specify the input file and the basename of the generated index
 
-### Add dna2dna (and rna2rna) alignment template
-
-```
-echo \
-'#!/usr/bin/env bash
-
-bowtie2 \
-  -p ${task.cpus} \
-  -x ${idxmeta.target} \
-  -1 ${reads[0]} \
-  -2 ${reads[1]} \
-  --threads  ${task.cpus} \
-  ${ALIGN_PARAMS} \
-  > out.sam' \
-| tee templates/dna2dna/bowtie2_align.sh \
-> templates/rna/bowtie2_align.sh
-```
-
-Applicable nextflow variables resolve as follows :
+#### Mapping
 
 * `${task.cpus}` - number of logical cpus available to the alignment process
-* `${idxmeta.target}` - basename of the index file
-* `${reads[0]}` and `${reads[1]}` - path/filenames of paired-end reads
-* `${ALIGN_PARAMS}` any additional params passed to the aligner.
-  * Empty by default but one ore more sets of params can be defined in [conf/aligners.config](conf/aligners.config). When multiple sets of params are specified each set is used in separate execution.
+* `${ref}` - basename of the index file (sufficient if aligner uses basename to find multi-file index, otherwise appropriate extension may need to be appended, e.g. `${ref}.idx`).
+* `${reads[0]}` and `${reads[1]}` - filenames of paired-end reads
+* `${ALIGN_PARAMS}` any additional params passed to the aligner
+  * Empty by default but one or more sets of params can be defined in [conf/mapping_params.config](conf/mapping_params.config). When multiple sets of params are specified each set is used in separate execution.
 
 
-### Add rna2dna alignment template
+### Separate template files (optional)
+
+If you would rather keep the templates in separate files rather than embedded in [`conf/mappers.config`](conf/mappers.config)
+you can place each file under the appropriate template directory:
+
+  * [`templates/index`](templates/index)
+  * [`templates/dna2dna`](templates/dna2dna)
+  * [`templates/rna2dna`](templates/rna2dna)
+  * [`templates/rna2rna`](templates/rna2rna)
+
+and instead of including the script template string directly in [`conf/mappers.config`](conf/mappers.config) as we did above, set
+
+* `rna2dna: true,` which will be resolved to `templates/rna2dna/my_mapper.sh`
+
+or, when using a different file name,
+
+* `rna2dna: 'foo_bar.sh',` which will be resolved to `templates/rna2dna/foo_bar.sh`
+
+See the header of [`conf/mappers.config`](conf/mappers.config) for more details and limitations.
 
 
 
-### (Optional) Add additional alignment parameters
+## Non-core mapping parameters (optional)
+
+Add one or more sets of mapping parameters to [conf/mapping_params.config](conf/mapping_params.config),
+this is meant for parameter space exploration and should include any fine tuning params while the template
+should only include core params essential to mapper execution.
 
 
-As mentioned above, fine tuning or exploration of parameter space can be done through addition of parameter sets in [conf/aligners.config](conf/aligners.config) or overriding it at runtime with appropriate YAML or JSON params file via `-params-file filename`. An aligner will be run for each set of params specified.
 
-### Specify container
+## Notes on container specification in `conf/mappers.config`
 
-1. Upload a relevant container image to a docker registry (such as Docker Hub) or [locate an existing one](https://quay.io/repository/biocontainers/bowtie2?tab=tags). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
+You can upload a relevant container image to a docker registry (such as Docker Hub) or locate an existing one [e.g. among  quay biocontainers](https://quay.io/organization/biocontainers). If you opt for an existing one, chose one with a specific version tag and a Dockerfile.
 Alternatively, follow our procedure below for [defining per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
 
-2. Insert container specification
 
-```
-withLabel: bowtie2 {
-  container = 'quay.io/biocontainers/bowtie2:2.3.5--py37he860b03_0'
-}
-```
-within the `process {   }` block in [conf/containers.config](conf/containers.config).
-
-We opt for docker containers which can also be executed using singularity.
-Container images are pulled from docker hub, but nextflow is able to access other registries and also local images, see relevant [nextflow documentation](https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub)
+We opt for Docker containers which can also be executed using Singularity.
+Container images are pulled from Docker Hub, but nextflow is able to access other registries and also local images, see relevant [nextflow documentation](https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub)
 
 # Per-tool container images and docker automated builds
 
 Dockerfiles for individual tools used can be found under `dockerfiles/`.
-This includes various aligners but also other tools used by the pipeline.
+This includes various mappers but also other tools used by the pipeline.
 For each tool (or tool-set) we created a docker hub/cloud repository and configured automated builds.
 
 ## Setting-up an automated build
