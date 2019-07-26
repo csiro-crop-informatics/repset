@@ -24,6 +24,11 @@ validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(al
 //Read, sanitize and validate alignment/mapping param sets
 validators.validateMapperParamsDefinitions(params.mapperParamsDefinitions, allVersions, allModes)
 
+if(params.justvalidate) {
+  log.info "Finished validating input config, exiting. Run without --justvalidate to proceed further."
+  System.exit 0
+}
+
 //Validated now, so gobble up mappers...
 // mappersChannel = Channel.from(params.mappersDefinitions)
 Channel.from(params.mappersDefinitions)
@@ -351,7 +356,7 @@ process rnfSimReads {
 
   when:
     !(mode == "PE" && simulator == "CuReSim") && \
-    (meta.seqtype == 'RNA' || (meta.seqtype == 'DNA' && 'dna2dna'.matches(params.alnmode) ))
+    (meta.seqtype == 'RNA' || (meta.seqtype == 'DNA' && 'dna2dna'.matches(params.mapmode) ))
     // ((meta.seqtype == 'mRNA' && 'rna2rna'.matches(params.alnmode)) || (meta.seqtype == 'DNA' && 'rna2rna'.matches(params.alnmode))
 
 
@@ -446,7 +451,7 @@ process convertReadCoordinates {
     set val(outmeta), file('*.fq.gz') into convertedCoordinatesReads
 
   when:
-    simmeta.seqtype == 'RNA' && 'rna2dna'.matches(params.alnmode) \
+    simmeta.seqtype == 'RNA' && 'rna2dna'.matches(params.mapmode) \
     && simmeta.species == refmeta.species && simmeta.version == refmeta.version
 
   // exec:
