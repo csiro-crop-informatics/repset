@@ -6,6 +6,7 @@
 # Table of Contents <!-- omit in toc -->
 - [Dependencies](#dependencies)
 - [Preliminaries](#preliminaries)
+  - [Note on terminology (mapping vs alignment)](#note-on-terminology-mapping-vs-alignment)
 - [Running the pipeline](#running-the-pipeline)
   - [Execution profiles](#execution-profiles)
     - [Running with docker](#running-with-docker)
@@ -56,6 +57,11 @@ results (or partial results) are re-used.
 Default execution will simulate, align and evaluate reads from a small dataset (a single chromosome from the genome assembly of *A thaliana*).
 You can use the `--debug` flag to reduce compute requirements in trial runs on the default data set.
 
+## Note on terminology (mapping vs alignment)
+
+Terms related to read mapping/alignment (and related such as pseudoalignment and quasi mapping) are not used consistently in bioinformatics in a way which would make many a mathematician cringe.
+We hereby attempt to strictly follow the common convention by consistently propagating these inconsistencies.
+For a much(!) more coherent summary refer to [Lior Pachter's blog post](https://liorpachter.wordpress.com/2015/11/01/what-is-a-read-mapping/).
 
 # Running the pipeline
 
