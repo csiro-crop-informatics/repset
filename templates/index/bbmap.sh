@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-bbmap.sh ref=${ref} Xmx=${task.memory.toMega()}M
+bbmap.sh ref=${ref} Xmx=${task.memory.toMega()}M threads=${task.cpus}
