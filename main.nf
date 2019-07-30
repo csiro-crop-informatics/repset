@@ -10,6 +10,7 @@ jsonGenerator = new groovy.json.JsonGenerator.Options()
                 .build()
 
 
+
 //Input validation specified elswhere
 def validators = new GroovyShell().parse(new File("${baseDir}/groovy/Validators.groovy"))
 
@@ -316,6 +317,7 @@ process indexGenerator {
   //   [['RNA','rna2rna'],['DNA','rna2dna'],['DNA','dna2dna']].any { refmeta.seqtype == it[0] && mapper.containsKey(it[1]) && it[1].matches(params.mapmode) }
 
   exec:
+    // println "Ref size = ${ref.size()}"
     //meta = [toolmodes: alignermeta.modes, tool: "${alignermeta.tool}", target: "${ref}"]+refmeta.subMap(['species','version','seqtype'])
     // meta = [mapper: mapper, target: refmeta+[file: ref]]
     // println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(mapper+refmeta+[ref: ref])))
@@ -519,10 +521,13 @@ convertedCoordinatesReads.mix(readsForAlignment)
 
 // .view{ groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 
+
 process mapSimulatedReads {
   label 'align'
   container { "${meta.mapper.container}" }
   tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
+  // time = { check_max( (maxMapTime(meta.query.nreads)) * task.attempt, 'time' ) }
+  // time = { check_max( (params.debug ? 10.m : maxMapTime(meta.query.nreads)) * task.attempt, 'time' ) }
 
   input:
     set val(meta), file(reads), file(ref), file(fai), file('*'), val(run), val(ALIGN_PARAMS) from combinedToMap
@@ -530,8 +535,11 @@ process mapSimulatedReads {
   output:
     set val(meta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated
 
+
   script:
     def binding = [ref: ref, reads: reads, task: task.clone(), ALIGN_PARAMS: ALIGN_PARAMS]
+    // println meta.query.nreads
+    // println task.time
     if(run.template) { //if template file specified / declared
       template run.template //either default or explicit template file name
     } else { //indexing script defined in config
