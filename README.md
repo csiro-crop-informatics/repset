@@ -15,6 +15,7 @@
     - [Running on AWS batch](#running-on-aws-batch)
   - [Mapping modes](#mapping-modes)
   - [Evaluated mappers](#evaluated-mappers)
+- [Computational resources](#computational-resources)
 - [Capturing results and run metadata](#capturing-results-and-run-metadata)
 - [Experimental pipeline overview](#experimental-pipeline-overview)
 - [Execution environment](#execution-environment)
@@ -128,6 +129,36 @@ To execute the workflow for only a subset of the available tools, you can specif
 * `--mappers '^((?!bwa).)*$'` - evaluate all but this tool
 
 Other regular expressions can be specified to taylor the list of evaluated tools.
+
+# Computational resources
+
+Resources required for running the workflow can be substantial and will vary greatly
+depending on multiple factors, such as
+* input genomes sizes
+* simulated read coverage
+* number and choice of mappers evaluated
+* mapping mode(s) selected
+
+We have empirically derived simple functions to allow resource requests
+auto-scaling for key processes such as genome indexing and read mapping.
+These depend on either the reference size or the number of reads and
+were based on tools which were slowest or required the most memory.
+Clearly if e.g. a slower tool is added, these will need to be revised.
+However, failed tasks are re-submitted with increased resources as long as
+valid comparisons can be made between different tools' results.
+For that reason, CPUs and memory limits are not increased on re-submission
+of the mapping process but allowed maximum wall-clock time is.
+In the case of the indexing process, the initial time and memory limits
+are increased on each task re-submission as indexing performance is not
+well suited for comparisons anyway. For example, many indexing processes
+are single-threaded, in other cases it might make sense to skip the indexing
+process and allow for on-the-fly index generation.
+Input size based as well as re-submission based resource auto-scaling
+is subject to constraints which may need to be adjusted for particular
+compute environment either at run time (e.g.  `--max_memory 64.GB --max_cpus 32 --max_time 72.h`)
+or by editing (`conf/requirements.config`)[conf/requirements.config]
+where the dynamic scaling functions can also be adjusted.
+
 
 
 # Capturing results and run metadata
