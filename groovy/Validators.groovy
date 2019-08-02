@@ -158,3 +158,27 @@ def validateMapperParamsDefinitions (mapperParams, allVersions, allModes) {
   // println(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(validationMaps)))
   // System.exit 0
 }
+
+
+
+
+def validateInputDefinitions (references, allRequired, optional) {
+  def validated = []
+  references.each { rec ->
+    // println(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(rec)))
+    rec.each {k, v ->
+      if(!(k in (allRequired+optional))) {
+        System.err.println """Validation error: unexpected field in input definition:
+          Offending field: ${k}
+          Offending record: ${rec}"""
+        System.exit 1
+      }
+    }
+    if(!allRequired.every { it in rec.keySet() } ) {
+      System.err.println """Validation error: required field not set.
+        Required fields: ${allRequired}
+        Offending record: ${rec}"""
+      System.exit 1
+    }
+  }
+}

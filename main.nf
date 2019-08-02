@@ -24,6 +24,10 @@ validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(al
 //Read, sanitize and validate alignment/mapping param sets
 validators.validateMapperParamsDefinitions(params.mapperParamsDefinitions, allVersions, allModes)
 
+//Parse, sanitize and validate input dataset definitions
+def requiredInputFields = ['species','version','fasta','seqtype']
+validators.validateInputDefinitions(params.references, requiredInputFields, ['gff'])
+
 if(params.justvalidate) {
   log.info "Finished validating input config, exiting. Run without --justvalidate to proceed further."
   System.exit 0
@@ -110,59 +114,63 @@ if (params.help){
  2. Conversion would not have been necessary and script could point directly to meta.fasta
     but local files might not be on paths automatically mounted in the container.
 */
-// referencesDNA = Channel.from(params.referencesDNA).map {
-//   (it.fasta).matches("^(https?|ftp)://.*\$") ? [it, file(workDir+'/REMOTE')] : [it, file(it.fasta)]
-// }
-fastaChn = Channel.create()
-gffChn = Channel.create()
+Channel.from(params.references)
+.combine(Channel.from('fasta','gff')) //duplicate each reference record
+.filter { meta, fileType -> meta.containsKey(fileType)} //exclude gff record if no gff declared
+.tap { refsToStage } //download if URL
+.filter { meta, fileType ->  !(meta."${fileType}").isURL() } //Exclude URLs
+.map { meta, fileType ->  [meta, fileType, file(meta."${fileType}")] } //file declaration required for correct binding of source path
+// .view { it -> groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+.set { refsToStageLocal }
 
-Channel.from(params.references).separate (fastaChn, gffChn) { it ->
-  onlyFasta = it.clone()
-  onlyFasta.remove('gff')
-  onlyGff = it.clone()
-  onlyGff.remove('fasta')
-  fasta = [onlyFasta, it.fasta.isURL() ? file(workDir+'/REMOTE1') : file(it.fasta)]
-  it.containsKey('gff') ? [fasta, [onlyGff, it.gff.isURL() ? file(workDir+'/REMOTE2') : file(it.gff)]] : [fasta, [onlyGff, file(workDir+'/NULL')]]
-}
 
-process stageInputFile {
+process stageRemoteInputFile {
   tag{meta.subMap(['species','version'])+[fileType: fileType]}
-
-  //as above, storeDir not mounted accessible
-  // storeDir { (infile.name).matches("REMOTE") ? (executor == 'awsbatch' ? "${params.outdir}/downloaded" : "downloaded") : null }
-  // storeDir { (infile.name).matches("REMOTE.*") ? "${params.outdir}/downloaded" : null }
-  storeDir { (infile.name).matches("REMOTE.*") ? "${workDir}/downloaded" : null } //- perhaps more robust as workdir is mounted in singularity unlike outdir?
+  errorStrategy 'finish'
+  storeDir {  "${workDir}/downloaded"  } //- perhaps more robust as workdir is mounted in singularity unlike outdir?
 
   input:
-    set val(meta), file(infile) from fastaChn.mix(gffChn)
+    set val(meta), val(fileType) from refsToStage //fastaChn.mix(gffChn)
 
   output:
-    set val(outmeta), file(outfile)  into stagedFiles
-    // set val(outmeta), file(outfile), val(meta.seqtype)  into stagedFiles
+    set val(outmeta), file(outfile)  into stagedFilesRemote
 
   when:
-    !infile.name.matches('NULL')
+    (meta."${fileType}").isURL()
 
   script:
     basename=getTagFromMeta(meta)
-    // println(prettyPrint(toJson(meta)))
-    fileType = meta.containsKey('fasta') ? 'fasta' : 'gff'
     outfile =  "${basename}.${fileType}"
     outmeta = meta.subMap(['species', 'version','seqtype'])
-    if(infile.name.matches("REMOTE.*")) { //REMOTE FILE
-      remoteFileName = meta."${fileType}"
-      decompress = remoteFileName.matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
-      """curl ${remoteFileName} ${decompress} > ${outfile}"""
-    } else if((infile.name).matches("^.*\\.gz\$")){ //LOCAL GZIPPED
+    fpath = meta."${fileType}"
+    decompress = fpath.matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
+    """curl ${fpath} ${decompress} > ${outfile}"""
+}
+
+process stageLocalInputFile {
+  tag{meta.subMap(['species','version'])+[fileType: fileType]}
+  errorStrategy 'finish'
+
+  input:
+    set val(meta), val(fileType), file(infile) from refsToStageLocal
+
+  output:
+    set val(outmeta), file(outfile)  into stagedFilesLocal
+
+  script:
+    basename=getTagFromMeta(meta)
+    outfile = "${basename}.${fileType}"
+    outmeta = meta.subMap(['species', 'version','seqtype'])
+    if((infile.name).matches("^.*\\.gz\$")){ //GZIPPED
       """gunzip --stdout  ${infile}  > ${outfile} """
-    } else { //LOCAL FLAT
+    } else { //FLAT
       """cp -s  ${infile} ${outfile}"""
     }
 }
 
 // referencesOnly = Channel.create()
 // referencesForTranscriptomeExtraction = Channel.create()
-stagedFiles
+stagedFilesRemote.mix(stagedFilesLocal)
   // .view()
   .groupTuple() //match back fasta with it's gffif available
   // .view { meta, files, seqtype -> "meta: ${meta}\nfiles: ${files}\nseqtype: ${seqtype}"}
@@ -172,6 +180,8 @@ stagedFiles
   // }
   // .view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
   .set { stagedReferences }
+
+
 
 
 process faidxGenomeFASTA {
@@ -404,7 +414,7 @@ process rnfSimReads {
 }
 
 //extract simulation stats from file (currently number of reads only), reshape and split to different channels
-readsForCoordinateConversion = Channel.create()
+// readsForCoordinateConversion = Channel.create()
 simulatedReads.map { simmeta, ref, simStats, simReads ->
     // simStats.splitEachLine("=", { record ->
     //   if(record.size() > 1) {
@@ -415,7 +425,7 @@ simulatedReads.map { simmeta, ref, simStats, simReads ->
     parseFileMap(simStats, simmeta)
     new Tuple(simmeta, ref, simReads)
   }
-  .tap ( readsForCoordinateConversion )
+  .tap { readsForCoordinateConversion }
   .map { simmeta, ref, simReads  ->
     new Tuple(simmeta, simReads)
   }
