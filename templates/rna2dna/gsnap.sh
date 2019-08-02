@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-gsnap \
+GSNAP=\$(awk '{tot+=\$2};END{print tot < 2^32 ? "gsnap" : "gsnapl" }' ${fai});
+\${GSNAP} \
   -D genomeDir \
   -d GENOME \
   -A sam \
