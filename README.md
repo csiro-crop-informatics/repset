@@ -10,8 +10,7 @@
 - [Running the pipeline](#running-the-pipeline)
   - [Execution profiles](#execution-profiles)
     - [Running with docker](#running-with-docker)
-    - [Running with singularity](#running-with-singularity)
-    - [Running on a SLURM cluster](#running-on-a-slurm-cluster)
+    - [Running with singularity (local or Slurm cluster)](#running-with-singularity-local-or-slurm-cluster)
     - [Running on AWS batch](#running-on-aws-batch)
   - [Mapping modes](#mapping-modes)
   - [Evaluated mappers](#evaluated-mappers)
@@ -40,7 +39,7 @@
 
 # Dependencies
 
-* Nextflow [![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.04.0-orange.svg)](https://www.nextflow.io/)
+* Nextflow [![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.04.0-orange.svg)](https://www.nextflow.io/) - you may consider using the exact version of Nextflow by setting the appropriate environmental variable `export NXF_VER=19.04.0` before running the workflow.
 * and
   * either Singularity [![Singularity](https://img.shields.io/badge/Singularity-%E2%89%A53.1.1-orange.svg)](https://www.sylabs.io/singularity/)
    * or Docker
@@ -55,8 +54,7 @@ When running separately or re-running the pipeline
 the `-resume` flag ensures that previously computed
 results (or partial results) are re-used.
 
-Default execution will simulate, align and evaluate reads from a small dataset (a single chromosome from the genome assembly of *A thaliana*).
-You can use the `--debug` flag to reduce compute requirements in trial runs on the default data set.
+Default execution will simulate, align and evaluate reads from a few small datasets defined in [`conf/simulations.config`](conf/simulations.config).
 
 ## Note on terminology (mapping vs alignment)
 
@@ -69,7 +67,7 @@ For a much(!) more coherent summary refer to [Lior Pachter's blog post](https://
 ## Execution profiles
 
 There are several ways to execute the pipeline, each requires Nextflow and either Docker or Singularity.
-See [nextflow.config](nextflow.config#L74-L110) for available execution profiles, e.g. for local execution this could be
+See [nextflow.config](nextflow.config) for available execution profiles (or to add your own!), e.g. for local execution this could be
 
 
 ### Running with docker
@@ -78,22 +76,49 @@ See [nextflow.config](nextflow.config#L74-L110) for available execution profiles
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
 ```
 
-### Running with singularity
+### Running with singularity (local or Slurm cluster)
+
+Tu run the workflow with Singularity on
+
+* a local machine,
+* a standalone server
+* in an interactive session on a cluster
+
+First make sure that recent version of Singularity is available and then run
 
 ```
 nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
 ```
 
-### Running on a SLURM cluster
+On a Slurm cluster you can run
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity,singularitymodule
+nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity
 ```
 
-Note:
-1. `singularitymodule` profile is used to ensure singularity is available on each execution node by loading an appropriate module.
-This may have to be adapted for your system in [nextflow.config](https://github.com/csiro-crop-informatics/biokanga-manuscript/blob/6d0be3f77603f67d13ceeee18de83c517e39db96/nextflow.config#L82).
-2. Singularity must also be available on the node where you execute the pipeline, e.g. by running `module load singularity/3.2.1` prior to running the pipeline.
+Note! Multiple container images will be pulled in parallel from Docker Hub (and potentially other repositories.
+A [bug](https://github.com/nextflow-io/nextflow/issues/1210) (?) in singularity may cause the parallel processing to fail with an error message similar to
+
+```
+Error executing process > 'indexGenerator ([[species:Saccharomyces_cerevisiae, version:R64-1-1.44, seqtype:DNA], [tool:hisat2, version:2.1.0]])'
+
+Caused by:
+  Failed to pull singularity image
+  command: singularity pull  --name rsuchecki-hisat2-2.1.0_4cb1d4007322767b562e98f69179e8ebf6d31fb1.img docker://rsuchecki/hisat2:2.1.0_4cb1d4007322767b562e98f69179e8ebf6d31fb1 > /dev/null
+  status : 255
+```
+
+Until this is [fixed](https://github.com/sylabs/singularity/issues/3634), our workaround is to run the following prior to running the main script, run
+
+```
+nextflow run csiro-crop-informatics/biokanga-manuscript/pull_containers.nf
+```
+
+which will pull most of the containers used by the workflow (the remaining ones are unlikely to be pulled in parallel).
+
+Note that singularity must be available on the node where you execute the pipeline, e.g. by running `module load singularity/3.2.1` prior to running the pipeline.
+It is also required on each compute node. Your cluster configuration should ensure that,
+if it does not, the additional execution profile `singularitymodule` can be modified in [nextflow.config](nextflow.config) to match your singularity module name and used at run-time.
 
 
 ### Running on AWS batch
