@@ -558,10 +558,10 @@ process evaluateAlignmentsRNF {
   tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
 
   input:
-    set val(meta), file(ref), file(fai), file(samOrBam) from alignedSimulated.map { meta, ref, fai, samOrBam, trace ->
+    set val(meta), file(ref), file(fai), file(samOrBam) from alignedSimulated.map { mapmeta, ref, fai, samOrBam, trace ->
         def traceMap = [:]
         parseFileMap(trace, traceMap) //could be parseFileMap(trace, meta.trace, 'realtime') or parseFileMap(trace, meta, ['realtime','..']) or parseFileMap(trace, meta) to capture all fields
-        [meta+[trace: traceMap], ref, fai, samOrBam]
+        [mapmeta+[trace: traceMap], ref, fai, samOrBam]
       }
 
   output:
@@ -590,8 +590,7 @@ process evaluateAlignmentsRNF {
 **/
 def slurper = new groovy.json.JsonSlurper()
 evaluatedAlignmentsRNF.map { META, JSON ->
-      META.evaluation = slurper.parseText(JSON.text)
-      META
+      [META+[evaluation: slurper.parseText(JSON.text)]]
   }
   .collect()
   .map {
