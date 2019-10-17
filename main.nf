@@ -219,7 +219,7 @@ process faidxGenomeFASTA {
 //   .into {referencesForAligners; references4rnfSimReads}
 
 
-process extarctTranscripts {
+process extractTranscripts {
   echo true
   label 'gffread'
   label 'slow'
