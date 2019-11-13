@@ -155,6 +155,19 @@ To execute the workflow for only a subset of the available tools, you can specif
 
 Other regular expressions can be specified to taylor the list of evaluated tools.
 
+## Alternative input data sets
+
+To run the pipeline with alternative input data you can use the `-params-file` flag
+to specify a JSON or a YAML file to overwrite `conf/simulations.config`,
+for example 
+
+```
+nextflow run main.nf -params-file path/to/conf/simulations.json
+```
+
+
+Alternatively, you can simply edit the content of conf/simulations.config`.
+
 # Computational resources
 
 Resources required for running the workflow can be substantial and will vary greatly
