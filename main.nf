@@ -91,8 +91,8 @@ def helpMessage() {
   log.info"""
   Usage:
 
-  nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
-  nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
+  nextflow run csiro-crop-informatics/repset -profile singularity
+  nextflow run csiro-crop-informatics/repset -profile docker
 
   Default params:
   """.stripIndent()

@@ -1,5 +1,5 @@
-[![Latest GitHub release](https://img.shields.io/github/release/csiro-crop-informatics/biokanga-manuscript.svg?style=flat-square&logo=github&label=latest%20release)](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases)
-[![GitHub commits since latest release](https://img.shields.io/github/commits-since/csiro-crop-informatics/biokanga-manuscript/latest.svg?style=flat-square&logo=github)](https://github.com/csiro-crop-informatics/biokanga-manuscript/releases)
+[![Latest GitHub release](https://img.shields.io/github/release/csiro-crop-informatics/repset.svg?style=flat-square&logo=github&label=latest%20release)](https://github.com/csiro-crop-informatics/repset/releases)
+[![GitHub commits since latest release](https://img.shields.io/github/commits-since/csiro-crop-informatics/repset/latest.svg?style=flat-square&logo=github)](https://github.com/csiro-crop-informatics/repset/releases)
 [![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.04.0-orange.svg)](https://www.nextflow.io/)
 
 
@@ -73,7 +73,7 @@ See [nextflow.config](nextflow.config) for available execution profiles (or to a
 ### Running with docker
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile docker
+nextflow run csiro-crop-informatics/repset -profile docker
 ```
 
 ### Running with singularity (local or Slurm cluster)
@@ -87,13 +87,13 @@ Tu run the workflow with Singularity on
 First make sure that recent version of Singularity is available and then run
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile singularity
+nextflow run csiro-crop-informatics/repset -profile singularity
 ```
 
 On a Slurm cluster you can run
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript -profile slurm,singularity
+nextflow run csiro-crop-informatics/repset -profile slurm,singularity
 ```
 
 Note! Multiple container images will be pulled in parallel from Docker Hub (and potentially other repositories.
@@ -111,7 +111,7 @@ Caused by:
 Until this is [fixed](https://github.com/sylabs/singularity/issues/3634), our workaround is to run the following prior to running the main script, run
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript/pull_containers.nf
+nextflow run csiro-crop-informatics/repset/pull_containers.nf
 ```
 
 which will pull most of the containers used by the workflow (the remaining ones are unlikely to be pulled in parallel).
@@ -126,7 +126,7 @@ if it does not, the additional execution profile `singularitymodule` can be modi
 If you are new to AWS batch and/or nextflow, follow [this blog post](https://antunderwood.gitlab.io/bioinformant-blog/posts/running_nextflow_on_aws_batch/), once you are done, or you already use AWS batch, simply run
 
 ```
-nextflow run csiro-crop-informatics/biokanga-manuscript \
+nextflow run csiro-crop-informatics/repset \
   -profile awsbatch \
   -work-dir s3://your_s3_bucket/work \
   --outdir s3://your_s3_bucket/results
@@ -443,7 +443,7 @@ cd report && ./render.R
 # Manuscript
 
 Manuscript source is under `manuscript/` sub directory on `manuscript` branch which should not be merged into master.
-Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`manuscript/biokanga-manuscript.Rmd`](blob/manuscript/manuscript/biokanga-manuscript.Rmd) file.
+Application note is drafted in [RMarkdown](https://rmarkdown.rstudio.com/) in [`manuscript/repset.Rmd`](blob/manuscript/manuscript/repset.Rmd) file.
 RMarkdown is well integrated in RStudio, but can be written/edited in a text editor of your choice.
 
 ## Rendering
