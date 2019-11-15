@@ -1,7 +1,8 @@
 [![Latest GitHub release](https://img.shields.io/github/release/csiro-crop-informatics/repset.svg?style=flat-square&logo=github&label=latest%20release)](https://github.com/csiro-crop-informatics/repset/releases)
 [![GitHub commits since latest release](https://img.shields.io/github/commits-since/csiro-crop-informatics/repset/latest.svg?style=flat-square&logo=github)](https://github.com/csiro-crop-informatics/repset/releases)
-[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.04.0-orange.svg)](https://www.nextflow.io/)
+[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.10.0-orange.svg)](https://www.nextflow.io/)
 
+*REPSET* or *RREPSET* or *R²EPSET* is a *R*eproducible, *R*eusable, *E*xtensible, *P*ortable and *S*calable *E*valuation *T*ool for short read aligners
 
 # Table of Contents <!-- omit in toc -->
 - [Dependencies](#dependencies)
