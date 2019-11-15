@@ -40,7 +40,7 @@
 
 # Dependencies
 
-* Nextflow [![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.04.0-orange.svg)](https://www.nextflow.io/) - you may consider using the exact version of Nextflow by setting the appropriate environmental variable `export NXF_VER=19.04.0` before running the workflow.
+* Nextflow [![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.10.0-orange.svg)](https://www.nextflow.io/) - you may consider using the exact version of Nextflow by setting the appropriate environmental variable `export NXF_VER=19.10.0` before running the workflow.
 * and
   * either Singularity [![Singularity](https://img.shields.io/badge/Singularity-%E2%89%A53.1.1-orange.svg)](https://www.sylabs.io/singularity/)
    * or Docker
@@ -210,9 +210,9 @@ These can be simply collected from the output directories but for full traceabil
 1. Select a tagged revision or add a tag (adhering to the usual semantic versioning approach)
 2. Generate a [Git Hub access token](https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line)
    which will allow the pipeline to create releases in this or a forked repository,
-   when creating the token it suffices to select only the following scope:
+   when creating the token it should suffice to select only the following scope:
    > `public_repo`   Access public repositories
-3. Make the access token accessible as an environmental variable e.g. `GH_TOKEN='your-token-goes-here'`
+3. Make the access token accessible as an environmental variable e.g. `export GH_TOKEN='your-token-goes-here'`
 4. Run the pipeline from the remote repository, specifying
     - the required revision  e.g. `-revision v0.8.3`
     - the `--release` flag
