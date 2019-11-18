@@ -13,7 +13,7 @@ def gitHubRelease(Logger log, Map args) {
   }
 
   //CREATE RELEASE
-  responseMap = gitHubApiCall([
+  responseMap = gitHubApiCall(log, [
     GH_TOKEN: GH_TOKEN, method: 'POST', url:"https://api.github.com/repos/${args.REPO}/releases"  ,
     message: $/{"tag_name": "${args.RELEASE_TAG}", "target_commitish" : "${args.COMMIT}", "name":"${args.RELEASE_NAME}","body":"${args.RELEASE_BODY}", "draft": true }/$
   ])
