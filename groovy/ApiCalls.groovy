@@ -43,7 +43,7 @@ def gitHubRelease(Logger log, Map args) {
 
 }
 
-def gitHubApiCall(Map args) {
+def gitHubApiCall(Logger log, Map args) {
    HttpURLConnection connection =(HttpURLConnection)  new URL(args.url).openConnection();
     connection.setRequestProperty("Authorization","token ${args.GH_TOKEN}")
     connection.setRequestMethod(args.method)
