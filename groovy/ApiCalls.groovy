@@ -1,14 +1,15 @@
 import groovy.json.*
+import ch.qos.logback.classic.Logger
 
-def gitHubRelease(Map args) {
+def gitHubRelease(Logger log, Map args) {
   GH_TOKEN = System.getenv("GH_TOKEN")
 
   if(GH_TOKEN == null) {
-    System.err.println "GH_TOKEN not set, unable to create GH release"
+    log.error "GH_TOKEN not set, unable to create GH release"
     return
   } else {
-    println "GH_TOKEN found, attempting to create a GH release"
-    println args
+    log.info "GH_TOKEN found, attempting to create a GH release"
+    log.info args.toString()
   }
 
   //CREATE RELEASE
@@ -53,19 +54,19 @@ def gitHubApiCall(Map args) {
     } else if (args.containsKey('payload')) {
       connection.getOutputStream().write(args.payload);
     } else {
-      System.err.println('Either JSON control message or payload (file content) is required for the call, terminating')
+      log.error ('Either JSON control message or payload (file content) is required for the call, terminating')
       connection.disconnect();
       System.exit(1)
     }
     int postRC = connection.getResponseCode();
-    println(postRC + " [${args.url}]");
+    log.info(postRC + " [${args.url}]");
     if(postRC >= 200 && postRC <= 202) { //201 == created
         response  = connection.getInputStream().getText()
         jsonSlurper = new JsonSlurper()
         respMap = jsonSlurper.parseText(response)
         return respMap
     } else {
-      System.err.println connection.getErrorStream().getText()
+      log.error connection.getErrorStream().getText()
       return null
     }
 }
