@@ -128,7 +128,12 @@ Channel.from(params.references)
 process stageRemoteInputFile {
   tag{meta.subMap(['species','version'])+[fileType: fileType]}
   errorStrategy 'finish'
-  storeDir {  "${workDir}/downloaded"  } //- perhaps more robust as workdir is mounted in singularity unlike outdir?
+  /*
+  storeDir can be problematic on s3 - leads to "Missing output file(s)" error
+  workDir should be more robust as it is mounted in singularity unlike outdir?
+  */
+  storeDir { executor == 'awsbatch' ? null : "${workDir}/downloaded" } 
+
 
   input:
     set val(meta), val(fileType) from refsToStage //fastaChn.mix(gffChn)
