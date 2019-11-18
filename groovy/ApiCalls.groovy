@@ -34,11 +34,11 @@ def gitHubRelease(Logger log, Map args) {
 
     //Displayed and remote file name could be customized using alternative '?label=' and '?name='
     payload = f.getBytes()
-    uploadResponseMap = gitHubApiCall([GH_TOKEN: GH_TOKEN, method: 'POST', url:"${uploadUrl}?name=${f.name}&label=${f.name}", payload: payload, type: type ])
+    uploadResponseMap = gitHubApiCall(log, [GH_TOKEN: GH_TOKEN, method: 'POST', url:"${uploadUrl}?name=${f.name}&label=${f.name}", payload: payload, type: type ])
   }
 
   //FINALIZE RELEASE
-  finalResponseMap = gitHubApiCall([GH_TOKEN: GH_TOKEN, method: 'POST', url:"https://api.github.com/repos/${args.REPO}/releases/${relaeseId}", message: $/{"draft": false }/$ ])
+  finalResponseMap = gitHubApiCall(log, [GH_TOKEN: GH_TOKEN, method: 'POST', url:"https://api.github.com/repos/${args.REPO}/releases/${relaeseId}", message: $/{"draft": false }/$ ])
   //println(JsonOutput.prettyPrint(JsonOutput.toJson(finalResponseMap)))
 
 }
