@@ -1,6 +1,6 @@
 [![Latest GitHub release](https://img.shields.io/github/release/csiro-crop-informatics/repset.svg?style=flat-square&logo=github&label=latest%20release)](https://github.com/csiro-crop-informatics/repset/releases)
 [![GitHub commits since latest release](https://img.shields.io/github/commits-since/csiro-crop-informatics/repset/latest.svg?style=flat-square&logo=github)](https://github.com/csiro-crop-informatics/repset/releases)
-[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.10.0-orange.svg)](https://www.nextflow.io/)
+[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.10.0-orange.svg?style=flat-square)](https://www.nextflow.io/)
 
 *REPSET* or *RREPSET* or *R²EPSET* is a *R*eproducible, *R*eusable, *E*xtensible, *P*ortable and *S*calable *E*valuation *T*ool for short read aligners
 
@@ -15,6 +15,7 @@
     - [Running on AWS batch](#running-on-aws-batch)
   - [Mapping modes](#mapping-modes)
   - [Evaluated mappers](#evaluated-mappers)
+  - [Alternative input data sets](#alternative-input-data-sets)
 - [Computational resources](#computational-resources)
 - [Capturing results and run metadata](#capturing-results-and-run-metadata)
 - [Experimental pipeline overview](#experimental-pipeline-overview)
@@ -130,10 +131,15 @@ If you are new to AWS batch and/or nextflow, follow [this blog post](https://ant
 nextflow run csiro-crop-informatics/repset \
   -profile awsbatch \
   -work-dir s3://your_s3_bucket/work \
-  --outdir s3://your_s3_bucket/results
 ```
 
-after replacing `your_s3_bucket` with a bucket you have created on S3.
+after replacing `your_s3_bucket` with a bucket you have created on S3. 
+
+To reduce potential connectivity issues you may consider running the workflow from an EC2 instance. 
+This may guide your decision on where the result file(s) should be placed.
+If you wish to deposit the result file(s) on `s3`, you can specify e.g. `--outdir s3://your_s3_bucket/results`,
+otherwise you can find them under `./results`.
+
 
 [**Warning! You will be charged by AWS according to your resource use.**](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/monitoring-costs.html)
 
@@ -207,15 +213,31 @@ Each pipeline run generates a number of files including
 * run metadata reflecting information about the pipeline version, software and compute environment etc.
 
 These can be simply collected from the output directories but for full traceability of the results, the following procedure is preferable:
-1. Select a tagged revision or add a tag (adhering to the usual semantic versioning approach)
-2. Generate a [Git Hub access token](https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line)
+
+1. Fork this repository ()
+2. Select a tagged revision or add a tag (adhering to the usual semantic versioning approach)
+3. Generate a [Git Hub access token](https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line)
    which will allow the pipeline to create releases in this or a forked repository,
    when creating the token it should suffice to select only the following scope:
    > `public_repo`   Access public repositories
-3. Make the access token accessible as an environmental variable e.g. `export GH_TOKEN='your-token-goes-here'`
+   
+   (assuming your fork of this repo remains public)
+
+4. Make the access token accessible as an environmental variable 
 4. Run the pipeline from the remote repository, specifying
-    - the required revision  e.g. `-revision v0.8.3`
+    - the required revision  e.g. `-revision v0.9.6`
     - the `--release` flag
+    - the appropriate `-profile` 
+
+
+For example, 
+
+```
+GH_TOKEN='your-token-goes-here' nextflow run \
+  user-or-organisation-name/repset-fork-name \
+  -revision v0.9.6 \
+  --release
+```
 
 On successful completion of the pipeline a series of API calls will be made to
 
