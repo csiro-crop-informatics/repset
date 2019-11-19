@@ -725,8 +725,7 @@ workflow.onComplete {
     runmeta['java']['Version']  = System.getProperty("java.version")
 
     runmeta['workflow'] = workflow.getProperties()
-    // runmeta['params'] = params //WARNING - these can be overwritten in main.nf
-    // runmeta['params']['note'] = "params can be overwritten in ${workflow.scriptName}"
+    runmeta['params'] = params
 
     // println  !(runmeta['workflow']['nextflow'] instanceof java.util.LinkedHashMap)
 
