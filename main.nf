@@ -756,7 +756,7 @@ workflow.onComplete {
 
   // IF --release requested by the user and execution from GH repo
   if(params.release && workflow.repository && workflow.commitId && workflow.revision && workflow.scriptName == 'main.nf') {
-    if(workflow.revision ==~ /^v?([0-9]+)\.([0-9]+)\.?([0-9]+)?$/ ) {
+    //if(workflow.revision ==~ /^v?([0-9]+)\.([0-9]+)\.?([0-9]+)?$/ ) {
       GroovyShell shell = new GroovyShell()
       def apiCalls = shell.parse(new File("$baseDir/groovy/ApiCalls.groovy"))
 
@@ -774,10 +774,10 @@ workflow.onComplete {
         RELEASE_NAME: "${workflow.revision} - results and metadata for run '${workflow.runName}'",
         RELEASE_BODY: "Release created and artefacts uploaded for run '${workflow.runName}', session ID ${workflow.sessionId}, commit ${workflow.commitId}, see assets for more details."
       ]
-      apiCalls.gitHubRelease(log, releaseArgs, params.draft)
-    } else {
-      log.warn "Automated GH release generation only aimed at semantically tagged revisions (e.g. v1.5.4), current revision: ${workflow.revision}"
-      log.warn "Note that this restriction can be lifted without adversely affecting functionality"
-    }
+      apiCalls.gitHubRelease(log, releaseArgs)
+    //} else {
+    //  log.warn "Automated GH release generation only aimed at semantically tagged revisions (e.g. v1.5.4), current revision: ${workflow.revision}"
+    //  log.warn "Note that this restriction can be lifted without adversely affecting functionality"
+    //}
   }
 }
