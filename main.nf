@@ -725,8 +725,7 @@ workflow.onComplete {
     runmeta['java']['Version']  = System.getProperty("java.version")
 
     runmeta['workflow'] = workflow.getProperties()
-    // runmeta['params'] = params //WARNING - these can be overwritten in main.nf
-    // runmeta['params']['note'] = "params can be overwritten in ${workflow.scriptName}"
+    runmeta['params'] = params
 
     // println  !(runmeta['workflow']['nextflow'] instanceof java.util.LinkedHashMap)
 
@@ -754,11 +753,21 @@ workflow.onComplete {
     // evaluate(new File("$baseDir/conf/ApiCalls.groovy"))
     // apiCalls = new ApiCalls()
 
+
+  // workflow.repository = 'rsuchecki/repset'
+  // workflow.commitId = 'c9ac00dfa9b67b00e00a9bc71063b6bc76675d36'
+  // workflow.revision = 'master'
   // IF --release requested by the user and execution from GH repo
   if(params.release && workflow.repository && workflow.commitId && workflow.revision && workflow.scriptName == 'main.nf') {
     //if(workflow.revision ==~ /^v?([0-9]+)\.([0-9]+)\.?([0-9]+)?$/ ) {
       GroovyShell shell = new GroovyShell()
       def apiCalls = shell.parse(new File("$baseDir/groovy/ApiCalls.groovy"))
+
+      // def instant = Instant.now() 
+      // println instant
+      // def utc =  LocalDateTime.ofInstant(instant, ZoneOffset.UTC)
+      // def local = LocalDateTime.ofInstant(instant, ZoneId.systemDefault())
+      def formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmssx");
 
       releaseArgs = [
         REPO : workflow.repository.replaceFirst("^(http[s]?://github\\.com/|git@github\\.com:)","").replaceFirst("\\.git\$",""),
@@ -770,11 +779,21 @@ workflow.onComplete {
           "${params.infodir}/runmeta.json",
           "${params.infodir}/trace.tsv"
         ],
-        RELEASE_TAG: "${workflow.revision}_${workflow.runName}_${workflow.sessionId}",
+        RELEASE_TAG: "${workflow.revision}_${workflow.complete.format(formatter)}_${workflow.runName}_${workflow.sessionId}",
         RELEASE_NAME: "${workflow.revision} - results and metadata for run '${workflow.runName}'",
-        RELEASE_BODY: "Release created and artefacts uploaded for run '${workflow.runName}', session ID ${workflow.sessionId}, commit ${workflow.commitId}, see assets for more details."
+        RELEASE_BODY: 
+"""
+- revision          `${workflow.revision}`
+- commit ID          ${workflow.commitId}
+- session ID        `${workflow.sessionId}`
+- profile           `${workflow.profile}`
+- started at        `${workflow.start}`
+- completed at      `${workflow.complete}`
+
+see assets for more details.
+""".replace('\n','<br />')
       ]
-      apiCalls.gitHubRelease(log, releaseArgs)
+      apiCalls.gitHubRelease(log, releaseArgs, params.draft)
     //} else {
     //  log.warn "Automated GH release generation only aimed at semantically tagged revisions (e.g. v1.5.4), current revision: ${workflow.revision}"
     //  log.warn "Note that this restriction can be lifted without adversely affecting functionality"
