@@ -785,7 +785,7 @@ workflow.onComplete {
 * completed at      `${workflow.complete}`
 
 see assets for more details.
-"""
+""".replace('\n','<br />')
       ]
       apiCalls.gitHubRelease(log, releaseArgs, params.draft)
     //} else {
