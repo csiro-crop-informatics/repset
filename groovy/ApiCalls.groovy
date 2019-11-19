@@ -1,7 +1,7 @@
 import groovy.json.*
 import ch.qos.logback.classic.Logger
 
-def gitHubRelease(Logger log, Map args) {
+def gitHubRelease(Logger log, Map args, boolean draft) {
   GH_TOKEN = System.getenv("GH_TOKEN")
 
   if(GH_TOKEN == null) {
@@ -38,8 +38,9 @@ def gitHubRelease(Logger log, Map args) {
   }
 
   //FINALIZE RELEASE
-  finalResponseMap = gitHubApiCall(log, [GH_TOKEN: GH_TOKEN, method: 'POST', url:"https://api.github.com/repos/${args.REPO}/releases/${relaeseId}", message: $/{"draft": false }/$ ])
-  //println(JsonOutput.prettyPrint(JsonOutput.toJson(finalResponseMap)))
+  if(!draft)
+    finalResponseMap = gitHubApiCall(log, [GH_TOKEN: GH_TOKEN, method: 'POST', url:"https://api.github.com/repos/${args.REPO}/releases/${relaeseId}", message: $/{"draft": false }/$ ])
+    //println(JsonOutput.prettyPrint(JsonOutput.toJson(finalResponseMap)))
 
 }
 

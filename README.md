@@ -225,7 +225,7 @@ These can be simply collected from the output directories but for full traceabil
 
 4. Make the access token accessible as an environmental variable 
 4. Run the pipeline from the remote repository, specifying
-    - the required revision  e.g. `-revision v0.9.6`
+    - the required revision  e.g. `-revision v0.9.10`
     - the `--release` flag
     - the appropriate `-profile` 
 
@@ -235,7 +235,7 @@ For example,
 ```
 GH_TOKEN='your-token-goes-here' nextflow run \
   user-or-organisation-name/repset-fork-name \
-  -revision v0.9.6 \
+  -revision v0.9.10 \
   --release
 ```
 
@@ -243,9 +243,10 @@ On successful completion of the pipeline a series of API calls will be made to
 
 1. create a new release
 2. upload results and metadata files as artefacts for that release
-3. finalize the release
+3. finalize the release (skipped if `--draft` flag used)
 
 The last of this calls will trigger minting of a DOI for that release if Zenodo integration is configured and enabled for the repository.
+To keep your release as a draft use the `--draft` flag.
 
 # Experimental pipeline overview
 
