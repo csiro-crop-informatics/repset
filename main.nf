@@ -773,9 +773,19 @@ workflow.onComplete {
           "${params.infodir}/runmeta.json",
           "${params.infodir}/trace.tsv"
         ],
-        RELEASE_TAG: "${workflow.revision}_${workflow.complete}_${workflow.runName}_${workflow.sessionId}",
+        RELEASE_TAG: "${workflow.revision}_${workflow.complete.toInstant()}_${workflow.runName}_${workflow.sessionId}",
         RELEASE_NAME: "${workflow.revision} - results and metadata for run '${workflow.runName}' - ${workflow.complete}",
-        RELEASE_BODY: "Release created and artefacts uploaded for run '${workflow.runName}', session ID ${workflow.sessionId}, commit ${workflow.commitId}, completed ${workflow.complete}, see assets for more details."
+        RELEASE_BODY: 
+"""Release created and artefacts uploaded for run `${workflow.runName}` 
+
+* workflow revision `${workflow.revision}`
+* session ID        `${workflow.sessionId}` 
+* commit ID          ${workflow.commitId}
+* started at        `${workflow.start}`
+* completed at      `${workflow.complete}`
+
+see assets for more details.
+"""
       ]
       apiCalls.gitHubRelease(log, releaseArgs, params.draft)
     //} else {
