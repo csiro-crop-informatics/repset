@@ -789,8 +789,6 @@ workflow.onComplete {
 - profile           `${workflow.profile}`
 - started at        `${workflow.start}`
 - completed at      `${workflow.complete}`
-- mappers           `${params.mappers}`
-- mapmode           `${params.mapmode}`
 
 see assets for more details.
 """.replace('\n','<br />')

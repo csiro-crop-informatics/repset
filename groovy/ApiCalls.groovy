@@ -9,7 +9,7 @@ def gitHubRelease(Logger log, Map args, boolean draft) {
     return
   } else {
     log.info "GH_TOKEN found, attempting to create a GH release"
-    log.info args.toString()
+    // log.info args.toString()
   }
 
   //CREATE RELEASE
