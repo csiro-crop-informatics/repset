@@ -763,6 +763,8 @@ workflow.onComplete {
       // println instant
       // def utc =  LocalDateTime.ofInstant(instant, ZoneOffset.UTC)
       // def local = LocalDateTime.ofInstant(instant, ZoneId.systemDefault())
+      def formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmssx");
+
       releaseArgs = [
         REPO : workflow.repository.replaceFirst("^(http[s]?://github\\.com/|git@github\\.com:)","").replaceFirst("\\.git\$",""),
         COMMIT : workflow.commitId,
@@ -773,7 +775,7 @@ workflow.onComplete {
           "${params.infodir}/runmeta.json",
           "${params.infodir}/trace.tsv"
         ],
-        RELEASE_TAG: "${workflow.revision}_${workflow.complete.toInstant()}_${workflow.runName}_${workflow.sessionId}",
+        RELEASE_TAG: "${workflow.revision}_${workflow.complete.format(formatter)}_${workflow.runName}_${workflow.sessionId}",
         RELEASE_NAME: "${workflow.revision} - results and metadata for run '${workflow.runName}' - ${workflow.complete}",
         RELEASE_BODY: 
 """Release created and artefacts uploaded for run `${workflow.runName}` 
