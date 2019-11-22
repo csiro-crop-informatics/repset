@@ -56,13 +56,12 @@ When running separately or re-running the pipeline
 the `-resume` flag ensures that previously computed
 results (or partial results) are re-used.
 
-Default execution will simulate, align and evaluate reads from a few small datasets defined in [`conf/simulations.config`](conf/simulations.config).
+Default execution will simulate, align and evaluate reads from a few small data sets defined in [`conf/simulations.config`](conf/simulations.config).
 
 ## Note on terminology (mapping vs alignment)
 
-Terms related to read mapping/alignment (and related such as pseudoalignment and quasi mapping) are not used consistently in bioinformatics in a way which would make many a mathematician cringe.
-We hereby attempt to strictly follow the common convention by consistently propagating these inconsistencies.
-For a much(!) more coherent summary refer to [Lior Pachter's blog post](https://liorpachter.wordpress.com/2015/11/01/what-is-a-read-mapping/).
+Terms related to read mapping, alignment and related such as pseudoalignment and quasi mapping are used in bioinformatics inconsistently (which would make many a mathematician cringe).
+We hereby attempt to strictly follow this convention by consistently propagating these inconsistencies.
 
 # Running the pipeline
 
@@ -148,7 +147,10 @@ otherwise you can find them under `./results`.
 
 The workflow incorporates three ways of mapping and evaluating reads, `dna2dna`, `rna2rna`, `rna2dna`
 and by default all are executed. To restrict execution to one or two of those,
-you can run the workflow with e.g. `--mapmode dna2dna` or `--mapmode rna2rna|rna2dna`.
+you can run the workflow with e.g.
+
+* `--mapmode dna2dna` - evaluate DNA-Seq read mapping to genome
+* `--mapmode rna2rna|rna2dna`  - evaluate RNA-Seq read mapping to genome and transcriptome
 
 ## Evaluated mappers
 
@@ -172,7 +174,6 @@ for example
 nextflow run main.nf -params-file path/to/conf/simulations.json
 ```
 
-
 Alternatively, you can simply edit the content of conf/simulations.config`.
 
 # Computational resources
@@ -192,18 +193,17 @@ Clearly if e.g. a slower tool is added, these will need to be revised.
 However, failed tasks are re-submitted with increased resources as long as
 valid comparisons can be made between different tools' results.
 For that reason, CPUs and memory limits are not increased on re-submission
-of the mapping process but allowed maximum wall-clock time is.
+of the mapping process but the maximum allowed wall-clock time is.
 In the case of the indexing process, the initial time and memory limits
 are increased on each task re-submission as indexing performance is not
 well suited for comparisons anyway. For example, many indexing processes
 are single-threaded, in other cases it might make sense to skip the indexing
 process and allow for on-the-fly index generation.
-Input size based as well as re-submission based resource auto-scaling
+Resource auto-scaling 
 is subject to constraints which may need to be adjusted for particular
 compute environment either at run time (e.g.  `--max_memory 64.GB --max_cpus 32 --max_time 72.h`)
 or by editing (`conf/requirements.config`)[conf/requirements.config]
 where the dynamic scaling functions can also be adjusted.
-
 
 
 # Capturing results and run metadata
@@ -215,19 +215,19 @@ Each pipeline run generates a number of files including
 These can be simply collected from the output directories but for full traceability of the results, the following procedure is preferable:
 
 1. Fork this repository ()
-2. Select a tagged revision or add a tag (adhering to the usual semantic versioning approach)
+2. Preferably select a tagged revision or add a tag (adhering to the usual semantic versioning approach) - this is optional but recommended 
 3. Generate a [Git Hub access token](https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line)
-   which will allow the pipeline to create releases in this or a forked repository,
+   which will allow the pipeline to create releases in your forked repset repository,
    when creating the token it should suffice to select only the following scope:
    > `public_repo`   Access public repositories
    
-   (assuming your fork of this repo remains public)
+   (assuming your fork of repset remains public)
 
 4. Make the access token accessible as an environmental variable 
-4. Run the pipeline from the remote repository, specifying
-    - the required revision  e.g. `-revision v0.9.10`
+5. Run the pipeline from the remote repository, specifying
     - the `--release` flag
     - the appropriate `-profile` 
+    - the required revision  e.g. `-revision v0.9.10` (optional but recommended)
 
 
 For example, 
@@ -235,8 +235,9 @@ For example,
 ```
 GH_TOKEN='your-token-goes-here' nextflow run \
   user-or-organisation-name/repset-fork-name \
+  -profile singularity \
   -revision v0.9.10 \
-  --release
+  --release \
 ```
 
 On successful completion of the pipeline a series of API calls will be made to
@@ -390,7 +391,7 @@ version='0.7.17'
 git checkout -b docker/${tool}/${version}
 ```
 
-Add or modify `dockerfiles/${tool}.Dockerfile` as required.
+Add, create or modify `dockerfiles/${tool}.Dockerfile` as required.
 
 Commit and push to trigger an automated build
 
