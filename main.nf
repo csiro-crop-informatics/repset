@@ -115,7 +115,7 @@ if (params.help){
     but local files might not be on paths automatically mounted in the container.
 */
 Channel.from(params.references)
-.take( params.debug ? 1 : -1) //just the one input dataset if in debug mode
+.take( params.subset ) //only process n data sets (-1 means all) 
 .combine(Channel.from('fasta','gff')) //duplicate each reference record
 .filter { meta, fileType -> meta.containsKey(fileType)} //exclude gff record if no gff declared
 .tap { refsToStage } //download if URL
