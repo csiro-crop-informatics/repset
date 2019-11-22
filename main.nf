@@ -548,6 +548,7 @@ process mapSimulatedReads {
 
   script:
     def binding = [ref: ref, reads: reads, task: task.clone(), ALIGN_PARAMS: ALIGN_PARAMS]
+    meta.resources = task.subMap(['cpus','memory','time'])
     if(run.template) { //if template file specified / declared
       template run.template //either default or explicit template file name
     } else { //indexing script defined in config
@@ -578,7 +579,7 @@ process evaluateAlignmentsRNF {
   script:
   // println prettyPrint(toJson(alignmeta))
   // println alignmeta.inspect()
-
+  // println groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(meta))
   """
   set -eo pipefail
   samtools view ${samOrBam} \
