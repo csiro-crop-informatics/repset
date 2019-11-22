@@ -214,8 +214,8 @@ Each pipeline run generates a number of files including
 
 These can be simply collected from the output directories but for full traceability of the results, the following procedure is preferable:
 
-1. Fork this repository ()
-2. Preferably select a tagged revision or add a tag (adhering to the usual semantic versioning approach) - this is optional but recommended 
+1. Fork this repository
+2. (Optional) select a tagged revision or add a tag (adhering to the usual semantic versioning approach) 
 3. Generate a [Git Hub access token](https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line)
    which will allow the pipeline to create releases in your forked repset repository,
    when creating the token it should suffice to select only the following scope:
@@ -227,7 +227,7 @@ These can be simply collected from the output directories but for full traceabil
 5. Run the pipeline from the remote repository, specifying
     - the `--release` flag
     - the appropriate `-profile` 
-    - the required revision  e.g. `-revision v0.9.10` (optional but recommended)
+    - the intended revision e.g. `-revision v0.9.10` (optional)
 
 
 For example, 
