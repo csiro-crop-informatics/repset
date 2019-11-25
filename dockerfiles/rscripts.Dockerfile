@@ -8,4 +8,4 @@ RUN apt-get -qq update && apt-get -qq -y install --no-install-recommends procps 
     && apt-get autoclean \
     && rm -rf /var/lib/apt/lists/* /var/log/dpkg.log
 
-RUN install2.r tidyverse kableExtra
+RUN install2.r dplyr readr ggplot2 viridis ggrepel purrr tidyr gplot RColorBrewer reshape2 jsonlite
