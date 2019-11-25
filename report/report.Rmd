@@ -1,31 +1,48 @@
 ---
-title: "Aligner comparison report"
-author:
-- Author Name
-subtitle: "subtitle"
-date: "`r format(Sys.time(), '%A, %d %B, %Y')`"
-# tags: [one, another]
-output:
-  #pdf_document:
-    #default
-  html_document:
-    toc: true
-    toc_float: true
-    number_sections: true
-    theme: yeti
-    highlight: tango
+title: 'Repset run: `r jsonlite::fromJSON("runmetatmp.json")$workflow$runName` started at `r jsonlite::fromJSON("runmetatmp.json")$workflow$start`'
+output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(cache=TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
-# Some content
 
-Here
+```{r load_data, include=FALSE}
+meta <- jsonlite::fromJSON("runmetatmp.json")
 
-## More content
+nxrun <- jsonlite::fromJSON("allstats.json", flatten = TRUE) %>%
+  as_tibble %>%
+  mutate(perc_prim_match = (evaluation.primary.match + evaluation.primary.mateMatch) / query.nreads,
+         perc_prim_mismatch = evaluation.primary.mismatch / query.nreads)
 
-There
+write.csv(nxrun, "allstats.csv", row.names = FALSE)
+```
+
+This run of repset evaluated alignment against `r nrow(meta$params$references)` genomes with `r nrow(meta$params$mappersDefinitions)` aligners.
+
+Detailed description of the run are available in the [runmeta.json](runmeta.json) file.
+
+## Evaluation summary
+
+```{r visualise, echo=FALSE}
+ggplot(nxrun, aes(evaluation.primary.match/(query.nreads / 2), trace.realtime)) +
+  geom_point(aes(colour = mapper.tool, shape = target.seqtype)) +
+  facet_grid(query.seqtype~target.species) +
+  theme_light() +
+  labs(main = "Primary correct matches",
+       x = "% Primary matches",
+       y = "Seconds elapsed")
+```
+  
+## Evaluation statistics
+
+Download the full table [here](allstats.csv).
+```{r eval_stats}
+kableExtra::kable(nxrun)
+```
+
 
 
