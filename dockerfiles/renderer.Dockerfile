@@ -11,4 +11,4 @@ RUN apt-get -qq update \
 
 RUN install2.r bookdown rticles rmarkdown 
 
-RUN dplyr readr ggplot2 viridis ggrepel purrr tidyr gplot RColorBrewer reshape2 jsonlite
+RUN install2.r dplyr readr ggplot2 viridis ggrepel purrr tidyr gplot RColorBrewer reshape2 jsonlite
