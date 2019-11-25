@@ -7,8 +7,6 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-library(tidyverse)
-library(jsonlite)
 ```
 
 
@@ -39,12 +37,6 @@ ggplot(nxrun, aes(evaluation.primary.match/(query.nreads / 2), trace.realtime)) 
        y = "Seconds elapsed")
 ```
   
-## Evaluation statistics
-
-Download the full table [here](allstats.csv).
-```{r eval_stats}
-kableExtra::kable(nxrun)
-```
 
 
 

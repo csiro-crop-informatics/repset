@@ -712,11 +712,16 @@ process render {
   library(rmarkdown)
   library(rticles)
   library(bookdown)
-
+  library(magrittr)
+  library(jsonlite)
+  library(tibble)
+  library(dplyr)
+  library(ggplot2)
+  
   rmarkdown::render("${Rmd}")
   """
 }
-
+// library(kableExtra)
 
 // // //WRAP-UP
 // // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
@@ -818,6 +823,7 @@ workflow.onComplete {
           // "${params.outdir}/report.html",
           // "${params.outdir}/repset-manuscript.pdf",
           "${params.outdir}/report.html",
+          "${params.outdir}/allstats.csv",
           "${params.outdir}/allstats.json",
           "${params.infodir}/runmeta.json",
           "${params.infodir}/trace.tsv"
