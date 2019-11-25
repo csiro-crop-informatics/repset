@@ -37,6 +37,12 @@ ggplot(nxrun, aes(evaluation.primary.match/(query.nreads / 2), trace.realtime)) 
        y = "Seconds elapsed")
 ```
   
+## Evaluation statistics
+
+Download the full table [here](allstats.csv).
+```{r eval_stats}
+kableExtra::kable(nxrun)
+```
 
 
 
