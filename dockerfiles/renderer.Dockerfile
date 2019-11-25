@@ -9,4 +9,6 @@ RUN apt-get -qq update \
   && apt-get autoclean \
   && rm -rf /var/lib/apt/lists/* /var/log/dpkg.log
 
-RUN install2.r bookdown rticles rmarkdown dplyr readr ggplot2 viridis ggrepel purrr tidyr gplot RColorBrewer reshape2 jsonlite
+RUN install2.r bookdown rticles rmarkdown 
+
+RUN dplyr readr ggplot2 viridis ggrepel purrr tidyr gplot RColorBrewer reshape2 jsonlite
