@@ -712,16 +712,14 @@ process render {
   library(rmarkdown)
   library(rticles)
   library(bookdown)
-  library(magrittr)
+  library(tidyverse)
   library(jsonlite)
-  library(tibble)
-  library(dplyr)
-  library(ggplot2)
+  library(kableExtra)
   
   rmarkdown::render("${Rmd}")
   """
 }
-// library(kableExtra)
+// 
 
 // // //WRAP-UP
 // // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
