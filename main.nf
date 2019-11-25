@@ -605,7 +605,6 @@ evaluatedAlignmentsRNF.map { META, JSON ->
     outfile = file("${params.outdir}/allstats.json")
     // outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))
     outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.mapper.tool <=>  k2.mapper.tool} ) ))
-
     def runmetatmp = [:]
     runmetatmp['workflow'] = workflow.getProperties()
     runmetatmp['params'] = params
@@ -627,26 +626,6 @@ evaluatedAlignmentsRNF.map { META, JSON ->
     [outfile, runmetaJSONtmp]
   }.set { jsonChannel }
 
-  // }.set { statsChannel }
-// process json2csv {
-//   label 'rscript'
-//   label 'stats'
-
-//   input:
-//     file(stats) from statsChannel
-
-//   output:
-//     file('*.csv')
-
-//   script:
-//   """
-//   #!/usr/bin/env r
-
-//   library(jsonlite)
-//   nxrun <- jsonlite::fromJSON("${stats}", flatten = TRUE)
-//   write.csv(nxrun, 'allstats.csv')
-//   """  
-// }
 
 // // process plotSummarySimulated {
 // //   label 'rscript'
