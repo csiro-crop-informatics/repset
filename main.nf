@@ -690,7 +690,6 @@ writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/m
 process render {
   tag {"Render ${Rmd}"}
   label 'rrender'
-  echo true
   label 'report'
   stageInMode 'copy'
   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
@@ -703,9 +702,6 @@ process render {
     file '*'
 
   script:
-  // """
-  // ls -la
-  // """
   """
   #!/usr/bin/env Rscript
 
