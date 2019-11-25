@@ -1,5 +1,5 @@
 ---
-title: 'Repset run: `r jsonlite::fromJSON("runmeta.json")$workflow$runName` completed at `r jsonlite::fromJSON("runmeta.json")$workflow$complete`'
+title: 'Repset run: `r jsonlite::fromJSON("runmetatmp.json")$workflow$runName` started at `r jsonlite::fromJSON("runmetatmp.json")$workflow$start`'
 output: html_document
 editor_options: 
   chunk_output_type: console
@@ -13,7 +13,7 @@ library(jsonlite)
 
 
 ```{r load_data, include=FALSE}
-meta <- jsonlite::fromJSON("runmeta.json")
+meta <- jsonlite::fromJSON("runmetatmp.json")
 
 nxrun <- jsonlite::fromJSON("allstats.json", flatten = TRUE) %>%
   as_tibble %>%

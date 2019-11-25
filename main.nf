@@ -598,7 +598,30 @@ evaluatedAlignmentsRNF.map { META, JSON ->
     outfile = file("${params.outdir}/allstats.json")
     // outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))
     outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.mapper.tool <=>  k2.mapper.tool} ) ))
-  }
+
+
+
+    def runmetatmp = [:]
+    runmetatmp['workflow'] = workflow.getProperties()
+    runmetatmp['params'] = params
+//Preventing stack overflow on Path objects and other  when map -> JSON
+    jsonGeneratorOptions1 = new groovy.json.JsonGenerator.Options()
+                .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
+                .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
+                .addConverter(java.time.OffsetDateTime) { java.time.OffsetDateTime dt, String key -> dt.toString() }
+                .addConverter(nextflow.NextflowMeta) { nextflow.NextflowMeta m, String key -> m.toJsonMap() }  //incompatible with Nextflow <= 19.04.0
+                .excludeFieldsByType(java.lang.Class) // .excludeFieldsByName('class')
+                // .excludeNulls()
+
+    jsonGeneratortmp = jsonGeneratorOptions1.build()
+
+    runmetaJSONtmp = file("${params.infodir}/runmetatmp.json")
+    runmetaJSONtmp.text = groovy.json.JsonOutput.prettyPrint(jsonGeneratortmp.toJson(runmetatmp))
+
+
+    [outfile, runmetaJSONtmp]
+  }.set { jsonChannel }
+
 
 
 // // process plotSummarySimulated {
@@ -637,38 +660,39 @@ evaluatedAlignmentsRNF.map { META, JSON ->
 // //   '''
 // // }
 
-// // //WRAP-UP
-// // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+//WRAP-UP
+writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-// // process render {
-// //   tag {"Render ${Rmd}"}
-// //   label 'rrender'
-// //   label 'report'
-// //   stageInMode 'copy'
-// //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+process render {
+  tag {"Render ${Rmd}"}
+  label 'rrender'
+  echo true
+  label 'report'
+  stageInMode 'copy'
+  //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
-// //   input:
-// //     // file('*') from plots.flatten().toList()
-// //     // file('*') from plotsRealRNA.flatten().toList()
-// //     file(Rmd) from writing
-// //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
-// //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
+  input:
+    file(Rmd) from writing
+    file(json)  from jsonChannel
 
-// //   output:
-// //     file '*'
+  output:
+    file '*'
 
-// //   script:
-// //   """
-// //   #!/usr/bin/env Rscript
+  script:
+  // """
+  // ls -la
+  // """
+  """
+  #!/usr/bin/env Rscript
 
-// //   library(rmarkdown)
-// //   library(rticles)
-// //   library(bookdown)
+  library(rmarkdown)
+  library(rticles)
+  library(bookdown)
 
-// //   rmarkdown::render("${Rmd}")
-// //   """
-// // }
-// // }
+  rmarkdown::render("${Rmd}")
+  """
+}
+
 
 // // //WRAP-UP
 // // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
