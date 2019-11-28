@@ -663,10 +663,10 @@ evaluatedAlignmentsRNF.map { META, JSON ->
 // //   '''
 // // }
 
-//WRAP-UP
-writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+//WRAP-UP --TODO Manuscript rendering to be separated
+// writing = Channel.fromPath("$baseDir/report/*.Rmd").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-process render {
+process renderReport {
   tag {"Render ${Rmd}"}
   label 'rrender'
   label 'report'
@@ -674,8 +674,8 @@ process render {
   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
   input:
-    file(Rmd) from writing
-    file(json)  from jsonChannel
+    file(Rmd) from Channel.fromPath("$baseDir/report/report.Rmd")
+    file(json) from jsonChannel
 
   output:
     file '*'
@@ -694,39 +694,14 @@ process render {
   rmarkdown::render("${Rmd}")
   """
 }
+
+
 // 
 
 // // //WRAP-UP
 // // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
-// // process render {
-// //   tag {"Render ${Rmd}"}
-// //   label 'rrender'
-// //   label 'report'
-// //   stageInMode 'copy'
-// //   //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
-// //   input:
-// //     // file('*') from plots.flatten().toList()
-// //     // file('*') from plotsRealRNA.flatten().toList()
-// //     file(Rmd) from writing
-// //     file('*') from collatedDetailsPlotsSimulatedDNA.collect()
-// //     file('*') from collatedSummariesPlotsSimulatedDNA.collect()
-
-// //   output:
-// //     file '*'
-
-// //   script:
-// //   """
-// //   #!/usr/bin/env Rscript
-
-// //   library(rmarkdown)
-// //   library(rticles)
-// //   library(bookdown)
-
-// //   rmarkdown::render("${Rmd}")
-// //   """
-// // }
 
 
 workflow.onComplete {
