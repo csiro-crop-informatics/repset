@@ -1,14 +1,27 @@
 #!/usr/bin/env nextflow
 
 //For pretty-printing nested maps etc
-import static groovy.json.JsonGenerator.*
-// import static groovy.json.JsonSlurper as JsonSlurper
+import groovy.json.JsonGenerator 
+import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
+//as JsonGenerator
+// import static groovy.json.JsonGenerator.*
+
 
 //Otherwise JSON generation triggers stackoverflow when encountering Path objects
-jsonGenerator = new groovy.json.JsonGenerator.Options()
-                .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
-                .build()
+// jsonGenerator = new JsonGenerator.Options()
+//                 .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
+//                 .build()
 
+//Preventing stack overflow on Path objects and other  when map -> JSON
+JsonGenerator jsonGenerator = new JsonGenerator.Options()
+                .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
+                .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
+                .addConverter(java.time.OffsetDateTime) { java.time.OffsetDateTime dt, String key -> dt.toString() }                
+                .addConverter(nextflow.NextflowMeta) { nextflow.NextflowMeta m, String key -> m.toJsonMap() }  //incompatible with Nextflow <= 19.04.0 
+                .excludeFieldsByType(java.lang.Class) // .excludeFieldsByName('class')
+                // .excludeNulls()
+                .build()
 
 //Input validation specified elswhere
 def validators = new GroovyShell().parse(new File("${baseDir}/groovy/Validators.groovy"))
@@ -595,7 +608,7 @@ process evaluateAlignmentsRNF {
 1. Embed evaluation results JSON in META JSON.
 2. Collect all datapoints in one JSON for output.
 **/
-def slurper = new groovy.json.JsonSlurper()
+def slurper = new JsonSlurper()
 evaluatedAlignmentsRNF.map { META, JSON ->
       [META+[evaluation: slurper.parseText(JSON.text)]]
   }
@@ -604,64 +617,16 @@ evaluatedAlignmentsRNF.map { META, JSON ->
     file("${params.outdir}").mkdirs()
     outfile = file("${params.outdir}/allstats.json")
     // outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))
-    outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.mapper.tool <=>  k2.mapper.tool} ) ))
-    def runmetatmp = [:]
-    runmetatmp['workflow'] = workflow.getProperties()
-    runmetatmp['params'] = params
-//Preventing stack overflow on Path objects and other  when map -> JSON
-    jsonGeneratorOptions1 = new groovy.json.JsonGenerator.Options()
-                .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
-                .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
-                .addConverter(java.time.OffsetDateTime) { java.time.OffsetDateTime dt, String key -> dt.toString() }
-                .addConverter(nextflow.NextflowMeta) { nextflow.NextflowMeta m, String key -> m.toJsonMap() }  //incompatible with Nextflow <= 19.04.0
-                .excludeFieldsByType(java.lang.Class) // .excludeFieldsByName('class')
-                // .excludeNulls()
+    outfile.text = JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.mapper.tool <=>  k2.mapper.tool} ) ))
+    def runmetapart = [:]
+    runmetapart['workflow'] = workflow.getProperties()
+    runmetapart['params'] = params
+    runmetaJSONpartial = file("${params.infodir}/runmetapart.json")
+    runmetaJSONpartial.text = JsonOutput.prettyPrint(jsonGenerator.toJson(runmetapart))
 
-    jsonGeneratortmp = jsonGeneratorOptions1.build()
-
-    runmetaJSONtmp = file("${params.infodir}/runmetatmp.json")
-    runmetaJSONtmp.text = groovy.json.JsonOutput.prettyPrint(jsonGeneratortmp.toJson(runmetatmp))
-
-
-    [outfile, runmetaJSONtmp]
+    [outfile, runmetaJSONpartial]
   }.set { jsonChannel }
 
-
-// // process plotSummarySimulated {
-// //   label 'rscript'
-// //   label 'figures'
-
-// //   input:
-// //     // set file(csv), file(json) from collatedSummariesSimulatedDNA
-// //     set file(json), file(categories) from collatedSummariesSimulated
-
-// //   output:
-// //     file '*' into collatedSummariesPlotsSimulated
-
-// //   shell:
-// //   '''
-// //   < !{json} plot_simulatedDNA.R
-// //   '''
-// // }
-
-
-
-// // process plotSummarySimulated {
-// //   label 'rscript'
-// //   label 'figures'
-
-// //   input:
-// //     // set file(csv), file(json) from collatedSummariesSimulatedDNA
-// //     set file(json), file(categories) from collatedSummariesSimulatedDNA
-
-// //   output:
-// //     file '*' into collatedSummariesPlotsSimulated
-
-// //   shell:
-// //   '''
-// //   < !{json} plot_simulatedDNA.R
-// //   '''
-// // }
 
 //WRAP-UP --TODO Manuscript rendering to be separated
 // writing = Channel.fromPath("$baseDir/report/*.Rmd").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
@@ -696,14 +661,6 @@ process renderReport {
 }
 
 
-// 
-
-// // //WRAP-UP
-// // writing = Channel.fromPath("$baseDir/report/*").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
-
-
-
-
 workflow.onComplete {
     log.info "Pipeline complete, collecting metadata..."
 
@@ -724,19 +681,8 @@ workflow.onComplete {
 
     // println  !(runmeta['workflow']['nextflow'] instanceof java.util.LinkedHashMap)
 
-    //Preventing stack overflow on Path objects and other  when map -> JSON
-    jsonGeneratorOptions = new groovy.json.JsonGenerator.Options()
-                .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
-                .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
-                .addConverter(java.time.OffsetDateTime) { java.time.OffsetDateTime dt, String key -> dt.toString() }                
-                .addConverter(nextflow.NextflowMeta) { nextflow.NextflowMeta m, String key -> m.toJsonMap() }  //incompatible with Nextflow <= 19.04.0 
-                .excludeFieldsByType(java.lang.Class) // .excludeFieldsByName('class')
-                // .excludeNulls()
-                
-    jsonGenerator = jsonGeneratorOptions.build()
-
     def runmetaJSON = new File("${params.infodir}/runmeta.json")
-    runmetaJSON.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(runmeta))
+    runmetaJSON.text = JsonOutput.prettyPrint(jsonGenerator.toJson(runmeta))
 
     //  def command = "tree -h -D all"
     // def proc = command.execute()

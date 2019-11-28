@@ -1,5 +1,5 @@
 ---
-title: 'Repset run: `r jsonlite::fromJSON("runmetatmp.json")$workflow$runName` started at `r jsonlite::fromJSON("runmetatmp.json")$workflow$start`'
+title: 'Repset run: `r jsonlite::fromJSON("runmetapart.json")$workflow$runName` started at `r jsonlite::fromJSON("runmetapart.json")$workflow$start`'
 output: html_document
 editor_options: 
   chunk_output_type: console
@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 
 ```{r load_data, include=FALSE}
-meta <- jsonlite::fromJSON("runmetatmp.json")
+meta <- jsonlite::fromJSON("runmetapart.json")
 
 nxrun <- jsonlite::fromJSON("allstats.json", flatten = TRUE) %>%
   as_tibble %>%
@@ -39,7 +39,7 @@ ggplot(nxrun, aes(evaluation.primary.match/(query.nreads / 2), trace.realtime)) 
   
 ## Evaluation statistics
 
-Download the full table [here](allstats.csv).
+<!-- Download the full table [here](allstats.csv). -->
 ```{r eval_stats}
 kableExtra::kable(nxrun)
 ```
