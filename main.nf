@@ -28,8 +28,9 @@ def validators = new GroovyShell().parse(new File("${baseDir}/groovy/Validators.
 
 //Read, parse, validate and sanitize alignment/mapping tools config
 def allRequired = ['tool','version','container','index'] //Fields required for each tool in config
+def allOptional = ['versionCall']
 def allModes = 'dna2dna|rna2rna|rna2dna' //At leas one mode has to be defined as supported by each tool
-def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allModes)
+def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allOptional, allModes)
 
 //Check if specified template files exist
 validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(allModes.split('\\|') as List)), "${baseDir}/templates")
@@ -52,9 +53,30 @@ Channel.from(params.mappersDefinitions)
   .filter{ params.mappers == 'all' || it.tool.matches(params.mappers) } //TODO Could allow :version
   // .tap { mappersMapChannel }
   // .map { it.subMap(allRequired)} //Exclude mapping specific fields from indexing process to avoid re-indexing e.g. on changes made to a mapping template
-  // .set { mappersIdxChannel }
-  .into { mappersIdxChannel; mappersMapChannel }
+  .set { mappersChannel }
+  // .into { mappersIdxChannel; mappersMapChannel; mappersVersionChannel }
 
+// mappersVersionChannel.view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+
+
+process parseMapperVersion {
+  container { "${mapmeta.container}" }
+  tag { mapmeta.subMap(['tool','version']) }
+
+  input:  val(mapmeta) from mappersChannel
+
+  output: tuple val(mapmeta), stdout into mappersCapturedVersionChannel
+
+  script: "${mapmeta.versionCall}"
+}
+
+mappersCapturedVersionChannel
+.map { meta, ver ->
+  meta.versionCall = ver.trim()
+  meta
+}
+.view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+.into { mappersIdxChannel; mappersMapChannel }
 
 //...and their params definitions
 mappersParamsChannel = Channel.from(params.mapperParamsDefinitions)
@@ -302,6 +324,10 @@ process faidxTranscriptomeFASTA {
   samtools faidx ${fa}
   """
 }
+
+
+
+
 
 /*
 Resolve variables emebeded in single-quoted strings
@@ -552,6 +578,7 @@ process mapSimulatedReads {
   label 'align'
   container { "${meta.mapper.container}" }
   tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
+  // beforeScript meta.mapper.containsKey('versionCall') ? "${meta.mapper.versionCall} > .mapper.version" : ''
 
   input:
     set val(meta), file(reads), file(ref), file(fai), file('*'), val(run), val(ALIGN_PARAMS) from combinedToMap
