@@ -68,14 +68,36 @@ process parseMapperVersion {
   output: tuple val(mapmeta), stdout into mappersCapturedVersionChannel
 
   script: "${mapmeta.versionCall}"
+  // script: "set -o pipefail; ${mapmeta.versionCall}"
 }
 
 mappersCapturedVersionChannel
 .map { meta, ver ->
-  meta.versionCall = ver.trim()
+  if(meta.version != ver.trim()) {
+    log.warn """
+    Decalred version ${meta.version} for ${meta.tool} 
+    does not match version ${ver.trim()} 
+    obtained from versionCall: ${meta.versionCall}    
+    Updating version in metadata to ${ver.trim()}
+    """      
+    //Please correct your mapper configuration file(s).    
+    // throw new RuntimeException('msg') or // 
+    // session.abort(new Exception())    
+    meta.version = ver.trim()
+    if(!meta.container.contains(meta.version)) {
+      log.error """
+      Updated tool version string ${meta.version}
+      not found in container image spec ${meta.container}.
+      Please correct your mapper configuration file(s).
+
+      Aborting...    
+      """
+      session.abort(new Exception())  // throw new RuntimeException('msg') 
+    }
+  }
   meta
 }
-.view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+// .view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 .into { mappersIdxChannel; mappersMapChannel }
 
 //...and their params definitions
