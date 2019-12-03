@@ -58,12 +58,23 @@ Channel.from(params.mappersDefinitions)
 
 // mappersVersionChannel.view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 
+mappersChannel.filter {
+  if(it.containsKey('versionCall')) {
+    true
+  } else {
+    log.warn """
+    versionCall not specified for ${it.tool} ${it.version}
+    it will not be included in this run
+    """ 
+  }
+} 
+.set { mappersVithVersionCallChannel }
 
 process parseMapperVersion {
   container { "${mapmeta.container}" }
   tag { mapmeta.subMap(['tool','version']) }
 
-  input:  val(mapmeta) from mappersChannel
+  input:  val(mapmeta) from mappersVithVersionCallChannel
 
   output: tuple val(mapmeta), stdout into mappersCapturedVersionChannel
 
