@@ -1,5 +1,7 @@
 #!/usr/bin/env nextflow
 
+log.info workflow.profile
+
 //For pretty-printing nested maps etc
 import groovy.json.JsonGenerator 
 import groovy.json.JsonSlurper
@@ -711,6 +713,9 @@ process renderReport {
 
   output:
     file '*'
+  
+  when:
+    !(workflow.profile.contains('CI')) //until leaner container
 
   script:
   """
