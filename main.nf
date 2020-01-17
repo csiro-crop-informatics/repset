@@ -637,7 +637,7 @@ process mapSimulatedReads {
 }
 
 process evaluateAlignmentsRNF {
-  label 'samtools'
+  label 'groovy_samtools'
   // label 'ES'
   // tag{alignmeta.tool.subMap(['name'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
   // tag{alignmeta.params.subMap(['paramslabel'])}
