@@ -1,5 +1,7 @@
 #!/usr/bin/env nextflow
 
+log.info workflow.profile
+
 //For pretty-printing nested maps etc
 import groovy.json.JsonGenerator 
 import groovy.json.JsonSlurper
@@ -28,8 +30,9 @@ def validators = new GroovyShell().parse(new File("${baseDir}/groovy/Validators.
 
 //Read, parse, validate and sanitize alignment/mapping tools config
 def allRequired = ['tool','version','container','index'] //Fields required for each tool in config
+def allOptional = ['versionCall']
 def allModes = 'dna2dna|rna2rna|rna2dna' //At leas one mode has to be defined as supported by each tool
-def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allModes)
+def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allOptional, allModes)
 
 //Check if specified template files exist
 validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(allModes.split('\\|') as List)), "${baseDir}/templates")
@@ -52,9 +55,63 @@ Channel.from(params.mappersDefinitions)
   .filter{ params.mappers == 'all' || it.tool.matches(params.mappers) } //TODO Could allow :version
   // .tap { mappersMapChannel }
   // .map { it.subMap(allRequired)} //Exclude mapping specific fields from indexing process to avoid re-indexing e.g. on changes made to a mapping template
-  // .set { mappersIdxChannel }
-  .into { mappersIdxChannel; mappersMapChannel }
+  .set { mappersChannel }
+  // .into { mappersIdxChannel; mappersMapChannel; mappersVersionChannel }
 
+// mappersVersionChannel.view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+
+mappersChannel.filter {
+  if(it.containsKey('versionCall')) {
+    true
+  } else {
+    log.warn """
+    versionCall not specified for ${it.tool} ${it.version}
+    it will not be included in this run
+    """ 
+  }
+} 
+.set { mappersVithVersionCallChannel }
+
+process parseMapperVersion {
+  container { "${mapmeta.container}" }
+  tag { mapmeta.subMap(['tool','version']) }
+
+  input:  val(mapmeta) from mappersVithVersionCallChannel
+
+  output: tuple val(mapmeta), stdout into mappersCapturedVersionChannel
+
+  script: "${mapmeta.versionCall}"
+  // script: "set -o pipefail; ${mapmeta.versionCall}"
+}
+
+mappersCapturedVersionChannel
+.map { meta, ver ->
+  if(meta.version != ver.trim()) {
+    log.warn """
+    Decalred version ${meta.version} for ${meta.tool} 
+    does not match version ${ver.trim()} 
+    obtained from versionCall: ${meta.versionCall}    
+    Updating version in metadata to ${ver.trim()}
+    """      
+    //Please correct your mapper configuration file(s).    
+    // throw new RuntimeException('msg') or // 
+    // session.abort(new Exception())    
+    meta.version = ver.trim()
+    if(!meta.container.contains(meta.version)) {
+      log.error """
+      Updated tool version string ${meta.version}
+      not found in container image spec ${meta.container}.
+      Please correct your mapper configuration file(s).
+
+      Aborting...    
+      """
+      session.abort(new Exception())  // throw new RuntimeException('msg') 
+    }
+  }
+  meta
+}
+// .view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+.into { mappersIdxChannel; mappersMapChannel }
 
 //...and their params definitions
 mappersParamsChannel = Channel.from(params.mapperParamsDefinitions)
@@ -303,6 +360,10 @@ process faidxTranscriptomeFASTA {
   """
 }
 
+
+
+
+
 /*
 Resolve variables emebeded in single-quoted strings
 */
@@ -411,6 +472,7 @@ process rnfSimReads {
       distDev=""
     }
     """
+    set -eo pipefail
     echo "import rnftools
     rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
     rnftools.mishmash.${simulator}(
@@ -425,12 +487,18 @@ process rnfSimReads {
     rule: input: rnftools.input()
     " > Snakefile
     snakemake -p \
-    && paste --delimiters '=' <(echo -n nreads) <(sed -n '1~4p' *.fq | wc -l) > simStats \
-    && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
-    && time gzip --fast *.fq \
+    && awk 'END{print "nreads="NR/4}' *.fq > simStats \
+    && for f in *.fq; do
+        paste - - - - < \$f \
+        | awk -vFS="\\t" -vOFS="\\n" '{gsub(/[^ACGTUacgtu]/,"N",\$2);print}' \
+        | gzip -c > \${f}.gz
+    done && rm *.fq \
     && find . -type d -mindepth 2 | xargs rm -r
     """
 }
+  //  && paste --delimiters '=' <(echo -n nreads) <(sed -n '1~4p' *.fq | wc -l) > simStats \
+  //  && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
+// && time gzip --fast *.fq \
 
 //extract simulation stats from file (currently number of reads only), reshape and split to different channels
 // readsForCoordinateConversion = Channel.create()
@@ -552,6 +620,7 @@ process mapSimulatedReads {
   label 'align'
   container { "${meta.mapper.container}" }
   tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
+  // beforeScript meta.mapper.containsKey('versionCall') ? "${meta.mapper.versionCall} > .mapper.version" : ''
 
   input:
     set val(meta), file(reads), file(ref), file(fai), file('*'), val(run), val(ALIGN_PARAMS) from combinedToMap
@@ -570,7 +639,7 @@ process mapSimulatedReads {
 }
 
 process evaluateAlignmentsRNF {
-  label 'samtools'
+  label 'groovy_samtools'
   // label 'ES'
   // tag{alignmeta.tool.subMap(['name'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
   // tag{alignmeta.params.subMap(['paramslabel'])}
@@ -644,6 +713,9 @@ process renderReport {
 
   output:
     file '*'
+  
+  when:
+    !(workflow.profile.contains('CI')) //until leaner container
 
   script:
   """
