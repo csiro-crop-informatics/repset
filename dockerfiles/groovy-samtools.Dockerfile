@@ -1,4 +1,4 @@
-FROM groovy:3.0-jre-alpine@sha256:99356f5d9a525e64fccc7f84a992a970fbb210275c6689b7d75398ca01010d19
+FROM groovy:3.0-jre-alpine
 
 USER root
 
