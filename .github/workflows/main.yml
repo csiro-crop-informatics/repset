@@ -159,7 +159,7 @@ jobs:
 
       - name: Pull containers
         run: |
-          nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -ansi-log false
+          nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -ansi-log false -with-dag false
       - name: Test workflow with singularity - '${{ matrix.params.mapper }}' - '${{ matrix.params.mode }}'
         run: |
           nextflow run ${GITHUB_WORKSPACE} -profile CI,singularity --subset 1 --mappers '${{ matrix.params.mapper }}' --mapmode '${{ matrix.params.mode }}' --max_cpus 2 --max_memory 6.GB -ansi-log false -with-dag dag.dot -resume
