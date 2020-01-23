@@ -1,0 +1,172 @@
+name: CI
+
+on: [push]
+
+jobs:
+  docker:
+    runs-on: ubuntu-18.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        params:
+          - { mapper: minimap2, mode: dna2dna }
+          - { mapper: hisat2, mode: rna2dna }
+          - { mapper: kallisto, mode: rna2rna }
+    steps:
+      - name: Install Nextflow
+        env:
+          NXF_VERSION: 19.10.0
+        run: |
+          wget -qO- get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Setup test-data cache
+        id: cache-data
+        uses: actions/cache@v1
+        with:
+          path: downloaded
+          key: data-${{ github.sha }}
+          restore-keys: |
+            data-${{ github.sha }}-
+            data-
+
+      - name: Setup work-dir cache
+        id: cache-work
+        uses: actions/cache@v1
+        with:
+          path: work
+          key: work-docker-${{ matrix.params.mode }}-${{ github.sha }}
+          restore-keys: |
+            work-docker-${{ matrix.params.mode }}-${{ github.sha }}-
+            work-docker-${{ matrix.params.mode }}-
+
+      - name: Setup NF cache
+        id: cache-NF
+        uses: actions/cache@v1
+        with:
+          path: .nextflow
+          key: nf-docker-${{ matrix.params.mode }}-${{ github.sha }}
+          restore-keys: |
+            nf-docker-${{ matrix.params.mode }}-${{ github.sha }}-
+            nf-docker-${{ matrix.params.mode }}-
+
+      - name: Test workflow with docker - ${{ matrix.params.mapper }}
+        run: |
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --subset 1 --mappers ${{ matrix.params.mapper }} --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -ansi-log false -with-dag dag.dot -resume
+      - name: sysinfo
+        run: |
+          df -h
+          lscpu | egrep 'Model name|Socket|Thread|NUMA|CPU\(s\)'
+          awk '/MemTotal/ {print "RAM : "$2/1E6" GB"}' /proc/meminfo
+          docker image ls
+      # - name: garaph-easy dag
+      #   run: |
+      #     cat dag.dot | docker run -i panguolin/grapheasy:latest graph-easy
+
+  singularity:
+    runs-on: ubuntu-18.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        params:
+          - { mapper: 'minimap2|hisat2|kallisto', mode: 'dna2dna|rna2dnarna2rna' }
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.13
+        id: go
+      - name: Install Dependencies for Singularity
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential \
+            libssl-dev \
+            uuid-dev \
+            libgpgme11-dev \
+            squashfs-tools \
+            libseccomp-dev \
+            pkg-config
+      - name: Install Singularity
+        env:
+          SINGULARITY_VERSION: 3.5.2
+        run: |
+          export GOPATH=/tmp/go
+          mkdir -p $GOPATH
+          sudo mkdir -p /usr/local/var/singularity/mnt && \
+          mkdir -p $GOPATH/src/github.com/sylabs && \
+          cd $GOPATH/src/github.com/sylabs && \
+          wget -qO- https://github.com/sylabs/singularity/releases/download/v${SINGULARITY_VERSION}/singularity-${SINGULARITY_VERSION}.tar.gz | \
+          tar xzv && \
+          cd singularity && \
+          ./mconfig -p /usr/local && \
+          make -C builddir && \
+          sudo make -C builddir install
+      - name: Install Nextflow
+        env:
+          NXF_VERSION: 19.10.0
+        run: |
+          wget -qO- get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Setup test-data cache
+        id: cache-data
+        uses: actions/cache@v1
+        with:
+          path: downloaded
+          key: data-${{ github.sha }}
+          restore-keys: |
+            data-${{ github.sha }}-
+            data-
+
+      - name: Setup work cache
+        id: cache-work
+        uses: actions/cache@v1
+        with:
+          path: work
+          key: work-sing-${{ github.sha }}
+          restore-keys: |
+            work-sing-${{ github.sha }}-
+            work-sing-
+
+      - name: Setup NF cache
+        id: cache-NF
+        uses: actions/cache@v1
+        with:
+          path: .nextflow
+          key: nf-sing-${{ github.sha }}
+          restore-keys: |
+            nf-sing-${{ github.sha }}-
+            nf-sing-
+
+      - name: Setup singularity images cache
+        id: cache-singularity-images
+        uses: actions/cache@v1
+        with:
+          path: singularity-images
+          key: simg-${{ github.sha }}
+          restore-keys: |
+            simg-${{ github.sha }}-
+            simg-
+
+      - name: Pull containers
+        run: |
+          nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -ansi-log false
+      - name: Test workflow with singularity - '${{ matrix.params.mapper }}' - '${{ matrix.params.mode }}'
+        run: |
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,singularity --subset 1 --mappers '${{ matrix.params.mapper }}' --mapmode '${{ matrix.params.mode }}' --max_cpus 2 --max_memory 6.GB -ansi-log false -with-dag dag.dot -resume
+      - name: sysinfo
+        run: |
+          df -h
+          lscpu | egrep 'Model name|Socket|Thread|NUMA|CPU\(s\)'
+          awk '/MemTotal/ {print "RAM : "$2/1E6" GB"}' /proc/meminfo
+          ls -lhS singularity-images/
+          du -h singularity-images

@@ -4,11 +4,25 @@ import nextflow.util.Escape
 import nextflow.container.SingularityCache
 
 
-Channel.from(params.mappersDefinitions).map {
+//Auxiliary container images
+def containers = []
+session.getConfig().process.each {k, v ->
+  if((k.startsWith('withLabel:') || k.startsWith('withName:')) && v.containsKey('container') && !(k.endsWith('rrender'))) { //skipping rrender for CI
+    // println "$k -> $v.container"
+    containers << v.container
+  }
+}
+
+//Mappers container images
+Channel.from(params.mappersDefinitions)
+.filter{ params.mappers == 'all' || it.tool.matches(params.mappers) }
+.map {
   it.container
-}.set { containers }
+}
+.set { mapperContainers }
 
 SingularityCache scache = new SingularityCache() //to get NF-consitent image file names
+
 
 process pull_container {
   tag { remote }
@@ -17,7 +31,7 @@ process pull_container {
   echo true
 
 input:
-  val(remote) from containers
+  val(remote) from mapperContainers.mix(Channel.from(containers)).unique()
 
 output:
   file(img)

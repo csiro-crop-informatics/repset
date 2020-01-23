@@ -1,5 +1,7 @@
 #!/usr/bin/env nextflow
 
+log.info workflow.profile
+
 //For pretty-printing nested maps etc
 import groovy.json.JsonGenerator 
 import groovy.json.JsonSlurper
@@ -200,7 +202,7 @@ process stageRemoteInputFile {
   storeDir can be problematic on s3 - leads to "Missing output file(s)" error
   workDir should be more robust as it is mounted in singularity unlike outdir?
   */
-  storeDir { executor == 'awsbatch' ? null : "${workDir}/downloaded" } 
+  storeDir { executor == 'awsbatch' ? null : "downloaded" } 
 
 
   input:
@@ -470,6 +472,7 @@ process rnfSimReads {
       distDev=""
     }
     """
+    set -eo pipefail
     echo "import rnftools
     rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
     rnftools.mishmash.${simulator}(
@@ -484,12 +487,18 @@ process rnfSimReads {
     rule: input: rnftools.input()
     " > Snakefile
     snakemake -p \
-    && paste --delimiters '=' <(echo -n nreads) <(sed -n '1~4p' *.fq | wc -l) > simStats \
-    && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
-    && time gzip --fast *.fq \
+    && awk 'END{print "nreads="NR/4}' *.fq > simStats \
+    && for f in *.fq; do
+        paste - - - - < \$f \
+        | awk -vFS="\\t" -vOFS="\\n" '{gsub(/[^ACGTUacgtu]/,"N",\$2);print}' \
+        | gzip -c > \${f}.gz
+    done && rm *.fq \
     && find . -type d -mindepth 2 | xargs rm -r
     """
 }
+  //  && paste --delimiters '=' <(echo -n nreads) <(sed -n '1~4p' *.fq | wc -l) > simStats \
+  //  && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
+// && time gzip --fast *.fq \
 
 //extract simulation stats from file (currently number of reads only), reshape and split to different channels
 // readsForCoordinateConversion = Channel.create()
@@ -630,7 +639,7 @@ process mapSimulatedReads {
 }
 
 process evaluateAlignmentsRNF {
-  label 'samtools'
+  label 'groovy_samtools'
   // label 'ES'
   // tag{alignmeta.tool.subMap(['name'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
   // tag{alignmeta.params.subMap(['paramslabel'])}
@@ -704,6 +713,9 @@ process renderReport {
 
   output:
     file '*'
+  
+  when:
+    !(workflow.profile.contains('CI')) //until leaner container
 
   script:
   """

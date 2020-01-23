@@ -5,7 +5,8 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
 
-@Grab('info.picocli:picocli:4.0.0-alpha-3') //command line interface
+@Grab('info.picocli:picocli-groovy:4.1.2') //command line interface
+
 @Command(header = [
        //Font Name: Calvin S (Caps)
        $/@|bold,blue  ╔═╗╦  ╦╔═╗╦    ╦═╗╔╗╔╔═╗   |@/$,
