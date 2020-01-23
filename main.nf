@@ -677,36 +677,35 @@ process evaluateAlignmentsRNF {
 **/
 def slurper = new JsonSlurper()
 evaluatedAlignmentsRNF.map { META, JSON ->
-      [META+[evaluation: slurper.parseText(JSON.text)]]
+      [ META + [evaluation: slurper.parseText(JSON.text)] ]
   }
   .collect()
-  .map {
-    file("${params.outdir}").mkdirs()
-    outfile = file("${params.outdir}/allstats.json")
-    // outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))
-    outfile.text = JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.mapper.tool <=>  k2.mapper.tool} ) ))
-    def runmetapart = [:]
-    runmetapart['workflow'] = workflow.getProperties()
-    runmetapart['params'] = params
-    runmetaJSONpartial = file("${params.infodir}/runmetapart.json")
-    runmetaJSONpartial.text = JsonOutput.prettyPrint(jsonGenerator.toJson(runmetapart))
+  .map { //Generate:  [ allstats.json, runmetapart.json]
+    [
+      JsonOutput.prettyPrint(jsonGenerator.toJson(
+        it.sort( { k1,k2 -> k1.mapper.tool <=>  k2.mapper.tool }
+      ))),
+      JsonOutput.prettyPrint(jsonGenerator.toJson([
+        workflow : workflow.getProperties(),
+        params   : params
+      ]))
+    ]
+  }
+  .set { resultsJsonChannel }
 
-    [outfile, runmetaJSONpartial]
-  }.set { jsonChannel }
-
-
-//WRAP-UP --TODO Manuscript rendering to be separated
-// writing = Channel.fromPath("$baseDir/report/*.Rmd").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+// //WRAP-UP --TODO Manuscript rendering to be separated
+// // writing = Channel.fromPath("$baseDir/report/*.Rmd").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
 process renderReport {
   tag {"Render ${Rmd}"}
   label 'rrender'
   label 'report'
   stageInMode 'copy'
+  cache false //Input includes run metadata so cache would not work anyway
 
   input:
     file(Rmd) from Channel.fromPath("$baseDir/report/report.Rmd")
-    file(json) from jsonChannel.collect()
+    tuple file('allstats.json'), file('runmetapart.json') from resultsJsonChannel
 
   output:
     file '*'
