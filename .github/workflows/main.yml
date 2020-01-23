@@ -169,4 +169,3 @@ jobs:
           lscpu | egrep 'Model name|Socket|Thread|NUMA|CPU\(s\)'
           awk '/MemTotal/ {print "RAM : "$2/1E6" GB"}' /proc/meminfo
           ls -lhS singularity-images/
-          du -h singularity-images
