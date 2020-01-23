@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 //For pretty-printing nested maps etc
-import groovy.json.JsonGenerator 
+import groovy.json.JsonGenerator
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 //as JsonGenerator
@@ -17,8 +17,8 @@ import groovy.json.JsonOutput
 JsonGenerator jsonGenerator = new JsonGenerator.Options()
                 .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
                 .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
-                .addConverter(java.time.OffsetDateTime) { java.time.OffsetDateTime dt, String key -> dt.toString() }                
-                .addConverter(nextflow.NextflowMeta) { nextflow.NextflowMeta m, String key -> m.toJsonMap() }  //incompatible with Nextflow <= 19.04.0 
+                .addConverter(java.time.OffsetDateTime) { java.time.OffsetDateTime dt, String key -> dt.toString() }
+                .addConverter(nextflow.NextflowMeta) { nextflow.NextflowMeta m, String key -> m.toJsonMap() }  //incompatible with Nextflow <= 19.04.0
                 .excludeFieldsByType(java.lang.Class) // .excludeFieldsByName('class')
                 // .excludeNulls()
                 .build()
@@ -28,8 +28,9 @@ def validators = new GroovyShell().parse(new File("${baseDir}/groovy/Validators.
 
 //Read, parse, validate and sanitize alignment/mapping tools config
 def allRequired = ['tool','version','container','index'] //Fields required for each tool in config
+def allOptional = ['versionCall']
 def allModes = 'dna2dna|rna2rna|rna2dna' //At leas one mode has to be defined as supported by each tool
-def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allModes)
+def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allOptional, allModes)
 
 //Check if specified template files exist
 validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(allModes.split('\\|') as List)), "${baseDir}/templates")
@@ -52,9 +53,63 @@ Channel.from(params.mappersDefinitions)
   .filter{ params.mappers == 'all' || it.tool.matches(params.mappers) } //TODO Could allow :version
   // .tap { mappersMapChannel }
   // .map { it.subMap(allRequired)} //Exclude mapping specific fields from indexing process to avoid re-indexing e.g. on changes made to a mapping template
-  // .set { mappersIdxChannel }
-  .into { mappersIdxChannel; mappersMapChannel }
+  .set { mappersChannel }
+  // .into { mappersIdxChannel; mappersMapChannel; mappersVersionChannel }
 
+// mappersVersionChannel.view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+
+mappersChannel.filter {
+  if(it.containsKey('versionCall')) {
+    true
+  } else {
+    log.warn """
+    versionCall not specified for ${it.tool} ${it.version}
+    it will not be included in this run
+    """
+  }
+}
+.set { mappersVithVersionCallChannel }
+
+process parseMapperVersion {
+  container { "${mapmeta.container}" }
+  tag { mapmeta.subMap(['tool','version']) }
+
+  input:  val(mapmeta) from mappersVithVersionCallChannel
+
+  output: tuple val(mapmeta), stdout into mappersCapturedVersionChannel
+
+  script: "${mapmeta.versionCall}"
+  // script: "set -o pipefail; ${mapmeta.versionCall}"
+}
+
+mappersCapturedVersionChannel
+.map { meta, ver ->
+  if(meta.version != ver.trim()) {
+    log.warn """
+    Decalred version ${meta.version} for ${meta.tool}
+    does not match version ${ver.trim()}
+    obtained from versionCall: ${meta.versionCall}
+    Updating version in metadata to ${ver.trim()}
+    """
+    //Please correct your mapper configuration file(s).
+    // throw new RuntimeException('msg') or //
+    // session.abort(new Exception())
+    meta.version = ver.trim()
+    if(!meta.container.contains(meta.version)) {
+      log.error """
+      Updated tool version string ${meta.version}
+      not found in container image spec ${meta.container}.
+      Please correct your mapper configuration file(s).
+
+      Aborting...
+      """
+      session.abort(new Exception())  // throw new RuntimeException('msg')
+    }
+  }
+  meta
+}
+// .view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+.into { mappersIdxChannel; mappersMapChannel }
 
 //...and their params definitions
 mappersParamsChannel = Channel.from(params.mapperParamsDefinitions)
@@ -128,7 +183,7 @@ if (params.help){
     but local files might not be on paths automatically mounted in the container.
 */
 Channel.from(params.references)
-.take( params.subset ) //only process n data sets (-1 means all) 
+.take( params.subset ) //only process n data sets (-1 means all)
 .combine(Channel.from('fasta','gff')) //duplicate each reference record
 .filter { meta, fileType -> meta.containsKey(fileType)} //exclude gff record if no gff declared
 .tap { refsToStage } //download if URL
@@ -145,7 +200,7 @@ process stageRemoteInputFile {
   storeDir can be problematic on s3 - leads to "Missing output file(s)" error
   workDir should be more robust as it is mounted in singularity unlike outdir?
   */
-  storeDir { executor == 'awsbatch' ? null : "${workDir}/downloaded" } 
+  storeDir { executor == 'awsbatch' ? null : "downloaded" }
 
 
   input:
@@ -303,6 +358,10 @@ process faidxTranscriptomeFASTA {
   """
 }
 
+
+
+
+
 /*
 Resolve variables emebeded in single-quoted strings
 */
@@ -411,6 +470,7 @@ process rnfSimReads {
       distDev=""
     }
     """
+    set -eo pipefail
     echo "import rnftools
     rnftools.mishmash.sample(\\"${basename}_reads\\",reads_in_tuple=${tuple})
     rnftools.mishmash.${simulator}(
@@ -425,12 +485,18 @@ process rnfSimReads {
     rule: input: rnftools.input()
     " > Snakefile
     snakemake -p \
-    && paste --delimiters '=' <(echo -n nreads) <(sed -n '1~4p' *.fq | wc -l) > simStats \
-    && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
-    && time gzip --fast *.fq \
+    && awk 'END{print "nreads="NR/4}' *.fq > simStats \
+    && for f in *.fq; do
+        paste - - - - < \$f \
+        | awk -vFS="\\t" -vOFS="\\n" '{gsub(/[^ACGTUacgtu]/,"N",\$2);print}' \
+        | gzip -c > \${f}.gz
+    done && rm *.fq \
     && find . -type d -mindepth 2 | xargs rm -r
     """
 }
+  //  && paste --delimiters '=' <(echo -n nreads) <(sed -n '1~4p' *.fq | wc -l) > simStats \
+  //  && time sed -i '2~4 s/[^ACGTUacgtu]/N/g' *.fq \
+// && time gzip --fast *.fq \
 
 //extract simulation stats from file (currently number of reads only), reshape and split to different channels
 // readsForCoordinateConversion = Channel.create()
@@ -552,6 +618,7 @@ process mapSimulatedReads {
   label 'align'
   container { "${meta.mapper.container}" }
   tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
+  // beforeScript meta.mapper.containsKey('versionCall') ? "${meta.mapper.versionCall} > .mapper.version" : ''
 
   input:
     set val(meta), file(reads), file(ref), file(fai), file('*'), val(run), val(ALIGN_PARAMS) from combinedToMap
@@ -570,7 +637,7 @@ process mapSimulatedReads {
 }
 
 process evaluateAlignmentsRNF {
-  label 'samtools'
+  label 'groovy_samtools'
   // label 'ES'
   // tag{alignmeta.tool.subMap(['name'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
   // tag{alignmeta.params.subMap(['paramslabel'])}
@@ -610,40 +677,41 @@ process evaluateAlignmentsRNF {
 **/
 def slurper = new JsonSlurper()
 evaluatedAlignmentsRNF.map { META, JSON ->
-      [META+[evaluation: slurper.parseText(JSON.text)]]
+      [ META + [evaluation: slurper.parseText(JSON.text)] ]
   }
   .collect()
-  .map {
-    file("${params.outdir}").mkdirs()
-    outfile = file("${params.outdir}/allstats.json")
-    // outfile.text = groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))
-    outfile.text = JsonOutput.prettyPrint(jsonGenerator.toJson(it.sort( {k1,k2 -> k1.mapper.tool <=>  k2.mapper.tool} ) ))
-    def runmetapart = [:]
-    runmetapart['workflow'] = workflow.getProperties()
-    runmetapart['params'] = params
-    runmetaJSONpartial = file("${params.infodir}/runmetapart.json")
-    runmetaJSONpartial.text = JsonOutput.prettyPrint(jsonGenerator.toJson(runmetapart))
+  .map { //Generate:  [ allstats.json, runmetapart.json]
+    [
+      JsonOutput.prettyPrint(jsonGenerator.toJson(
+        it.sort( { k1,k2 -> k1.mapper.tool <=>  k2.mapper.tool }
+      ))),
+      JsonOutput.prettyPrint(jsonGenerator.toJson([
+        workflow : workflow.getProperties(),
+        params   : params
+      ]))
+    ]
+  }
+  .set { resultsJsonChannel }
 
-    [outfile, runmetaJSONpartial]
-  }.set { jsonChannel }
-
-
-//WRAP-UP --TODO Manuscript rendering to be separated
-// writing = Channel.fromPath("$baseDir/report/*.Rmd").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
+// //WRAP-UP --TODO Manuscript rendering to be separated
+// // writing = Channel.fromPath("$baseDir/report/*.Rmd").mix(Channel.fromPath("$baseDir/manuscript/*")) //manuscript dir exists only on manuscript branch
 
 process renderReport {
   tag {"Render ${Rmd}"}
   label 'rrender'
   label 'report'
   stageInMode 'copy'
-  //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
+  cache false //Input includes run metadata so cache would not work anyway
 
   input:
     file(Rmd) from Channel.fromPath("$baseDir/report/report.Rmd")
-    file(json) from jsonChannel
+    tuple file('allstats.json'), file('runmetapart.json') from resultsJsonChannel
 
   output:
     file '*'
+
+  when:
+    !(workflow.profile.contains('CI')) //until leaner container
 
   script:
   """
@@ -655,7 +723,7 @@ process renderReport {
   library(tidyverse)
   library(jsonlite)
   library(kableExtra)
-  
+
   rmarkdown::render("${Rmd}")
   """
 }
@@ -704,7 +772,7 @@ workflow.onComplete {
       GroovyShell shell = new GroovyShell()
       def apiCalls = shell.parse(new File("$baseDir/groovy/ApiCalls.groovy"))
 
-      // def instant = Instant.now() 
+      // def instant = Instant.now()
       // println instant
       // def utc =  LocalDateTime.ofInstant(instant, ZoneOffset.UTC)
       // def local = LocalDateTime.ofInstant(instant, ZoneId.systemDefault())
@@ -724,7 +792,7 @@ workflow.onComplete {
         ],
         RELEASE_TAG: "${workflow.revision}_${workflow.complete.format(formatter)}_${workflow.runName}_${workflow.sessionId}",
         RELEASE_NAME: "${workflow.revision} - results and metadata for run '${workflow.runName}'",
-        RELEASE_BODY: 
+        RELEASE_BODY:
 """
 - revision          `${workflow.revision}`
 - commit ID          ${workflow.commitId}

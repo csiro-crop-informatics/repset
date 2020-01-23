@@ -433,17 +433,51 @@ There are several ways for rendering of the report outside the pipeline, with do
 
 ### Using docker
 
+1. Put all requited files in one place
+
 ```sh
-docker run --rm --user $(id -u):$(id -g) \
-  --volume $(pwd)/report:/report \
-  --workdir /report rsuchecki/renderer:0.2 ./render.R
+mkdir -p localrender
+cp report/report.Rmd  localrender/
+cp results/* localrender/
+cp flowinfo/*.{json,tsv} localrender/
 ```
+
+2. Docker run rendering
+
+```sh
+docker run \
+  --rm \
+  --user $(id -u):$(id -g) \
+  --volume $(pwd)/localrender:/render \
+  --volume $(pwd)/bin:/binr \
+  --workdir /render \
+  rsuchecki/renderer:0.4.1_81ab6b5d71509d48e3a37b5eafb4bca5b117b5fc /binr/render.R
+```
+
+3. Rendered report should be available under `./localrender`
+   
 
 ### Using singularity
 
+1. Put all requited files in one place
+
 ```sh
-singularity exec --pwd $(pwd)/report docker://rsuchecki/renderer:0.1 ./render.R
+mkdir -p localrender \
+ && cp report/report.Rmd  localrender/ \
+ && cp results/* localrender/ \
+ && cp flowinfo/*.{json,tsv} localrender/ 
 ```
+
+2. Docker run rendering
+  
+```sh
+singularity exec \
+  --bind $(pwd)/bin:/binr \
+  --pwd $(pwd)/localrender \
+  docker://rsuchecki/renderer:0.4.1_81ab6b5d71509d48e3a37b5eafb4bca5b117b5fc /binr/render.R
+```
+
+3. Rendered report should be available under `./localrender`
 
 ### Natively
 
@@ -456,13 +490,20 @@ If you'd like to render the report without docker/singularity, you will need the
   * `rmarkdown`
   * `rticles`
   * `bookdown`
+  * `tidyverse`
+  * `jsonlite`
+  * `kableExtra`
 
 Then:
 
 ```
-cd report && ./render.R
-```
+mkdir -p localrender \
+ && cp report/report.Rmd  localrender/ \
+ && cp results/* localrender/ \
+ && cp flowinfo/*.{json,tsv} localrender/ 
 
+cd localrender && ../bin/render.R
+```
 
 
 # Manuscript

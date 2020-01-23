@@ -19,12 +19,12 @@ def addToListInMap (map, key, value, context) {
   }
 }
 
-def validateMappersDefinitions (mappers, allRequired, allModes) {
+def validateMappersDefinitions (mappers, allRequired, allOptional, allModes) {
   def allVersions = [:] //Keep track of tool versions declared in config
   mappers.each { rec ->
     addToListInMap(allVersions, rec.tool, rec.version, rec)
     rec.each {k, v ->
-      if(!(k in (allModes.split('\\|')+allRequired))) {
+      if(!(k in (allModes.split('\\|')+allRequired+allOptional))) {
         System.err.println """Validation error: unexpected field in mapper definition:
           Offending field: ${k}
           Offending record: ${rec}"""
@@ -44,7 +44,7 @@ def validateMappersDefinitions (mappers, allRequired, allModes) {
       System.exit 1
     }
     if(!rec.container.contains(rec.version))
-      System.err.println "Warning: decalred tool version string ${rec.version} not found in container image spec ${rec.container}."
+      System.err.println "Warning: declared tool version string ${rec.version} not found in container image spec ${rec.container}."
   }
   allVersions.each {k, v ->
     if(v.size()==1)
