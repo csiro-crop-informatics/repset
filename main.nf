@@ -1,9 +1,7 @@
 #!/usr/bin/env nextflow
 
-log.info workflow.profile
-
 //For pretty-printing nested maps etc
-import groovy.json.JsonGenerator 
+import groovy.json.JsonGenerator
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 //as JsonGenerator
@@ -19,8 +17,8 @@ import groovy.json.JsonOutput
 JsonGenerator jsonGenerator = new JsonGenerator.Options()
                 .addConverter(java.nio.file.Path) { java.nio.file.Path p, String key -> p.toUriString() }
                 .addConverter(Duration) { Duration d, String key -> d.durationInMillis }
-                .addConverter(java.time.OffsetDateTime) { java.time.OffsetDateTime dt, String key -> dt.toString() }                
-                .addConverter(nextflow.NextflowMeta) { nextflow.NextflowMeta m, String key -> m.toJsonMap() }  //incompatible with Nextflow <= 19.04.0 
+                .addConverter(java.time.OffsetDateTime) { java.time.OffsetDateTime dt, String key -> dt.toString() }
+                .addConverter(nextflow.NextflowMeta) { nextflow.NextflowMeta m, String key -> m.toJsonMap() }  //incompatible with Nextflow <= 19.04.0
                 .excludeFieldsByType(java.lang.Class) // .excludeFieldsByName('class')
                 // .excludeNulls()
                 .build()
@@ -67,9 +65,9 @@ mappersChannel.filter {
     log.warn """
     versionCall not specified for ${it.tool} ${it.version}
     it will not be included in this run
-    """ 
+    """
   }
-} 
+}
 .set { mappersVithVersionCallChannel }
 
 process parseMapperVersion {
@@ -88,14 +86,14 @@ mappersCapturedVersionChannel
 .map { meta, ver ->
   if(meta.version != ver.trim()) {
     log.warn """
-    Decalred version ${meta.version} for ${meta.tool} 
-    does not match version ${ver.trim()} 
-    obtained from versionCall: ${meta.versionCall}    
+    Decalred version ${meta.version} for ${meta.tool}
+    does not match version ${ver.trim()}
+    obtained from versionCall: ${meta.versionCall}
     Updating version in metadata to ${ver.trim()}
-    """      
-    //Please correct your mapper configuration file(s).    
-    // throw new RuntimeException('msg') or // 
-    // session.abort(new Exception())    
+    """
+    //Please correct your mapper configuration file(s).
+    // throw new RuntimeException('msg') or //
+    // session.abort(new Exception())
     meta.version = ver.trim()
     if(!meta.container.contains(meta.version)) {
       log.error """
@@ -103,9 +101,9 @@ mappersCapturedVersionChannel
       not found in container image spec ${meta.container}.
       Please correct your mapper configuration file(s).
 
-      Aborting...    
+      Aborting...
       """
-      session.abort(new Exception())  // throw new RuntimeException('msg') 
+      session.abort(new Exception())  // throw new RuntimeException('msg')
     }
   }
   meta
@@ -185,7 +183,7 @@ if (params.help){
     but local files might not be on paths automatically mounted in the container.
 */
 Channel.from(params.references)
-.take( params.subset ) //only process n data sets (-1 means all) 
+.take( params.subset ) //only process n data sets (-1 means all)
 .combine(Channel.from('fasta','gff')) //duplicate each reference record
 .filter { meta, fileType -> meta.containsKey(fileType)} //exclude gff record if no gff declared
 .tap { refsToStage } //download if URL
@@ -202,7 +200,7 @@ process stageRemoteInputFile {
   storeDir can be problematic on s3 - leads to "Missing output file(s)" error
   workDir should be more robust as it is mounted in singularity unlike outdir?
   */
-  storeDir { executor == 'awsbatch' ? null : "downloaded" } 
+  storeDir { executor == 'awsbatch' ? null : "downloaded" }
 
 
   input:
@@ -705,15 +703,14 @@ process renderReport {
   label 'rrender'
   label 'report'
   stageInMode 'copy'
-  //scratch = true //hack, otherwise -profile singularity (with automounts) fails with FATAL:   container creation failed: unabled to {task.workDir} to mount list: destination ${task.workDir} is already in the mount point list
 
   input:
     file(Rmd) from Channel.fromPath("$baseDir/report/report.Rmd")
-    file(json) from jsonChannel
+    file(json) from jsonChannel.collect()
 
   output:
     file '*'
-  
+
   when:
     !(workflow.profile.contains('CI')) //until leaner container
 
@@ -727,7 +724,7 @@ process renderReport {
   library(tidyverse)
   library(jsonlite)
   library(kableExtra)
-  
+
   rmarkdown::render("${Rmd}")
   """
 }
@@ -776,7 +773,7 @@ workflow.onComplete {
       GroovyShell shell = new GroovyShell()
       def apiCalls = shell.parse(new File("$baseDir/groovy/ApiCalls.groovy"))
 
-      // def instant = Instant.now() 
+      // def instant = Instant.now()
       // println instant
       // def utc =  LocalDateTime.ofInstant(instant, ZoneOffset.UTC)
       // def local = LocalDateTime.ofInstant(instant, ZoneId.systemDefault())
@@ -796,7 +793,7 @@ workflow.onComplete {
         ],
         RELEASE_TAG: "${workflow.revision}_${workflow.complete.format(formatter)}_${workflow.runName}_${workflow.sessionId}",
         RELEASE_NAME: "${workflow.revision} - results and metadata for run '${workflow.runName}'",
-        RELEASE_BODY: 
+        RELEASE_BODY:
 """
 - revision          `${workflow.revision}`
 - commit ID          ${workflow.commitId}

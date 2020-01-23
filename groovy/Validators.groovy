@@ -44,7 +44,7 @@ def validateMappersDefinitions (mappers, allRequired, allOptional, allModes) {
       System.exit 1
     }
     if(!rec.container.contains(rec.version))
-      System.err.println "Warning: decalred tool version string ${rec.version} not found in container image spec ${rec.container}."
+      System.err.println "Warning: declared tool version string ${rec.version} not found in container image spec ${rec.container}."
   }
   allVersions.each {k, v ->
     if(v.size()==1)
