@@ -1,8 +1,10 @@
 import static groovy.json.JsonGenerator.*
 
+class Validators {
+
 def addToListInMap (map, key, value, context) {
   if(map.containsKey(key)) {
-    stored = map.get(key)
+    def stored = map.get(key)
     if(value in stored) {
       System.err.println """Error: duplicate entry for ${key}
         Current value  : ${value}
@@ -19,7 +21,7 @@ def addToListInMap (map, key, value, context) {
   }
 }
 
-def validateMappersDefinitions (mappers, allRequired, allOptional, allModes) {
+def public validateMappersDefinitions (mappers, allRequired, allOptional, allModes) {
   def allVersions = [:] //Keep track of tool versions declared in config
   mappers.each { rec ->
     addToListInMap(allVersions, rec.tool, rec.version, rec)
@@ -111,12 +113,12 @@ def validateMapperParamsDefinitions (mapperParams, allVersions, allModes) {
     allModes.split('\\|'). each { mode ->
       def validationMap = validationMaps."${mode}"
       if(mode.matches(rec.mode)) {
-        versions = rec.version instanceof Collection ? rec.version : [rec.version]
+        def versions = rec.version instanceof Collection ? rec.version : [rec.version]
         versions.each{ ver ->
           // key = [rec.tool, ver, rec.label].join("_")
           // key = [rec.tool, ver].join("_")
-          key = "${rec.tool}_${ver}"
-          addToListInMap(validationMap, key, rec.label, "If tool/version/mode overlap then the labels must be unique: ${rec}")
+          // def key = "${rec.tool}_${ver}"
+          addToListInMap(validationMap, "${rec.tool}_${ver}", rec.label, "If tool/version/mode overlap then the labels must be unique: ${rec}")
           // // println "key "+key
           // stored = validationMap.putIfAbsent(key, rec)
           // if(stored != null) {
@@ -137,12 +139,12 @@ def validateMapperParamsDefinitions (mapperParams, allVersions, allModes) {
   allModes.split('\\|').each { mode ->
     def validationMap = validationMaps."${mode}"
     allVersions.each { tool, ver ->
-      versions = ver instanceof Collection ? ver : [ver]
+      def versions = ver instanceof Collection ? ver : [ver]
       versions.each { v ->
         // def key = [tool, v, 'default'].join("_")
         // println "\nCurrent ${tool}_${v} ${mode}"
         // println validationMap.keySet()
-        stored = validationMap.putIfAbsent("${tool}_${v}", "default")
+        def stored = validationMap.putIfAbsent("${tool}_${v}", "default")
         // if(!(validationMaps."${mode}".containsKey("${tool}_${v}"))) {
         if(stored == null) {
           // println "Putting ${tool}_${v} ${mode}"
@@ -181,4 +183,6 @@ def validateInputDefinitions (references, allRequired, optional) {
       System.exit 1
     }
   }
+}
+
 }

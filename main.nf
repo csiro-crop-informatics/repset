@@ -24,13 +24,14 @@ JsonGenerator jsonGenerator = new JsonGenerator.Options()
                 .build()
 
 //Input validation specified elswhere
-def validators = new GroovyShell().parse(new File("${baseDir}/groovy/Validators.groovy"))
+def validators = new Validators() //from lib/ instead of new GroovyShell().parse(new File("${baseDir}/groovy/Validators.groovy"))
 
 //Read, parse, validate and sanitize alignment/mapping tools config
 def allRequired = ['tool','version','container','index'] //Fields required for each tool in config
 def allOptional = ['versionCall']
 def allModes = 'dna2dna|rna2rna|rna2dna' //At leas one mode has to be defined as supported by each tool
 def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allOptional, allModes)
+
 
 //Check if specified template files exist
 validators.validateTemplatesAndScripts(params.mappersDefinitions, (['index']+(allModes.split('\\|') as List)), "${baseDir}/templates")
