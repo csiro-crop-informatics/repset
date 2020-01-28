@@ -131,26 +131,6 @@ jobs:
             data-${{ github.sha }}-
             data-
 
-      # - name: Setup work cache
-      #   id: cache-work
-      #   uses: actions/cache@v1
-      #   with:
-      #     path: work
-      #     key: work-sing-${{ github.sha }}
-      #     restore-keys: |
-      #       work-sing-${{ github.sha }}-
-      #       work-sing-
-
-      # - name: Setup NF cache
-      #   id: cache-NF
-      #   uses: actions/cache@v1
-      #   with:
-      #     path: .nextflow
-      #     key: nf-sing-${{ github.sha }}
-      #     restore-keys: |
-      #       nf-sing-${{ github.sha }}-
-      #       nf-sing-
-
       - name: Singularity images cache
         id: cache-singularity-images
         uses: actions/cache@v1
@@ -167,11 +147,7 @@ jobs:
       - name: Test workflow with singularity - '${{ matrix.params.mapper }}' - '${{ matrix.params.mode }}'
         run: |
           nextflow run ${GITHUB_WORKSPACE} -profile CI,singularity --subset 1 --mappers '${{ matrix.params.mapper }}' --mapmode '${{ matrix.params.mode }}' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot
-      # - name: Upload NF log
-      #   uses: actions/upload-artifact@v1
-      #   with:
-      #     name: log
-      #     path: .nextflow.log
+
       - name: sysinfo
         run: |
           df -h
