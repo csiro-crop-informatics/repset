@@ -13,10 +13,12 @@ jobs:
           - { mapper: minimap2, mode: dna2dna }
           - { mapper: hisat2, mode: rna2dna }
           - { mapper: kallisto, mode: rna2rna }
+    env:
+      NXF_ANSI_LOG: false
+      NXF_ANSI_SUMMARY: true
+      NXF_VERSION: 19.10.0
     steps:
       - name: Install Nextflow
-        env:
-          NXF_VERSION: 19.10.0
         run: |
           wget -qO- get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
@@ -56,7 +58,7 @@ jobs:
 
       - name: Test workflow with docker - ${{ matrix.params.mapper }}
         run: |
-          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --subset 1 --mappers ${{ matrix.params.mapper }} --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -ansi-log false -with-dag dag.dot -resume
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --subset 1 --mappers ${{ matrix.params.mapper }} --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
       - name: sysinfo
         run: |
           df -h
@@ -75,7 +77,11 @@ jobs:
       max-parallel: 1
       matrix:
         params:
-          - { mapper: 'minimap2|hisat2|kallisto', mode: 'dna2dna|rna2dnarna2rna' }
+          - { mapper: 'minimap2|hisat2|kallisto', mode: 'dna2dna|rna2dna|rna2rna' }
+    env:
+      NXF_ANSI_LOG: false
+      NXF_ANSI_SUMMARY: true
+      NXF_VERSION: 19.10.0
     steps:
       - name: Set up Go
         uses: actions/setup-go@v1
@@ -108,8 +114,6 @@ jobs:
           make -C builddir && \
           sudo make -C builddir install
       - name: Install Nextflow
-        env:
-          NXF_VERSION: 19.10.0
         run: |
           wget -qO- get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
@@ -159,10 +163,10 @@ jobs:
 
       - name: Pull containers
         run: |
-          nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -ansi-log false -with-dag false
+          nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -with-dag false
       - name: Test workflow with singularity - '${{ matrix.params.mapper }}' - '${{ matrix.params.mode }}'
         run: |
-          nextflow run ${GITHUB_WORKSPACE} -profile CI,singularity --subset 1 --mappers '${{ matrix.params.mapper }}' --mapmode '${{ matrix.params.mode }}' --max_cpus 2 --max_memory 6.GB -ansi-log false -with-dag dag.dot -resume
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,singularity --subset 1 --mappers '${{ matrix.params.mapper }}' --mapmode '${{ matrix.params.mode }}' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
       - name: sysinfo
         run: |
           df -h
