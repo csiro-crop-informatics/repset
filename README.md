@@ -1,5 +1,8 @@
+[![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/csiro-crop-informatics/repset?label=latest%20tag&logo=github&style=flat-square)](https://github.com/csiro-crop-informatics/repset/releases)
+
 [![Latest GitHub release](https://img.shields.io/github/release/csiro-crop-informatics/repset.svg?style=flat-square&logo=github&label=latest%20release)](https://github.com/csiro-crop-informatics/repset/releases)
 [![GitHub commits since latest release](https://img.shields.io/github/commits-since/csiro-crop-informatics/repset/latest.svg?style=flat-square&logo=github)](https://github.com/csiro-crop-informatics/repset/releases)
+
 [![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.10.0-orange.svg?style=flat-square)](https://www.nextflow.io/)
 
 *REPSET* or *RREPSET* or *R²EPSET* is a *R*eproducible, *R*eusable, *E*xtensible, *P*ortable and *S*calable *E*valuation *T*ool for short read aligners
@@ -132,9 +135,9 @@ nextflow run csiro-crop-informatics/repset \
   -work-dir s3://your_s3_bucket/work \
 ```
 
-after replacing `your_s3_bucket` with a bucket you have created on S3. 
+after replacing `your_s3_bucket` with a bucket you have created on S3.
 
-To reduce potential connectivity issues you may consider running the workflow from an EC2 instance. 
+To reduce potential connectivity issues you may consider running the workflow from an EC2 instance.
 This may guide your decision on where the result file(s) should be placed.
 If you wish to deposit the result file(s) on `s3`, you can specify e.g. `--outdir s3://your_s3_bucket/results`,
 otherwise you can find them under `./results`.
@@ -168,7 +171,7 @@ Other regular expressions can be specified to taylor the list of evaluated tools
 
 To run the pipeline with alternative input data you can use the `-params-file` flag
 to specify a JSON or a YAML file to overwrite `conf/simulations.config`,
-for example 
+for example
 
 ```
 nextflow run main.nf -params-file path/to/conf/simulations.json
@@ -199,7 +202,7 @@ are increased on each task re-submission as indexing performance is not
 well suited for comparisons anyway. For example, many indexing processes
 are single-threaded, in other cases it might make sense to skip the indexing
 process and allow for on-the-fly index generation.
-Resource auto-scaling 
+Resource auto-scaling
 is subject to constraints which may need to be adjusted for particular
 compute environment either at run time (e.g.  `--max_memory 64.GB --max_cpus 32 --max_time 72.h`)
 or by editing (`conf/requirements.config`)[conf/requirements.config]
@@ -215,22 +218,22 @@ Each pipeline run generates a number of files including
 These can be simply collected from the output directories but for full traceability of the results, the following procedure is preferable:
 
 1. Fork this repository
-2. (Optional) select a tagged revision or add a tag (adhering to the usual semantic versioning approach) 
+2. (Optional) select a tagged revision or add a tag (adhering to the usual semantic versioning approach)
 3. Generate a [Git Hub access token](https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line)
    which will allow the pipeline to create releases in your forked repset repository,
    when creating the token it should suffice to select only the following scope:
    > `public_repo`   Access public repositories
-   
+
    (assuming your fork of repset remains public)
 
-4. Make the access token accessible as an environmental variable 
+4. Make the access token accessible as an environmental variable
 5. Run the pipeline from the remote repository, specifying
     - the `--release` flag
-    - the appropriate `-profile` 
+    - the appropriate `-profile`
     - the intended revision e.g. `-revision v0.9.10` (optional)
 
 
-For example, 
+For example,
 
 ```
 GH_TOKEN='your-token-goes-here' nextflow run \
@@ -455,7 +458,7 @@ docker run \
 ```
 
 3. Rendered report should be available under `./localrender`
-   
+
 
 ### Using singularity
 
@@ -465,11 +468,11 @@ docker run \
 mkdir -p localrender \
  && cp report/report.Rmd  localrender/ \
  && cp results/* localrender/ \
- && cp flowinfo/*.{json,tsv} localrender/ 
+ && cp flowinfo/*.{json,tsv} localrender/
 ```
 
 2. Docker run rendering
-  
+
 ```sh
 singularity exec \
   --bind $(pwd)/bin:/binr \
@@ -500,7 +503,7 @@ Then:
 mkdir -p localrender \
  && cp report/report.Rmd  localrender/ \
  && cp results/* localrender/ \
- && cp flowinfo/*.{json,tsv} localrender/ 
+ && cp flowinfo/*.{json,tsv} localrender/
 
 cd localrender && ../bin/render.R
 ```
