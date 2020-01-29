@@ -43,6 +43,53 @@ validators.validateMapperParamsDefinitions(params.mapperParamsDefinitions, allVe
 def requiredInputFields = ['species','version','fasta','seqtype']
 validators.validateInputDefinitions(params.references, requiredInputFields, ['gff'])
 
+
+
+
+def sra = []
+params.rreads.each {
+  println it
+  if(it.containsKey('sra'))
+    sra << it.sra
+}
+
+println sra
+
+
+process sraMetadata {
+  // echo true
+  tag { entry }
+  label 'entrez'
+
+  input:
+    val(entry) from Channel.from(sra)
+
+  output:
+    tuple val(entry), stdout into sraMetadataChannel
+
+  script:
+  """
+  esearch -db sra -q ${entry} \
+    | efetch -mode xml
+  """
+}
+
+sraMetadataChannel
+.map { id, xml ->
+  [
+    id,
+    new XmlSlurper().parseText(xml).children().collectEntries { n ->
+        [ (n.name()):{->n.children()?.collectEntries(owner)?:n.text()}() ]
+      }
+  ]
+}
+.view{ id, map -> JsonOutput.prettyPrint(jsonGenerator.toJson(map))}
+
+Channel.fromSRA(sra)
+ .view{ JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+
+
+
 if(params.justvalidate) {
   log.info "Finished validating input config, exiting. Run without --justvalidate to proceed further."
   System.exit 0
