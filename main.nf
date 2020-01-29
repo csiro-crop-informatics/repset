@@ -576,23 +576,28 @@ process convertReadCoordinates {
 // mappersMapChannel  .view { it -> groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 
 /*
- This is where we combine
+ This is where we combine and match (and filter out inapropriate combinations)
+ * simulated read sets
+ * mapper indices
+ * mapper specs
+ * mapper params sets
+ * mapping modes (dna2dna, rna2dna, rna2rna)
 */
 convertedCoordinatesReads.mix(readsForAlignment)
 .combine(indices)
 .filter { simmeta, reads, idxmeta, ref, fai, idx ->
-  //reads - reference species & version check
+  //simulated reads vs reference species & version must match
   idxmeta.reference.species == simmeta.species && idxmeta.reference.version == simmeta.version
 }
-.combine(mappersMapChannel)
-.combine(mappersParamsChannel)
-.filter { simmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta -> //tool & version check
+.combine(mappersMapChannel) //mappers definitions
+.combine(mappersParamsChannel) //mappers params definitions
+.filter { simmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta -> //tool & version must match between mapper and a params set
   [mapper.tool, idxmeta.mapper.tool].every { it == paramsmeta.tool }  \
   && mapper.version == idxmeta.mapper.version \
   && mapper.version in paramsmeta.version
 }
-.combine(mapModesChannel)
-.filter { simmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta, mode ->  //map mode check
+.combine(mapModesChannel) //one or more of the 3 possible mapping modes
+.filter { simmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta, mode ->  //map mode check is mapper able to work in that mode mand is params set aimed at this mode
   mapper.containsKey(mode) && mode.matches(paramsmeta.mode) \
   && mode.startsWith(simmeta.seqtype.toLowerCase()) \
   && [simmeta.coordinates, idxmeta.reference.seqtype].every { mode.endsWith( it.toLowerCase() ) }
