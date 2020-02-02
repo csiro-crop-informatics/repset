@@ -7,6 +7,8 @@ import groovy.json.JsonOutput
 //as JsonGenerator
 // import static groovy.json.JsonGenerator.*
 
+//various helper methods in lib/Helpers.groovy
+def hlp = new Helpers()
 
 //Otherwise JSON generation triggers stackoverflow when encountering Path objects
 // jsonGenerator = new JsonGenerator.Options()
@@ -44,49 +46,126 @@ def requiredInputFields = ['species','version','fasta','seqtype']
 validators.validateInputDefinitions(params.references, requiredInputFields, ['gff'])
 
 
-
-
+//Some of the real_reads spec may point to sra rather than local files
 def sra = []
 params.rreads.each {
-  println it
   if(it.containsKey('sra'))
     sra << it.sra
 }
 
-println sra
+//Read SRA accessions and identify fastq for processing
+Channel.fromSRA(sra)
+ .view{ JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+ .map { srr, paths -> srr }
+//  .into { sraReadsChannel1; sraReadsChannel2 }
 
+Channel.from(params.rreads)
+  .branch {
+    sra   : it.containsKey('sra')
+    path : it.containsKey('r1') || it.containsKey('r2')
+    sink  : true //anything else goes into a black hole
+  }.set { realReadsDefinitionsChannel }
 
-process sraMetadata {
-  // echo true
-  tag { entry }
-  label 'entrez'
+realReadsDefinitionsChannel
+.sra.view()
+// .path.view()
+// .sink.view {
 
+process asperaDownload {
+  tag { SRR }
+  label 'aspera'
   input:
-    val(entry) from Channel.from(sra)
+    tuple val(SRR), val(MATE) from Channel.from('SRR769609').combine(Channel.from([1,2]))
 
   output:
-    tuple val(entry), stdout into sraMetadataChannel
+    tuple val(SRR), file("${SRR}_?.fastq.gz") into SraDownloadsChannel
 
   script:
   """
-  esearch -db sra -q ${entry} \
-    | efetch -mode xml
+  ascp -T --policy=fair -P33001 -i /home/aspera/.aspera/cli/etc/asperaweb_id_dsa.openssh \
+    era-fasp@fasp.sra.ebi.ac.uk:vol1/fastq/${SRR[0..5]}/${SRR}/${SRR}_${MATE}.fastq.gz ./
   """
 }
 
+SraDownloadsChannel.groupTuple().view()
+
+
+process sra2fastq {
+  echo true
+  label 'sra'
+  // label 'fastqdump' //parallel wrapper
+  input: tuple val(SRR), file("${SRR}.sra") from SraDownloadsChannel
+  // output:
+
+  script:
+  """
+  fastq-dump --split-3 --gzip ${SRR}
+  """
+  // """
+  // parallel-fastq-dump --sra-id ${SRR} --threads ${task.cpus} --outdir ./ --split-3 --gzip
+  // """
+}
+
+/*
+ Fetch SRA metadata from remote
+*/
+process sraMetadata {
+  tag { entry }
+  label 'entrez'
+  label 'sra'
+
+  input:  val(entry) from sraReadsChannel1.map { id, reads -> id }.first()
+  // output: tuple val(entry), stdout into sraMetadataChannel
+  // script: "esearch -db sra -q ${entry} | efetch -mode xml"
+  script: """
+          esearch -db sra -q ${entry} | efetch -mode xml > ${entry}.xml
+          fastq-dump --split-files  --origfmt --gzip ${entry}
+          """
+}
+
+//Link SRA metadata with remote read records
 sraMetadataChannel
 .map { id, xml ->
   [
-    id,
+    id, //keep the original SRA id to match with conf/real_reads.config spec
     new XmlSlurper().parseText(xml).children().collectEntries { n ->
         [ (n.name()):{->n.children()?.collectEntries(owner)?:n.text()}() ]
-      }
+    }
   ]
 }
-.view{ id, map -> JsonOutput.prettyPrint(jsonGenerator.toJson(map))}
+// // .view{ id, map -> JsonOutput.prettyPrint(jsonGenerator.toJson(map))}
+//link metadata with reads
+.combine(sraReadsChannel2).filter { id, metamap, runId, reads -> id == runId }
+.map { id, metamap, runId, reads -> [id, metamap, reads]}
+.set { sraReadsChannel }
 
-Channel.fromSRA(sra)
- .view{ JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+process stageSRA {
+  echo true
+
+  input: tuple val(id), val(meta), file(reads) from sraReadsChannel
+
+  "ls -la"
+}
+
+// .filter { id, metamap, runId, reads -> //id and runId may or may not be the same...
+//     hlp.containsValueRecursive(metamap, runId) //check if runId present deeper in metadata
+// }
+// // .count()
+// // .view()
+// // .view{ id, metamap, runId, reads ->
+// //   JsonOutput.prettyPrint(jsonGenerator.toJson([runId: runId]+metamap))
+// // }
+// // .map { id, metamap, runId, reads -> [id, runId, reads]}
+// // .view()
+// // .combine(realReadsDefinitionsChannel.sra).view()
+
+// sraReadsChannel2.view()
+// realReadsDefinitionsChannel.sra.view()
+// realReadsDefinitionsChannel.path.view()
+realReadsDefinitionsChannel.sink.view {
+   "Malformed real reads entry will be ignored: ${it}"
+}
+// Channel.from(params.rreads).view()
 
 
 
