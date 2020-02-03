@@ -47,6 +47,18 @@ validators.validateInputDefinitions(params.references, requiredInputFields, ['gf
 
 //Some of the real_reads spec may point to sra ids, other to local files
 Channel.from(params.rreads)
+// .map { it.coordinates = 'DNA'; it } //real reads come from DNA (even if via RNA) more to the point the coordinate var is just about whether these need to be converted back to DNA space in case of simulated reads
+  .flatMap { it ->
+    if(it.target instanceof List) { //multiple SRR entries
+      def elems = []
+      it.target.each { target ->
+        elems << [species: target.species, version: target.version]+it.subMap(it.keySet()-'target')
+      }
+      elems
+    } else {
+      [it.target+it.subMap(it.keySet()-'target')]
+    }
+  }
   .branch {
     sra   : it.containsKey('sra') && !(it.containsKey('r1') || it.containsKey('r2'))
     path :  !(it.containsKey('sra')) && (it.containsKey('r1') || it.containsKey('r2')) //only considering paired
@@ -94,8 +106,23 @@ process asperaDownload {
     era-fasp@fasp.sra.ebi.ac.uk:vol1/fastq/${SRR[0..5]}/${SRR}/${SRR}_${MATE}.fastq.gz ./
   """
 }
-SraDownloadsChannel
-.groupTuple().view()
+
+
+
+
+
+// process subsetRealReads {
+//   input:
+//     tuple val(META), file(reads) from SraDownloadsChannel
+
+//   output:
+//     tuple val(META), file('*.fastq.gz') into SraSubsampledChannel
+
+//   """
+//   zcat ${reads[0]} | paste - - - - | head ${params.numrreads} | gzip --stdout > ${META.sra}_
+//   """
+// }
+
 
 
 if(params.justvalidate) {
@@ -613,7 +640,6 @@ process convertReadCoordinates {
   out2 = reads[1].name.replace('.2.fq.gz','.R2.fq.gz')
   outmeta = [:]
   outmeta.putAll(simmeta)
-  outmeta.remove('coordiantes')
   outmeta.coordinates = 'DNA'
   """
   tct_rnf.groovy \
@@ -630,6 +656,47 @@ process convertReadCoordinates {
 
 // mappersMapChannel  .view { it -> groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 
+// [
+//   [
+//     sra:SRR769608,
+//     species:Encephalitozoon_cuniculi_ecuniii_l,
+//     version:gca_001078035, seqtype:RNA
+//   ],
+//   [
+//     /home/rad/repos/repset/downloaded/SRR769608_1.fastq.gz,
+//     /home/rad/repos/repset/downloaded/SRR769608_2.fastq.gz
+//   ]
+// ]
+
+// [
+//   [
+//     species:Encephalitozoon_cuniculi_ecuniii_l,
+//     version:gca_001078035,
+//     seqtype:DNA,
+//     simulator:ArtIllumina,
+//     coverage:0.2,
+//     mode:PE,
+//     length:100,
+//     coordinates:DNA,
+//     dist:300,
+//     distanceDev:50,
+//     nreads:4584
+//   ],
+//   [
+//     /home/rad/repos/repset/work/6a/1277939ae057cc5f32c20d871e76b3/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035_ArtIllumina_reads.1.fq.gz,
+//     /home/rad/repos/repset/work/6a/1277939ae057cc5f32c20d871e76b3/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035_ArtIllumina_reads.2.fq.gz
+//   ]
+// ]
+// [
+//   [species:Encephalitozoon_cuniculi_ecuniii_l, version:gca_001078035, seqtype:DNA, simulator:ArtIllumina, coverage:0.2, mode:PE, length:100, coordinates:DNA, dist:300, distanceDev:50, nreads:4584],
+//   [/home/rad/repos/repset/work/6a/1277939ae057cc5f32c20d871e76b3/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035_ArtIllumina_reads.1.fq.gz, /home/rad/repos/repset/work/6a/1277939ae057cc5f32c20d871e76b3/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035_ArtIllumina_reads.2.fq.gz],
+//   [mapper:[tool:minimap2, version:2.17-r941], reference:[species:Encephalitozoon_cuniculi_ecuniii_l, version:gca_001078035, seqtype:DNA]], /home/rad/repos/repset/work/54/343d3c7a861ab828eaec1efd3d4f72/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035.fasta, /home/rad/repos/repset/work/54/343d3c7a861ab828eaec1efd3d4f72/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035.fasta.fai, /home/rad/repos/repset/work/54/343d3c7a861ab828eaec1efd3d4f72/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035.fasta.mmi
+// ]
+
+
+// //using NF built in splitfastq - no way to use meta from channel to set subset size?
+params.numrreads = 10000
+
 /*
  This is where we combine and match (and filter out inapropriate combinations)
  * simulated read sets
@@ -638,44 +705,50 @@ process convertReadCoordinates {
  * mapper params sets
  * mapping modes (dna2dna, rna2dna, rna2rna)
 */
-convertedCoordinatesReads.mix(readsForAlignment)
+convertedCoordinatesReads.mix(readsForAlignment)// .first().mix(SraDownloadsChannel.groupTuple().first())
+.mix( SraDownloadsChannel
+      .splitFastq( by: params.numrreads, limit: params.numrreads, file: true, compress: true, elem: 1 )
+      .groupTuple()
+      .map { meta, reads -> [meta+[nreads: params.numrreads], reads] }
+      // .first()
+    )
 .combine(indices)
-.filter { simmeta, reads, idxmeta, ref, fai, idx ->
-  //simulated reads vs reference species & version must match
-  idxmeta.reference.species == simmeta.species && idxmeta.reference.version == simmeta.version
+.filter { readsmeta, reads, idxmeta, ref, fai, idx ->
+   //simreads/realreads.target  vs reference .species & .version must match
+   idxmeta.reference.species == readsmeta.species && idxmeta.reference.version == readsmeta.version
 }
 .combine(mappersMapChannel) //mappers definitions
 .combine(mappersParamsChannel) //mappers params definitions
-.filter { simmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta -> //tool & version must match between mapper and a params set
+.filter { readsmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta -> //tool & version must match between mapper and a params set
   [mapper.tool, idxmeta.mapper.tool].every { it == paramsmeta.tool }  \
   && mapper.version == idxmeta.mapper.version \
   && mapper.version in paramsmeta.version
 }
 .combine(mapModesChannel) //one or more of the 3 possible mapping modes
-.filter { simmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta, mode ->  //map mode check is mapper able to work in that mode mand is params set aimed at this mode
-  mapper.containsKey(mode) && mode.matches(paramsmeta.mode) \
-  && mode.startsWith(simmeta.seqtype.toLowerCase()) \
-  && [simmeta.coordinates, idxmeta.reference.seqtype].every { mode.endsWith( it.toLowerCase() ) }
+.filter { readsmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta, mode ->  //map mode check is mapper able to work in that mode mand is params set aimed at this mode
+   mapper.containsKey(mode) && mode.matches(paramsmeta.mode) \
+   && mode.startsWith(readsmeta.seqtype.toLowerCase()) \
+   && [(readsmeta.containsKey('coordinates') ? readsmeta.coordinates : 'DNA'), idxmeta.reference.seqtype].every { mode.endsWith( it.toLowerCase() ) }
 }
 // .view{ groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
-.map { simmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta, mode ->
+.map { readsmeta, reads, idxmeta, ref, fai, idx, mapper, paramsmeta, mode ->
   def template = (mode in mapper.templates) ? (mapper."${mode}" == true ? "${mode}/${mapper.tool}.sh" : "${mode}/${mapper.${mode}}") : false;
   [
-    [mapper: mapper.subMap(['tool','version','container']), query: simmeta, target: idxmeta.reference, params: paramsmeta.subMap(['label','params'])],
+    [mapper: mapper.subMap(['tool','version','container']), query: readsmeta, target: idxmeta.reference, params: paramsmeta.subMap(['label','params'])],
     reads, //as is
     ref, fai, idx, //as is
     [template: template, script: (template ? false: mapper."${mode}")],
     paramsmeta.params
   ]
 }
+// .view()
 // .view{ groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
-// .count()
 .set{ combinedToMap }
 
 
 // .view{ groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 
-process mapSimulatedReads {
+process mapReads {
   label 'align'
   container { "${meta.mapper.container}" }
   tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
@@ -685,16 +758,47 @@ process mapSimulatedReads {
     set val(meta), file(reads), file(ref), file(fai), file('*'), val(run), val(ALIGN_PARAMS) from combinedToMap
 
   output:
-    set val(meta), file(ref), file(fai), file('*.?am'), file('.command.trace') into alignedSimulated
+    set val(meta), file(ref), file(fai), file('*.?am'), file('.command.trace') into mappedReads
 
   script:
     def binding = [ref: ref, reads: reads, task: task.clone(), ALIGN_PARAMS: ALIGN_PARAMS]
     meta.resources = task.subMap(['cpus','memory','time'])
     if(run.template) { //if template file specified / declared
       template run.template //either default or explicit template file name
-    } else { //indexing script defined in config
+    } else { //mapping script defined in config
       resolveScriptVariables(run.script, binding)
     }
+}
+
+mappedReads
+.map { mapmeta, ref, fai, samOrBam, trace ->
+  def traceMap = [:]
+  parseFileMap(trace, traceMap) //could be parseFileMap(trace, meta.trace, 'realtime') or parseFileMap(trace, meta, ['realtime','..']) or parseFileMap(trace, meta) to capture all fields
+  [mapmeta+[trace: traceMap], ref, fai, samOrBam]
+}
+.branch { meta, ref, fai, samOrBam ->
+  simulated: meta.query.containsKey('simulator')
+  real: true
+}.set { mappedReadsWithtrace }
+
+
+// mappedReadsWithtrace.simulated.view()
+// mappedReadsWithtrace.real.view{ groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+
+process basicMappingStats {
+  echo true
+  label 'samtools'
+  tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
+
+  input:
+    tuple val(meta), file(ref), file(fai), file(samOrBam) from  mappedReadsWithtrace.real.first()
+
+  output:
+     tuple val(meta), stdout into flagstats
+  script:
+  """
+  samtools flagstat --output-fmt json ${samOrBam}
+  """
 }
 
 process evaluateAlignmentsRNF {
@@ -706,11 +810,7 @@ process evaluateAlignmentsRNF {
   tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
 
   input:
-    set val(meta), file(ref), file(fai), file(samOrBam) from alignedSimulated.map { mapmeta, ref, fai, samOrBam, trace ->
-        def traceMap = [:]
-        parseFileMap(trace, traceMap) //could be parseFileMap(trace, meta.trace, 'realtime') or parseFileMap(trace, meta, ['realtime','..']) or parseFileMap(trace, meta) to capture all fields
-        [mapmeta+[trace: traceMap], ref, fai, samOrBam]
-      }
+    set val(meta), file(ref), file(fai), file(samOrBam) from mappedReadsWithtrace.simulated
 
   output:
      set val(meta), file ('*.json') into evaluatedAlignmentsRNF
