@@ -32,7 +32,7 @@ def validators = new Validators() //from lib/ instead of new GroovyShell().parse
 def allRequired = ['tool','version','container','index'] //Fields required for each tool in config
 def allOptional = ['versionCall']
 def allModes = 'dna2dna|rna2rna|rna2dna' //At leas one mode has to be defined as supported by each tool
-def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allOptional, allModes)
+def allVersions = validators.validateMappersDefinitions(log, params.mappersDefinitions, allRequired, allOptional, allModes)
 
 
 //Check if specified template files exist
@@ -48,27 +48,32 @@ validators.validateInputDefinitions(params.references, requiredInputFields, ['gf
 //Some of the real_reads spec may point to sra ids, other to local files
 Channel.from(params.rreads)
   .branch {
-    sra   : it.containsKey('sra')
-    path : it.containsKey('r1') || it.containsKey('r2') //only considering paired
+    sra   : it.containsKey('sra') && !(it.containsKey('r1') || it.containsKey('r2'))
+    path :  !(it.containsKey('sra')) && (it.containsKey('r1') || it.containsKey('r2')) //only considering paired
     sink  : true //anything else goes into a black hole
   }.set { realReadsDefinitionsChannel }
 
+realReadsDefinitionsChannel.sink.subscribe {
+   log.warn "Malformed real reads entry will be ignored: ${it}"
+}
+
+//Prepare real read def for downloading: duplicate entry if multiuple SRR specified and for R1 and R2
 realReadsDefinitionsChannel.sra
-  .view()
   .flatMap { it ->
-    def elems = []
-    it.sra.each { currentSRA ->
-      elems << [sra: currentSRA]+it.subMap(it.keySet()-'sra')
+    if(it.sra instanceof List) { //multiple SRR entries
+      def elems = []
+      it.sra.each { currentSRA ->
+        elems << [sra: currentSRA]+it.subMap(it.keySet()-'sra')
+      }
+      elems
+    } else {
+      [it] //flatMap() will unwrap this
     }
-    elems
   }
-  // .map { it -> it.sra }
-  // .flatten()
   .combine(Channel.from([1,2])) //download each mate sepearately
-  .view()
   .set { srrDownloadChannel }
 
-// .path.view()
+// .path.view() //LOCAL READS NOT USED YET
 // .sink.view {
 
 process asperaDownload {
@@ -91,85 +96,6 @@ process asperaDownload {
 }
 SraDownloadsChannel
 .groupTuple().view()
-
-
-// process sra2fastq {
-//   echo true
-//   label 'sra'
-//   // label 'fastqdump' //parallel wrapper
-//   input: tuple val(SRR), file("${SRR}.sra") from SraDownloadsChannel
-//   // output:
-
-//   script:
-//   """
-//   fastq-dump --split-3 --gzip ${SRR}
-//   """
-//   // """
-//   // parallel-fastq-dump --sra-id ${SRR} --threads ${task.cpus} --outdir ./ --split-3 --gzip
-//   // """
-// }
-
-// /*
-//  Fetch SRA metadata from remote
-// */
-// process sraMetadata {
-//   tag { entry }
-//   label 'entrez'
-//   label 'sra'
-
-//   input:  val(entry) from sraReadsChannel1.map { id, reads -> id }.first()
-//   // output: tuple val(entry), stdout into sraMetadataChannel
-//   // script: "esearch -db sra -q ${entry} | efetch -mode xml"
-//   script: """
-//           esearch -db sra -q ${entry} | efetch -mode xml > ${entry}.xml
-//           fastq-dump --split-files  --origfmt --gzip ${entry}
-//           """
-// }
-
-// //Link SRA metadata with remote read records
-// sraMetadataChannel
-// .map { id, xml ->
-//   [
-//     id, //keep the original SRA id to match with conf/real_reads.config spec
-//     new XmlSlurper().parseText(xml).children().collectEntries { n ->
-//         [ (n.name()):{->n.children()?.collectEntries(owner)?:n.text()}() ]
-//     }
-//   ]
-// }
-// // // .view{ id, map -> JsonOutput.prettyPrint(jsonGenerator.toJson(map))}
-// //link metadata with reads
-// .combine(sraReadsChannel2).filter { id, metamap, runId, reads -> id == runId }
-// .map { id, metamap, runId, reads -> [id, metamap, reads]}
-// .set { sraReadsChannel }
-
-// process stageSRA {
-//   echo true
-
-//   input: tuple val(id), val(meta), file(reads) from sraReadsChannel
-
-//   "ls -la"
-// }
-
-// // .filter { id, metamap, runId, reads -> //id and runId may or may not be the same...
-// //     hlp.containsValueRecursive(metamap, runId) //check if runId present deeper in metadata
-// // }
-// // // .count()
-// // // .view()
-// // // .view{ id, metamap, runId, reads ->
-// // //   JsonOutput.prettyPrint(jsonGenerator.toJson([runId: runId]+metamap))
-// // // }
-// // // .map { id, metamap, runId, reads -> [id, runId, reads]}
-// // // .view()
-// // // .combine(realReadsDefinitionsChannel.sra).view()
-
-// // sraReadsChannel2.view()
-// // realReadsDefinitionsChannel.sra.view()
-// // realReadsDefinitionsChannel.path.view()
-// realReadsDefinitionsChannel.sink.view {
-//    "Malformed real reads entry will be ignored: ${it}"
-// }
-// // Channel.from(params.rreads).view()
-
 
 
 if(params.justvalidate) {

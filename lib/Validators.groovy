@@ -1,4 +1,6 @@
 import static groovy.json.JsonGenerator.*
+import ch.qos.logback.classic.Logger
+
 
 class Validators {
 
@@ -21,7 +23,7 @@ def addToListInMap (map, key, value, context) {
   }
 }
 
-def public validateMappersDefinitions (mappers, allRequired, allOptional, allModes) {
+def public validateMappersDefinitions (Logger log, mappers, allRequired, allOptional, allModes) {
   def allVersions = [:] //Keep track of tool versions declared in config
   mappers.each { rec ->
     addToListInMap(allVersions, rec.tool, rec.version, rec)
@@ -46,7 +48,8 @@ def public validateMappersDefinitions (mappers, allRequired, allOptional, allMod
       System.exit 1
     }
     if(!rec.container.contains(rec.version))
-      System.err.println "Warning: declared tool version string ${rec.version} not found in container image spec ${rec.container}."
+      // System.err.println "Warning: declared tool version string ${rec.version} not found in container image spec ${rec.container}."
+      log.warn "Declared tool version string ${rec.version} not found in container image spec ${rec.container}."
   }
   allVersions.each {k, v ->
     if(v.size()==1)
