@@ -776,30 +776,42 @@ mappedReads
   parseFileMap(trace, traceMap) //could be parseFileMap(trace, meta.trace, 'realtime') or parseFileMap(trace, meta, ['realtime','..']) or parseFileMap(trace, meta) to capture all fields
   [mapmeta+[trace: traceMap], ref, fai, samOrBam]
 }
-.branch { meta, ref, fai, samOrBam ->
-  simulated: meta.query.containsKey('simulator')
-  real: true
-}.set { mappedReadsWithtrace }
+// .branch { meta, ref, fai, samOrBam ->
+//   simulated: meta.query.containsKey('simulator')
+//   real: true
+// }
+.set { mappedReadsWithTrace }
 
 
 // mappedReadsWithtrace.simulated.view()
 // mappedReadsWithtrace.real.view{ groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 
 process basicMappingStats {
-  echo true
+  // echo true
   label 'samtools'
   tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
 
   input:
-    tuple val(meta), file(ref), file(fai), file(samOrBam) from  mappedReadsWithtrace.real.first()
+    tuple val(meta), file(ref), file(fai), file(samOrBam) from  mappedReadsWithTrace
 
   output:
-     tuple val(meta), stdout into flagstats
+     tuple val(meta), file(ref), file(fai), file(samOrBam), stdout into mappedWithFlagstats
+
   script:
   """
   samtools flagstat --output-fmt json ${samOrBam}
   """
 }
+
+mappedWithFlagstats
+.map { meta, ref, fai, samOrBam, flagstats ->
+  [ meta+[flagstats: new JsonSlurper().parseText(flagstats)], ref, fai, samOrBam ]
+}
+// .view { groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+.branch { meta, ref, fai, samOrBam ->
+  simulated: meta.query.containsKey('simulator')
+  real: true
+}.set { mappedWithFlagstats2 }
 
 process evaluateAlignmentsRNF {
   label 'groovy_samtools'
@@ -810,7 +822,7 @@ process evaluateAlignmentsRNF {
   tag {"${meta.target.seqtype}@${meta.target.species}@${meta.target.version} << ${meta.query.nreads}@${meta.query.seqtype}; ${meta.mapper.tool}@${meta.mapper.version}@${meta.params.label}"}
 
   input:
-    set val(meta), file(ref), file(fai), file(samOrBam) from mappedReadsWithtrace.simulated
+    set val(meta), file(ref), file(fai), file(samOrBam) from mappedWithFlagstats2.simulated
 
   output:
      set val(meta), file ('*.json') into evaluatedAlignmentsRNF
