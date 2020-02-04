@@ -852,6 +852,7 @@ def slurper = new JsonSlurper()
 evaluatedAlignmentsRNF.map { META, JSON ->
       [ META + [evaluation: slurper.parseText(JSON.text)] ]
   }
+  .mix ( mappedWithFlagstats2.real.map { meta, ref, fai, samOrBam -> meta } ) //flagstats already embeded in meta, no need for the other files
   .collect()
   .map { //Generate:  [ allstats.json, runmetapart.json]
     [
