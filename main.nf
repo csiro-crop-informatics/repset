@@ -881,7 +881,9 @@ process renderReport {
     tuple file('allstats.json'), file('runmetapart.json') from resultsJsonChannel
 
   output:
+    file 'allstats.json'
     file '*'
+
 
   when:
     !(workflow.profile.contains('CI')) //until leaner container
