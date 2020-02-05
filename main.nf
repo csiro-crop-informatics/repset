@@ -47,7 +47,7 @@ validators.validateInputDefinitions(params.references, requiredInputFields, ['gf
 
 //Some of the real_reads spec may point to sra ids, other to local files
 Channel.from(params.rreads)
-  .take( params.subset ) //for CI mostly..
+  // .take( params.subset ) //for CI mostly..
 // .map { it.coordinates = 'DNA'; it } //real reads come from DNA (even if via RNA) more to the point the coordinate var is just about whether these need to be converted back to DNA space in case of simulated reads
   .flatMap { it ->
     if(it.target instanceof List) { //multiple SRR entries
