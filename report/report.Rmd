@@ -1,7 +1,7 @@
 ---
 title: 'Repset run: `r jsonlite::fromJSON("runmetapart.json")$workflow$runName` started at `r jsonlite::fromJSON("runmetapart.json")$workflow$start`'
 output: html_document
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
@@ -18,7 +18,7 @@ nxrun <- jsonlite::fromJSON("allstats.json", flatten = TRUE) %>%
   mutate(perc_prim_match = (evaluation.primary.match + evaluation.primary.mateMatch) / query.nreads,
          perc_prim_mismatch = evaluation.primary.mismatch / query.nreads)
 
-write.csv(nxrun, "allstats.csv", row.names = FALSE)
+write.csv(apply(nxrun,2,as.character), "allstats.csv", row.names = FALSE)
 ```
 
 This run of repset evaluated alignment against `r nrow(meta$params$references)` genomes with `r nrow(meta$params$mappersDefinitions)` aligners.
@@ -36,7 +36,7 @@ ggplot(nxrun, aes(evaluation.primary.match/(query.nreads / 2), trace.realtime)) 
        x = "% Primary matches",
        y = "Seconds elapsed")
 ```
-  
+
 ## Evaluation statistics
 
 <!-- Download the full table [here](allstats.csv). -->
