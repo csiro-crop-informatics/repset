@@ -60,14 +60,24 @@ Channel.from(params.rreads)
     }
   }
   .branch {
-    sra   : it.containsKey('sra') && !(it.containsKey('r1') || it.containsKey('r2'))
-    path :  !(it.containsKey('sra')) && (it.containsKey('r1') || it.containsKey('r2')) //only considering paired
+    sra   : it.containsKey('sra') && !(it.containsKey('reads'))
+    path :  !(it.containsKey('sra')) && (it.containsKey('reads'))  //only considering paired
     sink  : true //anything else goes into a black hole
   }.set { realReadsDefinitionsChannel }
 
 realReadsDefinitionsChannel.sink.subscribe {
    log.warn "Malformed real reads entry will be ignored: ${it}"
 }
+
+//List of filenames will not get converted to path objects automatically, so doing it explicitly
+realReadsDefinitionsChannel.path
+  .map { meta ->
+    def reads = []
+    meta.reads.each { r ->
+      reads << file(r)
+    }
+  [ meta, reads ]
+}.set { realReadsDefinitionsChannelwithReadFiles }
 
 //Prepare real read def for downloading: duplicate entry if multiuple SRR specified and for R1 and R2
 realReadsDefinitionsChannel.sra
@@ -107,23 +117,47 @@ process asperaDownload {
   """
 }
 
+process countRealRads {
+  tag { META.containsKey('sra') ? META.sra : META.reads }
+  // input: tuple val(META), file(reads) from (SraDownloadsChannel.groupTuple().mix( realReadsDefinitionsChannel.path.map { meta -> [ meta, meta.reads ] }.view() ))
+  input: tuple val(META), path(reads) from SraDownloadsChannel.groupTuple().mix(realReadsDefinitionsChannelwithReadFiles)
+  output: tuple val(META), file(reads), stdout into realReadsCounted
+  script: "zcat ${reads[0]} | awk 'END{print NR/4}'"
+}
 
+realReadsCounted
+  .map { m,r, count -> [m+[totalreads: count.trim()], r]}
+  .branch { meta, reads ->
+    subsample: meta.containsKey('subset')
+    fullset: true
+  } . set { realReadsCountedBranched }
+ //.view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
 
+process subsetRealReads {
+  tag { "${basename}" }
+  echo true
+  label 'seqtk'
+  input: tuple val(META), file(reads) from realReadsCountedBranched.subsample
+  output: tuple val(META), file('*.fastq.gz'), file('count.1') into realReadsSubsampled
 
+  script:
+    basename = (META.containsKey('sra') ? META.sra : META.label) + "_subsample_${META.subset}"
+    // countOrReport = META.subset instanceof BigDecimal ? "zcat ${basename}_1.fastq.gz | awk 'END{print NR/4}'" : META.subset instanceof Integer ? "echo ${META.subset}" : "echo ERROR! subset value (${META.subset}) must be int or float"
+    """
+    SEED=\$RANDOM
+    seqtk sample -s \${SEED} ${reads[0]} ${META.subset} | tee >(awk 'END{print NR/4}' > count.1) | gzip -c > ${basename}_1.fastq.gz \
+    && seqtk sample -s \${SEED} ${reads[1]} ${META.subset}| tee >(awk 'END{print NR/4}' > count.2) | gzip -c > ${basename}_2.fastq.gz \
+    && cmp -s count.{1,2} || (echo "Read counts mismatch!"; head count.{1,2})
+    """
+}
 
-// process subsetRealReads {
-//   input:
-//     tuple val(META), file(reads) from SraDownloadsChannel
-
-//   output:
-//     tuple val(META), file('*.fastq.gz') into SraSubsampledChannel
-
-//   """
-//   zcat ${reads[0]} | paste - - - - | head ${params.numrreads} | gzip --stdout > ${META.sra}_
-//   """
-// }
-
-
+//counted nreads  -> meta
+realReadsSubsampled.map { meta, reads, counts ->
+  [ meta+[nreads: counts.text.trim() as Integer], reads ]
+}
+// .view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+.mix(realReadsCountedBranched.fullset)
+.set { realReadsReadyToMap }
 
 if(params.justvalidate) {
   log.info "Finished validating input config, exiting. Run without --justvalidate to proceed further."
@@ -441,10 +475,6 @@ process faidxTranscriptomeFASTA {
   """
 }
 
-
-
-
-
 /*
 Resolve variables emebeded in single-quoted strings
 */
@@ -650,53 +680,6 @@ process convertReadCoordinates {
   """
 }
 
-// // // convertedCoordinatesReads.view()
-
-// // // convertedCoordinatesReads.mix(readsForAlignment).combine(indices).combine(alignersParams).view { it -> println(groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it)))}
-
-// mappersMapChannel  .view { it -> groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
-
-// [
-//   [
-//     sra:SRR769608,
-//     species:Encephalitozoon_cuniculi_ecuniii_l,
-//     version:gca_001078035, seqtype:RNA
-//   ],
-//   [
-//     /home/rad/repos/repset/downloaded/SRR769608_1.fastq.gz,
-//     /home/rad/repos/repset/downloaded/SRR769608_2.fastq.gz
-//   ]
-// ]
-
-// [
-//   [
-//     species:Encephalitozoon_cuniculi_ecuniii_l,
-//     version:gca_001078035,
-//     seqtype:DNA,
-//     simulator:ArtIllumina,
-//     coverage:0.2,
-//     mode:PE,
-//     length:100,
-//     coordinates:DNA,
-//     dist:300,
-//     distanceDev:50,
-//     nreads:4584
-//   ],
-//   [
-//     /home/rad/repos/repset/work/6a/1277939ae057cc5f32c20d871e76b3/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035_ArtIllumina_reads.1.fq.gz,
-//     /home/rad/repos/repset/work/6a/1277939ae057cc5f32c20d871e76b3/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035_ArtIllumina_reads.2.fq.gz
-//   ]
-// ]
-// [
-//   [species:Encephalitozoon_cuniculi_ecuniii_l, version:gca_001078035, seqtype:DNA, simulator:ArtIllumina, coverage:0.2, mode:PE, length:100, coordinates:DNA, dist:300, distanceDev:50, nreads:4584],
-//   [/home/rad/repos/repset/work/6a/1277939ae057cc5f32c20d871e76b3/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035_ArtIllumina_reads.1.fq.gz, /home/rad/repos/repset/work/6a/1277939ae057cc5f32c20d871e76b3/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035_ArtIllumina_reads.2.fq.gz],
-//   [mapper:[tool:minimap2, version:2.17-r941], reference:[species:Encephalitozoon_cuniculi_ecuniii_l, version:gca_001078035, seqtype:DNA]], /home/rad/repos/repset/work/54/343d3c7a861ab828eaec1efd3d4f72/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035.fasta, /home/rad/repos/repset/work/54/343d3c7a861ab828eaec1efd3d4f72/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035.fasta.fai, /home/rad/repos/repset/work/54/343d3c7a861ab828eaec1efd3d4f72/Encephalitozoon_cuniculi_ecuniii_l_gca_001078035.fasta.mmi
-// ]
-
-
-// //using NF built in splitfastq - no way to use meta from channel to set subset size?
-params.numrreads = 10000
-
 /*
  This is where we combine and match (and filter out inapropriate combinations)
  * simulated read sets
@@ -706,12 +689,7 @@ params.numrreads = 10000
  * mapping modes (dna2dna, rna2dna, rna2rna)
 */
 convertedCoordinatesReads.mix(readsForAlignment)// .first().mix(SraDownloadsChannel.groupTuple().first())
-.mix( SraDownloadsChannel
-      .splitFastq( by: params.numrreads, limit: params.numrreads, file: true, compress: true, elem: 1 )
-      .groupTuple()
-      .map { meta, reads -> [meta+[nreads: params.numrreads], reads] }
-      // .first()
-    )
+.mix( realReadsReadyToMap )
 .combine(indices)
 .filter { readsmeta, reads, idxmeta, ref, fai, idx ->
    //simreads/realreads.target  vs reference .species & .version must match
