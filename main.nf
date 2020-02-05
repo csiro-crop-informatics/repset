@@ -72,12 +72,18 @@ realReadsDefinitionsChannel.sink.subscribe {
 //List of filenames will not get converted to path objects automatically, so doing it explicitly
 realReadsDefinitionsChannel.path
   .map { meta ->
-    def reads = []
-    meta.reads.each { r ->
-      reads << file(r)
+    if(meta.reads instanceof String) {
+      [meta, file(meta.reads)]
+    } else {
+      def reads = []
+      for(r in meta.reads) {
+        reads << file(r)
+      }
+      [ meta, reads ]
     }
-  [ meta, reads ]
-}.set { realReadsDefinitionsChannelwithReadFiles }
+}
+// .view{ it -> JsonOutput.prettyPrint(jsonGenerator.toJson(it))}
+.set { realReadsDefinitionsChannelwithReadFiles }
 
 //Prepare real read def for downloading: duplicate entry if multiuple SRR specified and for R1 and R2
 realReadsDefinitionsChannel.sra
