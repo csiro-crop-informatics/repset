@@ -154,7 +154,7 @@ process subsetRealReads {
     SEED=\$RANDOM
     seqtk sample -s \${SEED} ${reads[0]} ${META.subset} | tee >(awk 'END{print NR/4}' > count.1) | gzip -c > ${basename}_1.fastq.gz \
     && seqtk sample -s \${SEED} ${reads[1]} ${META.subset}| tee >(awk 'END{print NR/4}' > count.2) | gzip -c > ${basename}_2.fastq.gz \
-    && cmp -s count.{1,2} || (echo "Read counts mismatch!"; head count.{1,2})
+    && cmp -s count.{1,2} || (echo "Read counts mismatch!"; head count.{1,2}; exit 1)
     """
 }
 
@@ -342,7 +342,10 @@ process stageRemoteInputFile {
     outmeta = meta.subMap(['species', 'version','seqtype'])
     fpath = meta."${fileType}"
     decompress = fpath.matches("^.*\\.gz\$") ?  "| gunzip --stdout " :  " "
-    """curl ${fpath} ${decompress} > ${outfile}"""
+    """
+    set -eo pipefail
+    curl ${fpath} ${decompress} > ${outfile}
+    """
 }
 
 process stageLocalInputFile {
