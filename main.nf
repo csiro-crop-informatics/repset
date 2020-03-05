@@ -111,12 +111,12 @@ String getContainer(String label) {
 }
 
 process srrDownload {
-  tag { "${SRR} R${MATE}" }
+  tag { "${SRR} R${MATE} attempt=${task.attempt}" }
   // label 'aspera'
   storeDir { executor == 'awsbatch' ? null : "downloaded" }
   errorStrategy = 'retry'
   maxRetries = 2 //try up to 3 ways of getting SRR FASTQ
-  container = { task.attempt == 1 ? getContainer('aspera') : task.attemp2 == 2 ? getContainer('sra') : getContainer('tools') }
+  container = { task.attempt == 1 ? getContainer('aspera') : task.attempt == 2 ? getContainer('sra') : getContainer('tools') }
 
   input:
     tuple val(META), val(MATE) from srrDownloadChannel
@@ -133,7 +133,7 @@ process srrDownload {
   """ //sra file - will require fastq-dump: era-fasp@fasp.sra.ebi.ac.uk:vol1/srr/${SRR[0..5]}/${SRR} ./
   else if(task.attempt == 2 )
   """
-  fastq-dump --split-files  --origfmt --gzip ${SRR}
+  fastq-dump --split-files --origfmt --gzip ${SRR}
   """
   else
   """
