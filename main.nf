@@ -131,7 +131,7 @@ process srrDownload {
   ascp -T --policy=fair -P33001 -i /home/aspera/.aspera/cli/etc/asperaweb_id_dsa.openssh \
     era-fasp@fasp.sra.ebi.ac.uk:vol1/fastq/${SRR[0..5]}/${SRR}/${SRR}_${MATE}.fastq.gz ./
   """ //sra file - will require fastq-dump: era-fasp@fasp.sra.ebi.ac.uk:vol1/srr/${SRR[0..5]}/${SRR} ./
-  else(task.attempt == 2 )
+  else if(task.attempt == 2 )
   """
   fastq-dump --split-files  --origfmt --gzip ${SRR}
   """
