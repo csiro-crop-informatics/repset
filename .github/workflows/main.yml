@@ -57,7 +57,7 @@ jobs:
 
       - name: Test workflow with docker - ${{ matrix.params.mapper }}
         run: |
-          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --subset 1 --mappers ${{ matrix.params.mapper }} --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers ${{ matrix.params.mapper }} --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
       - name: sysinfo
         run: |
           df -h
@@ -144,7 +144,7 @@ jobs:
           nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -with-dag false
       - name: Test workflow with singularity - '${{ matrix.params.mapper }}' - '${{ matrix.params.mode }}'
         run: |
-          nextflow run ${GITHUB_WORKSPACE} -profile CI,singularity --subset 1 --mappers '${{ matrix.params.mapper }}' --mapmode '${{ matrix.params.mode }}' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,singularity --references 1 --samplesReal 1 --mappers '${{ matrix.params.mapper }}' --mapmode '${{ matrix.params.mode }}' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot
 
       - name: sysinfo
         run: |

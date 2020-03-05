@@ -43,11 +43,11 @@ validators.validateMapperParamsDefinitions(params.mapperParamsDefinitions, allVe
 
 //Parse, sanitize and validate input dataset definitions
 def requiredInputFields = ['species','version','fasta','seqtype']
-validators.validateInputDefinitions(params.references, requiredInputFields, ['gff'])
+validators.validateInputDefinitions(params.referencesList, requiredInputFields, ['gff'])
 
 //Some of the real_reads spec may point to sra ids, other to local files
 Channel.from(params.rreads)
-  // .take( params.subset ) //for CI mostly..
+  .take( params.samplesReal ) //for CI mostly..
 // .map { it.coordinates = 'DNA'; it } //real reads come from DNA (even if via RNA) more to the point the coordinate var is just about whether these need to be converted back to DNA space in case of simulated reads
   .flatMap { it ->
     if(it.target instanceof List) { //multiple SRR entries
@@ -105,10 +105,18 @@ realReadsDefinitionsChannel.sra
 // .path.view() //LOCAL READS NOT USED YET
 // .sink.view {
 
-process asperaDownload {
+
+String getContainer(String label) {
+  session.config.process.get("withLabel:${label}" as String).get("container")
+}
+
+process srrDownload {
   tag { "${SRR} R${MATE}" }
-  label 'aspera'
+  // label 'aspera'
   storeDir { executor == 'awsbatch' ? null : "downloaded" }
+  errorStrategy = 'retry'
+  maxRetries = 2 //try up to 3 ways of getting SRR FASTQ
+  container = { task.attempt == 1 ? getContainer('aspera') : task.attemp2 == 2 ? getContainer('sra') : getContainer('tools') }
 
   input:
     tuple val(META), val(MATE) from srrDownloadChannel
@@ -118,9 +126,18 @@ process asperaDownload {
 
   script:
   SRR = META.sra
+  if(task.attempt == 1 )
   """
   ascp -T --policy=fair -P33001 -i /home/aspera/.aspera/cli/etc/asperaweb_id_dsa.openssh \
     era-fasp@fasp.sra.ebi.ac.uk:vol1/fastq/${SRR[0..5]}/${SRR}/${SRR}_${MATE}.fastq.gz ./
+  """ //sra file - will require fastq-dump: era-fasp@fasp.sra.ebi.ac.uk:vol1/srr/${SRR[0..5]}/${SRR} ./
+  else(task.attempt == 2 )
+  """
+  fastq-dump --split-files  --origfmt --gzip ${SRR}
+  """
+  else
+  """
+  curl -L ftp://ftp.sra.ebi.ac.uk/vol1/fastq/${SRR[0..5]}/${SRR}/${SRR}_${MATE}.fastq.gz -O
   """
 }
 
@@ -306,8 +323,8 @@ if (params.help){
  2. Conversion would not have been necessary and script could point directly to meta.fasta
     but local files might not be on paths automatically mounted in the container.
 */
-Channel.from(params.references)
-.take( params.subset ) //only process n data sets (-1 means all)
+Channel.from(params.referencesList)
+.take( params.references ) //only process n data sets (-1 means all)
 .combine(Channel.from('fasta','gff')) //duplicate each reference record
 .filter { meta, fileType -> meta.containsKey(fileType)} //exclude gff record if no gff declared
 .tap { refsToStage } //download if URL
