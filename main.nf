@@ -130,7 +130,7 @@ process srrDownload {
   """
   ascp -T --policy=fair -P33001 -i /home/aspera/.aspera/cli/etc/asperaweb_id_dsa.openssh \
     era-fasp@fasp.sra.ebi.ac.uk:vol1/fastq/${SRR[0..5]}/${SRR}/${SRR}_${MATE}.fastq.gz ./
-  """ //sra file - will require fastq-dump: era-fasp@fasp.sra.ebi.ac.uk:vol1/srr/${SRR[0..5]}/${SRR} ./
+  """ // -pQTk1 -l 450m //sra file - will require fastq-dump: era-fasp@fasp.sra.ebi.ac.uk:vol1/srr/${SRR[0..5]}/${SRR} ./ or  anonftp@ftp-trace.ncbi.nlm.nih.gov:/sra/sra-instant/reads/ByRun/sra/SRR/SRR513/SRR5138775/SRR5138775.sra .- but this requires fastq-dump in the same contaier or more plumbing and interm files
   else if(task.attempt == 2 )
   """
   fastq-dump --split-files --origfmt --gzip ${SRR}
