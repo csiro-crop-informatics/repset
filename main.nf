@@ -819,7 +819,7 @@ mappedWithFlagstats
 }.set { mappedWithFlagstats2 }
 
 process evaluateAlignmentsRNF {
-  label 'groovy_samtools'
+  label 'groovy'
   // label 'ES'
   // tag{alignmeta.tool.subMap(['name'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
   // tag{alignmeta.params.subMap(['paramslabel'])}
