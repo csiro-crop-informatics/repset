@@ -11,3 +11,5 @@ writing/biokanga-manuscript.tex
 figures/*.?
 flowinfo*
 downloaded
+singularity-images/
+tmp/
