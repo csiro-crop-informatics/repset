@@ -9,13 +9,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        nxf_ver: ['19.10.0', '']
         params:
           - { mapper: minimap2, mode: dna2dna }
           - { mapper: hisat2, mode: rna2dna }
           - { mapper: kallisto, mode: rna2rna }
     env:
       NXF_ANSI_LOG: false
-      NXF_VERSION: 19.10.0
+      NXF_VER: ${{ matrix.nxf_ver }}
     steps:
       - name: Install Nextflow
         run: |
@@ -79,7 +80,7 @@ jobs:
           - { mapper: 'minimap2|hisat2|kallisto', mode: 'dna2dna|rna2dna|rna2rna' }
     env:
       NXF_ANSI_LOG: false
-      NXF_VERSION: 19.10.0
+      NXF_VER: 19.10.0
     steps:
       - name: Set up Go
         uses: actions/setup-go@v1
