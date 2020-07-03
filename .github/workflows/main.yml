@@ -36,25 +36,17 @@ jobs:
             data-${{ github.sha }}-
             data-
 
-      - name: Setup work-dir cache
+      - name: Setup work-dir & NF cache
         id: cache-work
-        uses: actions/cache@v1
+        uses: actions/cache@v2
         with:
-          path: work
-          key: work-docker-${{ matrix.params.mode }}-${{ github.sha }}
+          path: |
+            work
+            .nextflow
+          key: nf-work-docker-${{ matrix.params.mode }}-${{ github.sha }}
           restore-keys: |
-            work-docker-${{ matrix.params.mode }}-${{ github.sha }}-
-            work-docker-${{ matrix.params.mode }}-
-
-      - name: Setup NF cache
-        id: cache-NF
-        uses: actions/cache@v1
-        with:
-          path: .nextflow
-          key: nf-docker-${{ matrix.params.mode }}-${{ github.sha }}
-          restore-keys: |
-            nf-docker-${{ matrix.params.mode }}-${{ github.sha }}-
-            nf-docker-${{ matrix.params.mode }}-
+            nf-work-docker-${{ matrix.params.mode }}-${{ github.sha }}-
+            nf-work-docker-${{ matrix.params.mode }}-
 
       - name: Test workflow with docker - ${{ matrix.params.mapper }}
         run: |
