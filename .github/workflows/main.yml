@@ -124,13 +124,27 @@ jobs:
 
       - name: Singularity images cache
         id: cache-singularity-images
-        uses: actions/cache@v1
+        uses: actions/cache@v2
         with:
-          path: singularity-images
+          path: |
+            singularity-images
+            .singularity
           key: simg-${{ github.sha }}
           restore-keys: |
             simg-${{ github.sha }}-
             simg-
+
+      - name: Setup work-dir & NF cache
+        id: cache-work
+        uses: actions/cache@v2
+        with:
+          path: |
+            work
+            .nextflow
+          key: nf-work-singularity-${{ matrix.params.mode }}-${{ github.sha }}
+          restore-keys: |
+            nf-work-singularity-${{ matrix.params.mode }}-${{ github.sha }}-
+            nf-work-singularity-${{ matrix.params.mode }}-
 
       - name: Pull container images
         run: |
@@ -145,3 +159,4 @@ jobs:
           lscpu | egrep 'Model name|Socket|Thread|NUMA|CPU\(s\)'
           awk '/MemTotal/ {print "RAM : "$2/1E6" GB"}' /proc/meminfo
           ls -lhS singularity-images/
+          ls -lSh .singularity/cache/oci/blobs/sha256/
