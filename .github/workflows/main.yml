@@ -141,10 +141,10 @@ jobs:
           path: |
             work
             .nextflow
-          key: nf-work-singularity-${{ matrix.params.mode }}-${{ github.sha }}
+          key: nf-work-singularity-${{ github.sha }}
           restore-keys: |
-            nf-work-singularity-${{ matrix.params.mode }}-${{ github.sha }}-
-            nf-work-singularity-${{ matrix.params.mode }}-
+            nf-work-singularity-${{ github.sha }}-
+            nf-work-singularity-
 
       - name: Pull container images
         run: |
