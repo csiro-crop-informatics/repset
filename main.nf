@@ -844,7 +844,7 @@ process evaluateAlignmentsRNF {
   | eval_rnf.groovy \
       --allowed-delta ${params.allowedDelta} \
       --faidx ${fai} \
-      --output summary.json \
+      --output summary.json
   """
 }
 
