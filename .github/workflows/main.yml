@@ -31,8 +31,9 @@ jobs:
         uses: actions/cache@v2
         with:
           path: downloaded
-          key: data-${{ hashFiles('downloaded/*') }}
+          key: data-${{ github.sha }}
           restore-keys: |
+            data-${{ github.sha }}-
             data-
 
       - name: work-dir & NF cache
