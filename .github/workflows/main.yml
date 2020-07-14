@@ -56,7 +56,7 @@ jobs:
           df -h
           lscpu | egrep 'Model name|Socket|Thread|NUMA|CPU\(s\)'
           awk '/MemTotal/ {print "RAM : "$2/1E6" GB"}' /proc/meminfo
-          docker image ls -la
+          docker image ls
       # - name: garaph-easy dag
       #   run: |
       #     cat dag.dot | docker run -i panguolin/grapheasy:latest graph-easy
