@@ -341,7 +341,7 @@ process stageRemoteInputFile {
   storeDir can be problematic on s3 - leads to "Missing output file(s)" error
   workDir should be more robust as it is mounted in singularity unlike outdir?
   */
-  storeDir { executor == 'awsbatch' ? null : "downloaded" }
+  // storeDir { executor == 'awsbatch' ? null : "downloaded" }
 
 
   input:
