@@ -98,8 +98,8 @@ jobs:
       max-parallel: 1
       matrix:
         params:
-          - { mapper: kallisto, mode: rna2rna }
-          #- { mapper: 'minimap2|hisat2|kallisto', mode: 'dna2dna|rna2dna|rna2rna' }
+          - { mapper: 'minimap2|hisat2|kallisto', mode: 'dna2dna|rna2dna|rna2rna' }
+          # - { mapper: kallisto, mode: rna2rna }
     env:
       NXF_ANSI_LOG: false
       NXF_VER: 20.04.1
