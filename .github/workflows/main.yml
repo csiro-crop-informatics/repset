@@ -9,11 +9,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        nxf_ver: ['19.10.0', '']
+        nxf_ver: ['20.04.1']
+        # nxf_ver: ['19.10.0', '']
         params:
-          - { mapper: minimap2, mode: dna2dna }
-          - { mapper: hisat2, mode: rna2dna }
-          - { mapper: kallisto, mode: rna2rna }
+          - { mapper: '^$', mode: '' }
+          - { mapper: minimap2, mode: '--mapmode dna2dna' }
+          - { mapper: hisat2, mode: '--mapmode rna2dna' }
+          - { mapper: kallisto, mode: '--mapmode rna2rna' }
     env:
       NXF_ANSI_LOG: false
       NXF_VER: ${{ matrix.nxf_ver }}
@@ -26,15 +28,15 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
-      - name: test-data cache
-        id: cache-data
-        uses: actions/cache@v2
-        with:
-          path: downloaded
-          key: data-${{ github.sha }}
-          restore-keys: |
-            data-${{ github.sha }}-
-            data-
+      # - name: test-data cache
+      #   id: cache-data
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: downloaded
+      #     key: data-${{ github.sha }}
+      #     restore-keys: |
+      #       data-${{ github.sha }}-
+      #       data-
 
       - name: work-dir & NF cache
         id: cache-work
@@ -43,14 +45,23 @@ jobs:
           path: |
             work
             .nextflow
-          key: nf-${{ matrix.nxf_ver }}-work-docker-${{ matrix.params.mode }}-${{ github.sha }}
+          key: nf-${{ matrix.nxf_ver }}-docker-${{ matrix.params.mode }}-${{ github.sha }}
+          #restore keys - limit cache growth by not
+          #1 exact re-run, 2 same mode, 3. re-use data-only run (same SHA), 4. re-use data-only (any SHA)
           restore-keys: |
-            nf-${{ matrix.nxf_ver }}-work-docker-${{ matrix.params.mode }}-${{ github.sha }}
-            nf-${{ matrix.nxf_ver }}-work-docker-${{ matrix.params.mode }}-
+            nf-${{ matrix.nxf_ver }}-docker-${{ matrix.params.mode }}-${{ github.sha }}
+            nf-${{ matrix.nxf_ver }}-docker-${{ matrix.params.mode }}-
+            nf-${{ matrix.nxf_ver }}-docker--${{ github.sha }}
+            nf-${{ matrix.nxf_ver }}-docker--
 
+
+      # - name: Test workflow - data-setup only, no indexing or mapping
+      #   run: |
+      #     nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers '^$' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
       - name: Test workflow with docker - ${{ matrix.params.mapper }}
         run: |
-          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers ${{ matrix.params.mapper }} --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers ${{ matrix.params.mapper }} ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
+
       - name: sysinfo
         run: |
           df -h
