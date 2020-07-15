@@ -105,6 +105,8 @@ jobs:
       NXF_VER: 20.04.1
       SINGULARITY_CACHEDIR: .singularity
     steps:
+      - name: Check out code
+        uses: actions/checkout@v2
       - name: Set up Go
         uses: actions/setup-go@v1
         with:
@@ -138,9 +140,6 @@ jobs:
         run: |
           wget -qO- get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
-
-      - name: Check out code
-        uses: actions/checkout@v2
 
       # - name: Singularity cache and bin
       #   uses: actions/cache@v2
