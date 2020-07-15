@@ -34,7 +34,6 @@ jobs:
           #restore keys - limit cache growth by not
           #1 exact re-run, 2. re-use different data-only run
           restore-keys: |
-            nf-docker-data-${{ github.sha }}
             nf-docker-data-
 
       - name: Test workflow - data-setup only, no indexing or mapping
@@ -75,7 +74,6 @@ jobs:
           #restore keys - limit cache growth by not
           #1 exact re-run, 2 same mode, 3. re-use data-only run (same SHA), 4. re-use data-only (any SHA)
           restore-keys: |
-            nf-docker-${{ matrix.params.mode }}-${{ github.sha }}
             nf-docker-${{ matrix.params.mode }}-
             nf-docker-data-${{ github.sha }}
 
