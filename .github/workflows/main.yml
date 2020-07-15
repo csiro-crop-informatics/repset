@@ -98,8 +98,8 @@ jobs:
       max-parallel: 1
       matrix:
         params:
-          - { mapper: 'minimap2|hisat2|kallisto', mode: 'dna2dna|rna2dna|rna2rna' }
-          # - { mapper: kallisto, mode: rna2rna }
+          - { mapper: kallisto, mode: rna2rna }
+          #- { mapper: 'minimap2|hisat2|kallisto', mode: 'dna2dna|rna2dna|rna2rna' }
     env:
       NXF_ANSI_LOG: false
       NXF_VER: 20.04.1
@@ -142,15 +142,15 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
-      - name: Singularity cache and bin
-        uses: actions/cache@v2
-        with:
-          path: |
-            singularity-images
-            .singularity
-          key: simg-${{ github.sha }}
-          restore-keys: |
-            simg-
+      # - name: Singularity cache and bin
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       singularity-images
+      #       .singularity
+      #     key: simg-${{ github.sha }}
+      #     restore-keys: |
+      #       simg-
 
       - name: Setup work-dir & NF cache
         uses: actions/cache@v2
@@ -158,9 +158,11 @@ jobs:
           path: |
             work
             .nextflow
-          key: nf-work-singularity-${{ github.sha }}
+            singularity-images
+            .singularity
+          key: nf-singularity-${{ github.sha }}
           restore-keys: |
-            nf-work-singularity-
+            nf-singularity-
 
       - name: Pull container images
         run: |
