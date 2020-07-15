@@ -145,8 +145,7 @@ jobs:
       - name: Singularity cache and bin
         uses: actions/cache@v2
         with:
-          path: |
-            singularity-images
+          path: singularity-images
           key: simg-${{ github.sha }}
           restore-keys: |
             simg-
