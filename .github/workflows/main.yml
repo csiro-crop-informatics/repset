@@ -148,7 +148,6 @@ jobs:
           path: |
             singularity-images
             .singularity
-            /usr/local/bin/singularity
           key: simg-${{ github.sha }}
           restore-keys: |
             simg-
