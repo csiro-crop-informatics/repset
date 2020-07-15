@@ -140,7 +140,6 @@ jobs:
         run: |
           wget -qO- get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
-          which singularity
 
       # - name: Singularity cache and bin
       #   uses: actions/cache@v2
@@ -160,6 +159,7 @@ jobs:
             .nextflow
             ${HOME}/.singularity
             singularity-images
+            /usr/local/bin/singularity
 
           key: nf-singularity-${{ github.sha }}
           restore-keys: |
@@ -172,7 +172,7 @@ jobs:
       #     mkdir -p work .nextflow ${HOME}/.singularity
       - name: Pull container images
         run: |
-          nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -with-dag false
+          nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -with-dag false -resume
       - name: Test workflow with singularity - '${{ matrix.params.mapper }}' - '${{ matrix.params.mode }}'
         run: |
           nextflow run ${GITHUB_WORKSPACE} -profile CI,singularity --references 1 --samplesReal 0 --mappers '${{ matrix.params.mapper }}' --mapmode '${{ matrix.params.mode }}' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
