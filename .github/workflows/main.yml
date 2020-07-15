@@ -3,7 +3,7 @@ name: CI
 on: [push]
 
 jobs:
-  docker:
+  docker-data:
     runs-on: ubuntu-18.04
     timeout-minutes: 60
     strategy:
@@ -11,11 +11,6 @@ jobs:
       matrix:
         nxf_ver: ['20.04.1']
         # nxf_ver: ['19.10.0', '20.04.1']
-        params:
-          - { mapper: '^$', mode: '' }
-          - { mapper: minimap2, mode: '--mapmode dna2dna' }
-          - { mapper: hisat2, mode: '--mapmode rna2dna' }
-          - { mapper: kallisto, mode: '--mapmode rna2rna' }
     env:
       NXF_ANSI_LOG: false
       NXF_VER: ${{ matrix.nxf_ver }}
@@ -28,16 +23,47 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
-      # - name: test-data cache
-      #   id: cache-data
-      #   uses: actions/cache@v2
-      #   with:
-      #     path: downloaded
-      #     key: data-${{ github.sha }}
-      #     restore-keys: |
-      #       data-${{ github.sha }}-
-      #       data-
+      - name: work-dir & NF cache
+        id: cache-work
+        uses: actions/cache@v2
+        with:
+          path: |
+            work
+            .nextflow
+          key: nf-docker-data-${{ github.sha }}
+          #restore keys - limit cache growth by not
+          #1 exact re-run, 2. re-use different data-only run
+          restore-keys: |
+            nf-docker-data-${{ github.sha }}
+            nf-docker-data-
 
+      - name: Test workflow - data-setup only, no indexing or mapping
+        run: |
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers '^$' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
+
+  docker:
+    needs: docker-data
+    runs-on: ubuntu-18.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        nxf_ver: ['20.04.1']
+        # nxf_ver: ['19.10.0', '20.04.1']
+        params:
+          - { mapper: minimap2, mode: dna2dna }
+          - { mapper: hisat2, mode: rna2dna }
+          - { mapper: kallisto, mode: rna2rna }
+    env:
+      NXF_ANSI_LOG: false
+      NXF_VER: ${{ matrix.nxf_ver }}
+    steps:
+      - name: Install Nextflow
+        run: |
+          wget -qO- get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+      - name: Check out code
+        uses: actions/checkout@v2
       - name: work-dir & NF cache
         id: cache-work
         uses: actions/cache@v2
@@ -51,15 +77,11 @@ jobs:
           restore-keys: |
             nf-docker-${{ matrix.params.mode }}-${{ github.sha }}
             nf-docker-${{ matrix.params.mode }}-
-            nf-docker--${{ github.sha }}
-            nf-docker--
+            nf-docker-data-${{ github.sha }}
 
-      # - name: Test workflow - data-setup only, no indexing or mapping
-      #   run: |
-      #     nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers '^$' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
       - name: Test workflow with docker - ${{ matrix.params.mapper }}
         run: |
-          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers ${{ matrix.params.mapper }} ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers ${{ matrix.params.mapper }} --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
 
       - name: sysinfo
         run: |
@@ -67,6 +89,7 @@ jobs:
           lscpu | egrep 'Model name|Socket|Thread|NUMA|CPU\(s\)'
           awk '/MemTotal/ {print "RAM : "$2/1E6" GB"}' /proc/meminfo
           docker image ls
+          nextflow log
       # - name: garaph-easy dag
       #   run: |
       #     cat dag.dot | docker run -i panguolin/grapheasy:latest graph-easy
