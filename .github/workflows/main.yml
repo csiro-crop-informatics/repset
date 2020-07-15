@@ -10,7 +10,7 @@ jobs:
       fail-fast: false
       matrix:
         nxf_ver: ['20.04.1']
-        # nxf_ver: ['19.10.0', '']
+        # nxf_ver: ['19.10.0', '20.04.1']
         params:
           - { mapper: '^$', mode: '' }
           - { mapper: minimap2, mode: '--mapmode dna2dna' }
@@ -45,15 +45,14 @@ jobs:
           path: |
             work
             .nextflow
-          key: nf-${{ matrix.nxf_ver }}-docker-${{ matrix.params.mode }}-${{ github.sha }}
+          key: nf-docker-${{ matrix.params.mode }}-${{ github.sha }}
           #restore keys - limit cache growth by not
           #1 exact re-run, 2 same mode, 3. re-use data-only run (same SHA), 4. re-use data-only (any SHA)
           restore-keys: |
-            nf-${{ matrix.nxf_ver }}-docker-${{ matrix.params.mode }}-${{ github.sha }}
-            nf-${{ matrix.nxf_ver }}-docker-${{ matrix.params.mode }}-
-            nf-${{ matrix.nxf_ver }}-docker--${{ github.sha }}
-            nf-${{ matrix.nxf_ver }}-docker--
-
+            nf-docker-${{ matrix.params.mode }}-${{ github.sha }}
+            nf-docker-${{ matrix.params.mode }}-
+            nf-docker--${{ github.sha }}
+            nf-docker--
 
       # - name: Test workflow - data-setup only, no indexing or mapping
       #   run: |
