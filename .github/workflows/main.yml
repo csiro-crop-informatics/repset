@@ -159,7 +159,8 @@ jobs:
             .nextflow
             ${HOME}/.singularity
             singularity-images
-            /usr/local/bin/singularity
+
+          # /usr/local/bin/singularity
 
           key: nf-singularity-${{ github.sha }}
           restore-keys: |
