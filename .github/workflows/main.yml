@@ -103,7 +103,7 @@ jobs:
     env:
       NXF_ANSI_LOG: false
       NXF_VER: 20.04.1
-      SINGULARITY_CACHEDIR: .singularity
+      # SINGULARITY_CACHEDIR: .singularity
     steps:
       - name: Set up Go
         uses: actions/setup-go@v1
