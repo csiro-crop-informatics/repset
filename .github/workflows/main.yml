@@ -103,7 +103,7 @@ jobs:
     env:
       NXF_ANSI_LOG: false
       NXF_VER: 20.04.1
-      # SINGULARITY_CACHEDIR: .singularity
+      SINGULARITY_CACHEDIR: .singularity
     steps:
       - name: Set up Go
         uses: actions/setup-go@v1
@@ -145,7 +145,9 @@ jobs:
       - name: Singularity cache and bin
         uses: actions/cache@v2
         with:
-          path: singularity-images
+          path: |
+            singularity-images
+            .singularity
           key: simg-${{ github.sha }}
           restore-keys: |
             simg-
