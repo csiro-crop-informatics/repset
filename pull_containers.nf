@@ -27,7 +27,7 @@ SingularityCache scache = new SingularityCache() //to get NF-consitent image fil
 process pull_container {
   tag { remote }
   maxForks 1
-  storeDir "${params.singularitydir}"
+  publishDir "${params.singularitydir}"
   echo true
 
 input:

@@ -1,19 +1,16 @@
 name: CI
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
-  docker:
+  docker-data:
     runs-on: ubuntu-18.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        nxf_ver: ['19.10.0', '']
-        params:
-          - { mapper: minimap2, mode: dna2dna }
-          - { mapper: hisat2, mode: rna2dna }
-          - { mapper: kallisto, mode: rna2rna }
+        nxf_ver: ['20.04.1']
+        # nxf_ver: ['19.10.0', '20.04.1']
     env:
       NXF_ANSI_LOG: false
       NXF_VER: ${{ matrix.nxf_ver }}
@@ -26,37 +23,69 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
-      - name: Setup test-data cache
-        id: cache-data
-        uses: actions/cache@v1
-        with:
-          path: downloaded
-          key: data-${{ github.sha }}
-          restore-keys: |
-            data-${{ github.sha }}-
-            data-
-
-      - name: Setup work-dir & NF cache
-        id: cache-work
+      - name: work-dir & NF cache
         uses: actions/cache@v2
         with:
           path: |
             work
             .nextflow
-          key: nf-work-docker-${{ matrix.params.mode }}-${{ github.sha }}
+          key: nf-docker-data-${{ github.sha }}
+          #restore keys - limit cache growth by not
+          #1 exact re-run, 2. re-use different data-only run
           restore-keys: |
-            nf-work-docker-${{ matrix.params.mode }}-${{ github.sha }}-
-            nf-work-docker-${{ matrix.params.mode }}-
+            nf-docker-data-
+
+      - name: Test workflow - data-setup only, no indexing or mapping
+        run: |
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers '^$' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
+
+  docker:
+    needs: docker-data
+    runs-on: ubuntu-18.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        nxf_ver: ['20.04.1']
+        # nxf_ver: ['19.10.0', '20.04.1']
+        params:
+          - { mapper: minimap2, mode: dna2dna }
+          - { mapper: hisat2, mode: rna2dna }
+          - { mapper: kallisto, mode: rna2rna }
+    env:
+      NXF_ANSI_LOG: false
+      NXF_VER: ${{ matrix.nxf_ver }}
+    steps:
+      - name: Install Nextflow
+        run: |
+          wget -qO- get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: work-dir & NF cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            work
+            .nextflow
+          key: nf-docker-${{ matrix.params.mode }}-${{ github.sha }}
+          #restore keys - limit cache growth by not
+          #1 exact re-run, 2 same mode, 3. re-use data-only run (same SHA) - must exist because "needs: docker-data" is set
+          restore-keys: |
+            nf-docker-${{ matrix.params.mode }}-
+            nf-docker-data-${{ github.sha }}
 
       - name: Test workflow with docker - ${{ matrix.params.mapper }}
         run: |
           nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers ${{ matrix.params.mapper }} --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
+
       - name: sysinfo
         run: |
           df -h
           lscpu | egrep 'Model name|Socket|Thread|NUMA|CPU\(s\)'
           awk '/MemTotal/ {print "RAM : "$2/1E6" GB"}' /proc/meminfo
           docker image ls
+          nextflow log
       # - name: garaph-easy dag
       #   run: |
       #     cat dag.dot | docker run -i panguolin/grapheasy:latest graph-easy
@@ -70,16 +99,18 @@ jobs:
       matrix:
         params:
           - { mapper: 'minimap2|hisat2|kallisto', mode: 'dna2dna|rna2dna|rna2rna' }
+          # - { mapper: kallisto, mode: rna2rna }
     env:
       NXF_ANSI_LOG: false
-      NXF_VER: 19.10.0
-      SINGULARITY_CACHEDIR: .singularity
+      NXF_VER: 20.04.1
+      # SINGULARITY_CACHEDIR: .singularity
     steps:
+      - name: Check out code
+        uses: actions/checkout@v2
       - name: Set up Go
         uses: actions/setup-go@v1
         with:
-          go-version: 1.13
-        id: go
+          go-version: 1.14.5
       - name: Install Dependencies for Singularity
         run: |
           sudo apt-get update && sudo apt-get install -y \
@@ -92,7 +123,7 @@ jobs:
             pkg-config
       - name: Install Singularity
         env:
-          SINGULARITY_VERSION: 3.5.2
+          SINGULARITY_VERSION: 3.6.0
         run: |
           export GOPATH=/tmp/go
           mkdir -p $GOPATH
@@ -110,46 +141,19 @@ jobs:
           wget -qO- get.nextflow.io | bash
           sudo mv nextflow /usr/local/bin/
 
-      - name: Check out code
-        uses: actions/checkout@v2
-
-      - name: Setup test-data cache
-        id: cache-data
-        uses: actions/cache@v1
-        with:
-          path: downloaded
-          key: data-${{ github.sha }}
-          restore-keys: |
-            data-${{ github.sha }}-
-            data-
-
-      - name: Singularity images cache
-        id: cache-singularity-images
-        uses: actions/cache@v2
-        with:
-          path: |
-            singularity-images
-            .singularity
-          key: simg-${{ github.sha }}
-          restore-keys: |
-            simg-${{ github.sha }}-
-            simg-
-
-      - name: Setup work-dir & NF cache
-        id: cache-work
+      - name: Cache singularity and NF work
         uses: actions/cache@v2
         with:
           path: |
             work
             .nextflow
-          key: nf-work-singularity-${{ github.sha }}
+          key: nf-singularity-${{ github.sha }}
           restore-keys: |
-            nf-work-singularity-${{ github.sha }}-
-            nf-work-singularity-
+            nf-singularity-
 
       - name: Pull container images
         run: |
-          nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -with-dag false
+          nextflow run ${GITHUB_WORKSPACE}/pull_containers.nf --mappers '${{ matrix.params.mapper }}' -with-dag false -resume
       - name: Test workflow with singularity - '${{ matrix.params.mapper }}' - '${{ matrix.params.mode }}'
         run: |
           nextflow run ${GITHUB_WORKSPACE} -profile CI,singularity --references 1 --samplesReal 1 --mappers '${{ matrix.params.mapper }}' --mapmode '${{ matrix.params.mode }}' --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume

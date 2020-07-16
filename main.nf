@@ -113,7 +113,7 @@ String getContainer(String label) {
 process srrDownload {
   tag { "${SRR} R${MATE} attempt=${task.attempt}" }
   // label 'aspera'
-  storeDir { executor == 'awsbatch' ? null : "downloaded" }
+  storeDir { (executor == 'awsbatch' || workflow.profile.contains('CI')) ? null : "downloaded" }
   errorStrategy = 'retry'
   maxRetries = 2 //try up to 3 ways of getting SRR FASTQ
   container = { task.attempt == 1 ? getContainer('aspera') : task.attempt == 2 ? getContainer('sra') : getContainer('tools') }
@@ -341,7 +341,7 @@ process stageRemoteInputFile {
   storeDir can be problematic on s3 - leads to "Missing output file(s)" error
   workDir should be more robust as it is mounted in singularity unlike outdir?
   */
-  // storeDir { executor == 'awsbatch' ? null : "downloaded" }
+  storeDir { (executor == 'awsbatch' || workflow.profile.contains('CI')) ? null : "downloaded" }
 
 
   input:
@@ -844,7 +844,7 @@ process evaluateAlignmentsRNF {
   | eval_rnf.groovy \
       --allowed-delta ${params.allowedDelta} \
       --faidx ${fai} \
-      --output summary.json \
+      --output summary.json
   """
 }
 
