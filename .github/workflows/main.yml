@@ -77,7 +77,7 @@ jobs:
 
       - name: Test workflow with docker - ${{ matrix.params.mapper }}
         run: |
-          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers ${{ matrix.params.mapper }} --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
+          nextflow run ${GITHUB_WORKSPACE} -profile CI,docker --references 1 --samplesReal 1 --mappers '${{ matrix.params.mapper }}' --mapmode ${{ matrix.params.mode }} --max_cpus 2 --max_memory 6.GB -with-dag dag.dot -resume
 
       - name: sysinfo
         run: |
