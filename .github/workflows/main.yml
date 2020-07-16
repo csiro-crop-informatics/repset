@@ -49,7 +49,7 @@ jobs:
         nxf_ver: ['20.04.1']
         # nxf_ver: ['19.10.0', '20.04.1']
         params:
-          - { mapper: minimap2, mode: dna2dna }
+          - { mapper: 'minimap2|yara', mode: dna2dna }
           - { mapper: hisat2, mode: rna2dna }
           - { mapper: kallisto, mode: rna2rna }
     env:
