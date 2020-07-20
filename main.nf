@@ -26,13 +26,13 @@ JsonGenerator jsonGenerator = new JsonGenerator.Options()
                 .build()
 
 //Input validation specified elswhere
-def validators = new Validators() //from lib/ instead of new GroovyShell().parse(new File("${baseDir}/groovy/Validators.groovy"))
+def validators = new Validators(log) //from lib/ instead of new GroovyShell().parse(new File("${baseDir}/groovy/Validators.groovy"))
 
 //Read, parse, validate and sanitize alignment/mapping tools config
 def allRequired = ['tool','version','container','index'] //Fields required for each tool in config
 def allOptional = ['versionCall']
 def allModes = 'dna2dna|rna2rna|rna2dna' //At leas one mode has to be defined as supported by each tool
-def allVersions = validators.validateMappersDefinitions(log, params.mappersDefinitions, allRequired, allOptional, allModes)
+def allVersions = validators.validateMappersDefinitions(params.mappersDefinitions, allRequired, allOptional, allModes)
 
 
 //Check if specified template files exist
@@ -105,6 +105,12 @@ realReadsDefinitionsChannel.sra
 // .path.view() //LOCAL READS NOT USED YET
 // .sink.view {
 
+
+if(params.justvalidate) {
+  log.info "Finished validating input config, exiting. Run without --justvalidate to proceed further."
+  // Channel.from(params.mapperParamsDefinitions).filter{ it.tool.matches(params.mappers)} .view()
+  System.exit 0
+}
 
 String getContainer(String label) {
   session.config.process.get("withLabel:${label}" as String).get("container")
@@ -183,10 +189,7 @@ realReadsSubsampled.map { meta, reads, counts ->
 .mix(realReadsCountedBranched.fullset)
 .set { realReadsReadyToMap }
 
-if(params.justvalidate) {
-  log.info "Finished validating input config, exiting. Run without --justvalidate to proceed further."
-  System.exit 0
-}
+
 
 //Validated now, so gobble up mappers...
 // mappersChannel = Channel.from(params.mappersDefinitions)
