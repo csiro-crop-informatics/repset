@@ -4,11 +4,17 @@ import ch.qos.logback.classic.Logger
 
 class Validators {
 
+Logger log;
+
+public Validators(Logger log) {
+  this.log = log
+}
+
 def addToListInMap (map, key, value, context) {
   if(map.containsKey(key)) {
     def stored = map.get(key)
     if(value in stored) {
-      System.err.println """Error: duplicate entry for ${key}
+      log.error """Error: duplicate entry for: ${key}
         Current value  : ${value}
         Stored value(s): ${stored.join(' ')}
         Context: ${context}"""
@@ -23,26 +29,26 @@ def addToListInMap (map, key, value, context) {
   }
 }
 
-def public validateMappersDefinitions (Logger log, mappers, allRequired, allOptional, allModes) {
+def public validateMappersDefinitions (mappers, allRequired, allOptional, allModes) {
   def allVersions = [:] //Keep track of tool versions declared in config
   mappers.each { rec ->
     addToListInMap(allVersions, rec.tool, rec.version, rec)
     rec.each {k, v ->
       if(!(k in (allModes.split('\\|')+allRequired+allOptional))) {
-        System.err.println """Validation error: unexpected field in mapper definition:
+        log.error """Validation error: unexpected field in mapper definition:
           Offending field: ${k}
           Offending record: ${rec}"""
         System.exit 1
       }
     }
     if(!allRequired.every { it in rec.keySet() } ) {
-      System.err.println """Validation error: required field not set.
+      log.error """Validation error: required field not set.
         Required fields: ${allRequired}
         Offending record: ${rec}"""
       System.exit 1
     }
     if(!allModes.split('\\|').any { it in rec.keySet() }){
-      System.err.println """Validation error: required field not set.
+      log.error """Validation error: required field not set.
         At least one of '${allModes}' is required.
         Offending record: ${rec}"""
       System.exit 1
@@ -61,7 +67,8 @@ def public validateMappersDefinitions (Logger log, mappers, allRequired, allOpti
 def fileExists(path, rec) {
   // println "validating ${path}"
   if(!new File(path).exists()) {
-    System.err.println """Validation error: specified template file does not exist!
+    // System.err.println """Validation error: specified template file does not exist!
+    log.error """Validation error: specified template file does not exist!
     Expected file path: ${path}
     Offending record: ${rec}"""
     System.exit 1
@@ -97,14 +104,14 @@ def validateMapperParamsDefinitions (mapperParams, allVersions, allModes) {
     if(!it.containsKey('mode')) it.put('mode', allModes);
     // if(!it.containsKey('version')) it.put('version', 'ALL_AVAILABLE');
     if(!allVersions.containsKey(it.tool)) {
-      System.err.println """Validation error:  params defined for undefined mapper, please define in mapperParams
+      log.error """Validation error:  params defined for undefined mapper, please define in mapperParams
       Offending record: ${it}"""
       System.exit 1
     }
     if(it.containsKey('version')){
       it.version = it.version instanceof String ? it.version.split('\\||,') as List : it.version
       if(!it.version.every {ver -> ver in allVersions."${it.tool}"}) {
-        System.err.println """Validation error:  params defined for undefined mapper version, please define in mapperParams
+        log.error """Validation error:  params defined for undefined mapper version, please define in mapperParams
           Offending record: ${it}"""
         System.exit 1
       }
@@ -138,7 +145,8 @@ def validateMapperParamsDefinitions (mapperParams, allVersions, allModes) {
       // println(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(validationMap)))
     }
   }
-  //ADD EMPTY PARAM SET FOR ANY TOOL@VERSION NOT EXPLICITLY DEFINED - DON"T LIKE THIS
+  //ADD EMPTY PARAM SET FOR ANY TOOL@VERSION NOT EXPLICITLY DEFINED - DON'T LIKE THIS
+  //MODIFIED TO _ALWAYS_ GENERATE AN EMPTY DEFAULT IF NOT EXPLICITLY DEFINED
   allModes.split('\\|').each { mode ->
     def validationMap = validationMaps."${mode}"
     allVersions.each { tool, ver ->
@@ -149,11 +157,20 @@ def validateMapperParamsDefinitions (mapperParams, allVersions, allModes) {
         // println validationMap.keySet()
         def stored = validationMap.putIfAbsent("${tool}_${v}", "default")
         // if(!(validationMaps."${mode}".containsKey("${tool}_${v}"))) {
-        if(stored == null) {
+        if(stored == null)  {
           // println "Putting ${tool}_${v} ${mode}"
           mapperParams << [tool: tool, version:v, mode: mode, label: 'default', params: '']
         // } else {
         //   println "Already in"
+        }
+        else if(stored instanceof Collection) {
+          if(!(stored.contains('default'))) {
+            addToListInMap(validationMap, "${tool}_${v}", 'default', 'default not in collection?')
+            mapperParams << [tool: tool, version:v, mode: mode, label: 'default', params: '']
+          }
+        } else if(stored != 'default') {
+          addToListInMap(validationMap, "${tool}_${v}", 'default', 'default not the value')
+          mapperParams << [tool: tool, version:v, mode: mode, label: 'default', params: '']
         }
       }
     }
@@ -173,14 +190,14 @@ def validateInputDefinitions (references, allRequired, optional) {
     // println(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(rec)))
     rec.each {k, v ->
       if(!(k in (allRequired+optional))) {
-        System.err.println """Validation error: unexpected field in input definition:
+        log.error """Validation error: unexpected field in input definition:
           Offending field: ${k}
           Offending record: ${rec}"""
         System.exit 1
       }
     }
     if(!allRequired.every { it in rec.keySet() } ) {
-      System.err.println """Validation error: required field not set.
+      log.error """Validation error: required field not set.
         Required fields: ${allRequired}
         Offending record: ${rec}"""
       System.exit 1
