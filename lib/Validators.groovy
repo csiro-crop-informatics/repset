@@ -49,7 +49,7 @@ def public validateMappersDefinitions (Logger log, mappers, allRequired, allOpti
     }
     if(!rec.container.contains(rec.version))
       // System.err.println "Warning: declared tool version string ${rec.version} not found in container image spec ${rec.container}."
-      log.warn "Declared tool version string ${rec.version} not found in container image spec ${rec.container}."
+      log.warn "Declared tool version string \"${rec.version}\" not found in container image spec \"${rec.container}\"."
   }
   allVersions.each {k, v ->
     if(v.size()==1)
