@@ -162,6 +162,7 @@ def validateMapperParamsDefinitions (mapperParams, allVersions, allModes) {
           mapperParams << [tool: tool, version:v, mode: mode, label: 'default', params: '']
         // } else {
         //   println "Already in"
+        //The following 2 clauses ensure that unless explicitly defined, a(n empty) "default" param set is available for each tool-version-mode combination
         } else if(stored instanceof Collection) {
           if(!(stored.contains('default'))) {
             addToListInMap(validationMap, "${tool}_${v}", 'default', 'default not in collection?')
