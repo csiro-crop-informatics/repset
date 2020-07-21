@@ -6,4 +6,5 @@ minimap2 \
   ${ALIGN_PARAMS} \
   ${ref}.mmi \
   ${reads} \
-  > out.sam
+  | samtools view -b \
+  > out.bam
