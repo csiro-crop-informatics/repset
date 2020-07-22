@@ -5,4 +5,5 @@ bwa mem \
   ${ALIGN_PARAMS} \
   ${ref} \
   ${reads} \
-  > out.sam
+  | samtools view -b \
+  > out.bam
