@@ -53,9 +53,10 @@ def public validateMappersDefinitions (mappers, allRequired, allOptional, allMod
         Offending record: ${rec}"""
       System.exit 1
     }
-    if(!rec.container.contains(rec.version))
+    if(!rec.container.contains(rec.version.replaceFirst(/^v/,'')))
       // System.err.println "Warning: declared tool version string ${rec.version} not found in container image spec ${rec.container}."
-      log.warn "Declared tool version string \"${rec.version}\" not found in container image spec \"${rec.container}\"."
+      log.warn """Declared tool version string "${rec.version}" for "${rec.tool}"
+      not found in container image spec "${rec.container}"."""
   }
   allVersions.each {k, v ->
     if(v.size()==1)
