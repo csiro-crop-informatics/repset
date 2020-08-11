@@ -29,7 +29,7 @@ Detailed description of the run are available in the [runmeta.json](runmeta.json
 
 ```{r visualise, echo=FALSE}
 ggplot(nxrun, aes(evaluation.primary.match/(query.nreads / 2), trace.realtime)) +
-  geom_point(aes(colour = mapper.tool, shape = target.seqtype)) +
+  geom_point(aes(colour = paste(mapper.tool, mapper.version), shape = target.seqtype)) +
   facet_grid(query.seqtype~target.species) +
   theme_light() +
   labs(main = "Primary correct matches",
