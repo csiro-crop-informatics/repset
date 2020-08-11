@@ -1,7 +1,7 @@
 biokanga-manuscript.pdf
 .nextflow*
 results*
-work/*
+work*
 .Rhistory
 #local hardlink to .Rmd :
 writing/biokanga-manuscript.md
@@ -13,3 +13,4 @@ flowinfo*
 downloaded
 singularity-images/
 tmp/
+localrender
