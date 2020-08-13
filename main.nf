@@ -230,7 +230,7 @@ mappersCapturedVersionChannel
 .map { meta, ver ->
   if(meta.version != ver.trim()) {
     log.warn """
-    Decalred version "${meta.version}" for ${meta.tool}
+    Declared version "${meta.version}" for ${meta.tool}
     does not match version "${ver.trim()}"
     obtained from versionCall: ${meta.versionCall}
     Updating version in metadata to "${ver.trim()}"
