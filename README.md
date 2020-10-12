@@ -18,7 +18,7 @@
   - [Running the pipeline](#running-the-pipeline)
     - [Execution profiles](#execution-profiles)
       - [Running with docker](#running-with-docker)
-      - [Running with singularity (local or Slurm cluster)](#running-with-singularity-local-or-slurm-cluster)
+      - [Running with singularity (locally or on a Slurm cluster)](#running-with-singularity-locally-or-on-a-slurm-cluster)
       - [Running on AWS batch](#running-on-aws-batch)
     - [Mapping modes](#mapping-modes)
     - [Evaluated mappers](#evaluated-mappers)
@@ -57,7 +57,7 @@
 
 The pipeline consists of several, partly dependent paths
 which facilitate the evaluation of mappers using
-either DNA-  or RNA-Seq data, either ~~real~~ (temporarily unavailable) or simulated.
+either DNA- or RNA-Seq data, either real or simulated.
 The paths can be executed separately or in a single run.
 When running separately or re-running the pipeline
 the `-resume` flag ensures that previously computed
@@ -83,9 +83,9 @@ See [nextflow.config](nextflow.config) for available execution profiles (or to a
 nextflow run csiro-crop-informatics/repset -profile docker
 ```
 
-#### Running with singularity (local or Slurm cluster)
+#### Running with singularity (locally or on a Slurm cluster)
 
-Tu run the workflow with Singularity on
+To run the workflow with Singularity on
 
 - a local machine,
 - a standalone server
@@ -165,7 +165,7 @@ To execute the workflow for only a subset of the available tools, you can specif
 - `--mappers 'bwa|bowtie2|biokanga'` - evaluate a subset of tools
 - `--mappers '^((?!bwa).)*$'` - evaluate all but this tool
 
-Other regular expressions can be specified to taylor the list of evaluated tools.
+Other regular expressions can be specified to tailor the list of evaluated tools.
 
 ### Alternative input data sets
 
@@ -214,7 +214,7 @@ where the dynamic scaling functions can also be adjusted.
 Each pipeline run generates a number of files including
 
 - results in the form of report, figures, tables etc.
-- run metadata reflecting information about the pipeline version, software and compute environment etc.
+- run meta data reflecting information about the pipeline version, software and compute environment etc.
 
 These can be simply collected from the output directories but for full traceability of the results, the following procedure is preferable:
 
@@ -246,15 +246,15 @@ GH_TOKEN='your-token-goes-here' nextflow run \
 On successful completion of the pipeline a series of API calls will be made to
 
 1. create a new release
-2. upload results and metadata files as artefacts for that release
-3. finalize the release (skipped if `--draft` flag used)
+2. upload results and meta data files as artefacts for that release
+3. finalise the release (skipped if `--draft` flag used)
 
 The last of this calls will trigger minting of a DOI for that release if Zenodo integration is configured and enabled for the repository.
 To keep your release as a draft use the `--draft` flag.
 
 ## Experimental pipeline overview
 
-<!-- ![figures/dag.png](figures/dag.png) -->
+![figures/dag.png](figures/dag.png)
 <!-- <img src="figures/dag.png" alt="drawing" width="400"/> -->
 
 <!-- For comparison, here is [an earlier version of this graph](figures/dag-old-colmplex.png) -  before indexing and alignment processes were generalised to work with multiple tools. This earlier workflow also excludes evaluation based on real RNA-Seq data. -->
@@ -306,14 +306,14 @@ Applicable **nextflow** (not bash!) variables resolve as follows:
 
 #### Indexing
 
-- `${task.cpus}` - number of cpu threads available to the indexing process
-- `${ref}` - the reference FASTA filename - we use it both to specify the input file and the basename of the generated index
+- `${task.cpus}` - number of CPU threads available to the indexing process
+- `${ref}` - the reference FASTA file name - we use it both to specify the input file and the base name of the generated index
 
 #### Mapping
 
-- `${task.cpus}` - number of logical cpus available to the alignment process
-- `${ref}` - basename of the index file (sufficient if aligner uses basename to find multi-file index, otherwise appropriate extension may need to be appended, e.g. `${ref}.idx`).
-- `${reads[0]}` and `${reads[1]}` - filenames of paired-end reads
+- `${task.cpus}` - number of logical CPUS available to the alignment process
+- `${ref}` - base name of the index file (sufficient if aligner uses base name to find multi-file index, otherwise appropriate extension may need to be appended, e.g. `${ref}.idx`).
+- `${reads[0]}` and `${reads[1]}` - file names of paired-end reads
 - `${ALIGN_PARAMS}` any additional params passed to the aligner
   - Empty by default but one or more sets of params can be defined in [conf/mapping_params.config](conf/mapping_params.config). When multiple sets of params are specified each set is used in separate execution.
 
@@ -349,7 +349,7 @@ You can upload a relevant container image to a docker registry (such as Docker H
 Alternatively, follow our procedure below for [defining per-tool container images and docker automated builds](#per-tool-container-images-and-docker-automated-builds)
 
 We opt for Docker containers which can also be executed using Singularity.
-Container images are pulled from Docker Hub, but nextflow is able to access other registries and also local images, see relevant [nextflow documentation](https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub)
+Container images are pulled from Docker Hub, but Nextflow is able to access other registries and also local images, see relevant [Nextflow documentation](https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub)
 
 ## Per-tool container images and docker automated builds
 
