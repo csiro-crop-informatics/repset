@@ -11,7 +11,7 @@ RUN apk add --no-cache build-base zlib-dev bzip2-dev xz-dev ncurses-dev ca-certi
     && tar xjvf samtools-${SAMTOOLS_VERSION}.tar.bz2 \
     && cd samtools-${SAMTOOLS_VERSION}/ && make && cd .. \
     && mv samtools-${SAMTOOLS_VERSION}/samtools /bin/ \
-    && rm -rf samtools* \ 
+    && rm -rf samtools* \
     && apk del build-base zlib-dev ca-certificates wget
 
 USER groovy
