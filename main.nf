@@ -823,6 +823,7 @@ mappedWithFlagstats
 
 process evaluateAlignmentsRNF {
   label 'groovy'
+  // beforeScript 'ln -s `which picocli-4.5.1.jar`' //part of a hack/workaround for failing grapes @Grab
   // label 'ES'
   // tag{alignmeta.tool.subMap(['name'])+alignmeta.target.subMap(['species','version'])+alignmeta.query.subMap(['seqtype','nreads'])+alignmeta.params.subMap(['paramslabel'])}
   // tag{alignmeta.params.subMap(['paramslabel'])}

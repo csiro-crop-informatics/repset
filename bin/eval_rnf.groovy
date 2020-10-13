@@ -4,8 +4,13 @@ import static groovy.json.JsonOutput.*
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
-
-@Grab('info.picocli:picocli-groovy:4.1.2') //command line interface
+@Grab('info.picocli:picocli-groovy:4.5.1')  //Grapes/Ivy erraric
+// @GrabConfig(systemClassLoader=true)
+//command line interface
+// def picocliVersion = '4.5.1'
+//part of a hack/workaround for failing grapes @Grab
+// def picocliJar = "picocli-${picocliVersion}.jar"
+// this.getClass().classLoader.rootLoader.addURL(new File(picocliJar).toURL())
 
 @Command(header = [
        //Font Name: Calvin S (Caps)
