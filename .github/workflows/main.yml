@@ -123,7 +123,7 @@ jobs:
             pkg-config
       - name: Install Singularity
         env:
-          SINGULARITY_VERSION: 3.6.0
+          SINGULARITY_VERSION: 3.6.4
         run: |
           export GOPATH=/tmp/go
           mkdir -p $GOPATH
