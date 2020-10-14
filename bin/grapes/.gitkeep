@@ -1,0 +1,2 @@
+# We mount this dir in groovy-based containers
+# for storing dependencies
