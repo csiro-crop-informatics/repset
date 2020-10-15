@@ -842,6 +842,7 @@ process evaluateAlignmentsRNF {
   // println prettyPrint(toJson(alignmeta))
   // println alignmeta.inspect()
   // println groovy.json.JsonOutput.prettyPrint(jsonGenerator.toJson(meta))
+  // | groovy -Dgrape.root=/home/groovy/ `which eval_rnf.groovy` \
   """
   set -eo pipefail
   samtools view ${samOrBam} \

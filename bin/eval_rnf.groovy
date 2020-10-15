@@ -1,5 +1,10 @@
 #!/usr/bin/env groovy
 
+
+///path/to/put/grapes_parent_dir //https://stackoverflow.com/a/36031996
+// System.properties.'grape.root' = '/home/groovy/'
+
+
 import static groovy.json.JsonOutput.*
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
