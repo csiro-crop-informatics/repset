@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        nxf_ver: ['20.04.1']
+        nxf_ver: ['20.07.1']
         # nxf_ver: ['19.10.0', '20.04.1']
     env:
       NXF_ANSI_LOG: false
@@ -46,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        nxf_ver: ['20.04.1']
+        nxf_ver: ['20.07.1']
         # nxf_ver: ['19.10.0', '20.04.1']
         params:
           - { mapper: 'minimap2|yara', mode: dna2dna }
@@ -102,7 +102,7 @@ jobs:
           # - { mapper: kallisto, mode: rna2rna }
     env:
       NXF_ANSI_LOG: false
-      NXF_VER: 20.04.1
+      NXF_VER: 20.07.1
       # SINGULARITY_CACHEDIR: .singularity
     steps:
       - name: Check out code
