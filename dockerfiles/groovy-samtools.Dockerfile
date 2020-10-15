@@ -15,3 +15,8 @@ RUN apk add --no-cache build-base zlib-dev bzip2-dev xz-dev ncurses-dev ca-certi
     && apk del build-base zlib-dev ca-certificates wget
 
 USER groovy
+
+ADD grabPicocli.groovy ./
+
+# Storing grapes in home dir / pwd
+RUN groovy -Dgrape.root=/home/groovy grabPicocli.groovy
