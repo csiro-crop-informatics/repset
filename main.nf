@@ -565,6 +565,7 @@ process rnfSimReads {
   tag{simmeta}
   label 'rnftools'
   label 'slow'
+  publishDir "simreads", mode: 'symlink'
 
   input:
     // set val(meta), file(ref), file(fai) from referencesWithIndex4rnfSimReads
